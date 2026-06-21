@@ -396,7 +396,9 @@ function App() {
           </button>
         </div>
 
-        <nav className="nav">
+        <nav className={`nav nav-${activePage}`}>
+          <span className="nav-indicator" />
+          
           <NavButton
             label="Home"
             icon="⌂"
