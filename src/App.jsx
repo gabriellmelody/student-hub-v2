@@ -98,6 +98,9 @@ function getTaskTip(task) {
 }
 
 function App() {
+  const [activePage, setActivePage] = useState("home");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
   const [tasks, setTasks] = useState(() => {
     const savedTasks = localStorage.getItem("student-hub-tasks");
     return savedTasks ? JSON.parse(savedTasks) : defaultTasks;
@@ -160,6 +163,13 @@ function App() {
   }
 
   const hiddenBacklogCount = backlogTasks.length - visibleBacklog.length;
+
+  const progressPercentage =
+    tasks.length === 0
+      ? 0
+      : Math.round((completedTasks.length / tasks.length) * 100);
+
+  const nextTask = [...activeTasks, ...visibleBacklog][0];
 
   function toggleTask(taskId) {
     const taskBeingChanged = tasks.find((task) => task.id === taskId);
@@ -234,6 +244,7 @@ function App() {
           note: "Try setting at least 20 minutes.",
         },
       ]);
+      setActivePage("plan");
       return;
     }
 
@@ -252,6 +263,7 @@ function App() {
           note: "You are clear for now.",
         },
       ]);
+      setActivePage("plan");
       return;
     }
 
@@ -321,198 +333,186 @@ function App() {
     }
 
     setPlanBlocks(newPlan);
+    setActivePage("plan");
   }
 
-  const progressPercentage =
-    tasks.length === 0
-      ? 0
-      : Math.round((completedTasks.length / tasks.length) * 100);
-
   return (
-    <main className="app">
-      <section className="hero">
-        <div>
-          <p className="eyebrow">Student Hub</p>
-          <h1>Your school day, organised.</h1>
-          <p className="subtitle">
-            A self-filling student workspace for tasks, deadlines, and study
-            planning.
-          </p>
-        </div>
+    <main className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
+        <div className="brand-row">
+  <div className="brand">
+    <div className="brand-mark">S</div>
+    <div className="brand-text">
+      <h1>Student Hub</h1>
+      <p>School, organised.</p>
+    </div>
+  </div>
 
-        <div className="capacity-card">
-          <span>Hours available today</span>
-          <input
-            type="number"
-            min="0"
-            max="12"
-            value={hoursAvailable}
-            onChange={(event) => setHoursAvailable(event.target.value)}
+  <button
+    className="sidebar-toggle"
+    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+    aria-label="Toggle sidebar"
+  >
+    {sidebarCollapsed ? "→" : "←"}
+  </button>
+</div>
+
+        <nav className="nav">
+          <NavButton
+            label="Home"
+            icon="⌂"
+            active={activePage === "home"}
+            onClick={() => setActivePage("home")}
           />
-        </div>
-      </section>
-
-      <section className="progress-card">
-        <div className="progress-header">
-          <span>Progress</span>
-          <span>
-            {completedTasks.length}/{tasks.length} done
-          </span>
-        </div>
-
-        <div className="progress-track">
-          <div
-            className="progress-fill"
-            style={{ width: `${progressPercentage}%` }}
+          <NavButton
+            label="To-do list"
+            icon="✓"
+            active={activePage === "tasks"}
+            onClick={() => setActivePage("tasks")}
           />
-        </div>
+          <NavButton
+            label="Today’s plan"
+            icon="◷"
+            active={activePage === "plan"}
+            onClick={() => setActivePage("plan")}
+          />
+          <NavButton
+            label="Settings"
+            icon="⚙"
+            active={activePage === "settings"}
+            onClick={() => setActivePage("settings")}
+          />
+        </nav>
 
-        <p>{progressPercentage}% complete</p>
-      </section>
-
-      <section className="dashboard">
-        <div className="panel">
-          <div className="panel-header">
-            <h2>Tasks</h2>
-            <button
-              className="small-button"
-              onClick={() => setShowAddTask(!showAddTask)}
-            >
-              {showAddTask ? "Cancel" : "+ Add task"}
-            </button>
-          </div>
-
-          {showAddTask && (
-            <form className="add-task-form" onSubmit={addTask}>
-              <input
-                type="text"
-                placeholder="Subject, e.g. Chemistry"
-                value={newTask.subject}
-                onChange={(event) =>
-                  setNewTask({ ...newTask, subject: event.target.value })
-                }
-              />
-
-              <input
-                type="text"
-                placeholder="Task title"
-                value={newTask.title}
-                onChange={(event) =>
-                  setNewTask({ ...newTask, title: event.target.value })
-                }
-              />
-
-              <input
-                type="date"
-                value={newTask.dueDate}
-                onChange={(event) =>
-                  setNewTask({ ...newTask, dueDate: event.target.value })
-                }
-              />
-
-              <div className="effort-row">
-                <span>Effort</span>
-
-                {[1, 2, 3, 4, 5].map((number) => (
-                  <button
-                    key={number}
-                    type="button"
-                    className={
-                      newTask.effort === number
-                        ? "effort-button selected"
-                        : "effort-button"
-                    }
-                    onClick={() => setNewTask({ ...newTask, effort: number })}
-                  >
-                    {number}
-                  </button>
-                ))}
-              </div>
-
-              <button className="primary-button" type="submit">
-                Add task
-              </button>
-            </form>
-          )}
-
-          {activeTasks.map((task) => (
-            <TaskCard
-              key={task.id}
-              task={task}
-              onToggle={toggleTask}
-              onDelete={deleteTask}
+        <div className="sidebar-footer">
+          <p>{completedTasks.length}/{tasks.length} tasks done</p>
+          <div className="mini-progress-track">
+            <div
+              className="mini-progress-fill"
+              style={{ width: `${progressPercentage}%` }}
             />
-          ))}
-
-          {visibleBacklog.length > 0 && (
-            <div className="task-section">
-              <p className="section-label">Coming up</p>
-              {visibleBacklog.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onToggle={toggleTask}
-                  onDelete={deleteTask}
-                />
-              ))}
-            </div>
-          )}
-
-          {hiddenBacklogCount > 0 && (
-            <p className="muted-text">
-              + {hiddenBacklogCount} more task
-              {hiddenBacklogCount === 1 ? "" : "s"} in backlog
-            </p>
-          )}
-
-          {noDeadlineTasks.length > 0 && (
-            <div className="task-section">
-              <p className="section-label">No deadline</p>
-              {noDeadlineTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onToggle={toggleTask}
-                  onDelete={deleteTask}
-                />
-              ))}
-            </div>
-          )}
-
-          {completedTasks.length > 0 && (
-            <div className="task-section">
-              <p className="section-label">Completed</p>
-              {completedTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onToggle={toggleTask}
-                  onDelete={deleteTask}
-                  completed
-                />
-              ))}
-            </div>
-          )}
+          </div>
         </div>
+      </aside>
 
+      <section className="main-content">
+        {activePage === "home" && (
+          <HomePage
+            activeTasks={activeTasks}
+            completedTasks={completedTasks}
+            noDeadlineTasks={noDeadlineTasks}
+            visibleBacklog={visibleBacklog}
+            hiddenBacklogCount={hiddenBacklogCount}
+            hoursAvailable={hoursAvailable}
+            setHoursAvailable={setHoursAvailable}
+            startTime={startTime}
+            setStartTime={setStartTime}
+            progressPercentage={progressPercentage}
+            nextTask={nextTask}
+            generatePlan={generatePlan}
+            setActivePage={setActivePage}
+          />
+        )}
+
+        {activePage === "tasks" && (
+          <TasksPage
+            activeTasks={activeTasks}
+            visibleBacklog={visibleBacklog}
+            hiddenBacklogCount={hiddenBacklogCount}
+            noDeadlineTasks={noDeadlineTasks}
+            completedTasks={completedTasks}
+            showAddTask={showAddTask}
+            setShowAddTask={setShowAddTask}
+            newTask={newTask}
+            setNewTask={setNewTask}
+            addTask={addTask}
+            toggleTask={toggleTask}
+            deleteTask={deleteTask}
+          />
+        )}
+
+        {activePage === "plan" && (
+          <PlanPage
+            planBlocks={planBlocks}
+            startTime={startTime}
+            setStartTime={setStartTime}
+            generatePlan={generatePlan}
+            clearPlan={clearPlan}
+            completeTaskFromPlan={completeTaskFromPlan}
+            hoursAvailable={hoursAvailable}
+            setHoursAvailable={setHoursAvailable}
+          />
+        )}
+
+        {activePage === "settings" && <SettingsPage />}
+      </section>
+    </main>
+  );
+}
+
+function NavButton({ label, icon, active, onClick }) {
+  return (
+    <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}>
+      <span className="nav-icon">{icon}</span>
+      <span className="nav-label">{label}</span>
+    </button>
+  );
+}
+
+function HomePage({
+  activeTasks,
+  completedTasks,
+  noDeadlineTasks,
+  visibleBacklog,
+  hiddenBacklogCount,
+  hoursAvailable,
+  setHoursAvailable,
+  startTime,
+  setStartTime,
+  progressPercentage,
+  nextTask,
+  generatePlan,
+  setActivePage,
+}) {
+  return (
+    <div className="page">
+      <header className="page-header">
+        <p className="eyebrow">Home</p>
+        <h2>Your school day, organised.</h2>
+        <p>
+          See what matters, decide how much time you have, and generate a plan
+          when you’re ready.
+        </p>
+      </header>
+
+      <section className="stat-grid">
+        <StatCard label="Active tasks" value={activeTasks.length} />
+        <StatCard label="Completed" value={completedTasks.length} />
+        <StatCard label="No deadline" value={noDeadlineTasks.length} />
+        <StatCard
+          label="Backlog hidden"
+          value={hiddenBacklogCount > 0 ? hiddenBacklogCount : 0}
+        />
+      </section>
+
+      <section className="home-grid">
         <div className="panel">
           <div className="panel-header">
-            <h2>Today’s plan</h2>
-
-            <div className="plan-actions">
-              {planBlocks.length > 0 && (
-                <button className="small-button secondary" onClick={clearPlan}>
-                  Clear
-                </button>
-              )}
-
-              <button className="small-button" onClick={generatePlan}>
-                {planBlocks.length > 0 ? "Regenerate" : "Plan my day"}
-              </button>
-            </div>
+            <h3>Today setup</h3>
           </div>
 
-          <div className="plan-controls">
+          <div className="setup-row">
+            <label>
+              <span>Hours available</span>
+              <input
+                type="number"
+                min="0"
+                max="12"
+                value={hoursAvailable}
+                onChange={(event) => setHoursAvailable(event.target.value)}
+              />
+            </label>
+
             <label>
               <span>Start time</span>
               <input
@@ -523,60 +523,353 @@ function App() {
             </label>
           </div>
 
-          {planBlocks.length === 0 && (
+          <button className="primary-button" onClick={generatePlan}>
+            Plan my day
+          </button>
+        </div>
+
+        <div className="panel">
+          <div className="panel-header">
+            <h3>Next focus</h3>
+          </div>
+
+          {nextTask ? (
+            <div className="focus-card">
+              <p>{nextTask.subject}</p>
+              <h3>{nextTask.title}</h3>
+              <span>{getUrgencyLabel(getDaysLeft(nextTask.dueDate))}</span>
+            </div>
+          ) : (
             <div className="empty-plan">
-              <h3>Ready when you are.</h3>
-              <p>
-                Set your available hours, choose a start time, then generate a
-                simple study plan.
-              </p>
+              <h3>No urgent task.</h3>
+              <p>You’re clear for now.</p>
             </div>
           )}
 
-          {planBlocks.map((block) => {
-            if (block.type === "message") {
-              return (
-                <div className="empty-plan" key={block.id}>
-                  <h3>{block.title}</h3>
-                  <p>{block.note}</p>
-                </div>
-              );
-            }
-
-            return (
-              <div
-                className={
-                  block.type === "break"
-                    ? "plan-block break-block"
-                    : "plan-block"
-                }
-                key={block.id}
-              >
-                <div className="plan-time">
-                  {block.start} – {block.end}
-                </div>
-
-                {block.type === "study" && (
-                  <p className="plan-subject">{block.subject}</p>
-                )}
-
-                <h3>{block.title}</h3>
-                <p>{block.tip}</p>
-
-                {block.type === "study" && (
-                  <button
-                    className="complete-plan-button"
-                    onClick={() => completeTaskFromPlan(block.taskId)}
-                  >
-                    Mark task done
-                  </button>
-                )}
-              </div>
-            );
-          })}
+          <button
+            className="secondary-button"
+            onClick={() => setActivePage("tasks")}
+          >
+            Open to-do list
+          </button>
         </div>
       </section>
-    </main>
+
+      <section className="progress-card">
+        <div className="progress-header">
+          <span>Overall progress</span>
+          <span>{progressPercentage}%</span>
+        </div>
+
+        <div className="progress-track">
+          <div
+            className="progress-fill"
+            style={{ width: `${progressPercentage}%` }}
+          />
+        </div>
+
+        <p>
+          {completedTasks.length} task
+          {completedTasks.length === 1 ? "" : "s"} completed so far.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function TasksPage({
+  activeTasks,
+  visibleBacklog,
+  hiddenBacklogCount,
+  noDeadlineTasks,
+  completedTasks,
+  showAddTask,
+  setShowAddTask,
+  newTask,
+  setNewTask,
+  addTask,
+  toggleTask,
+  deleteTask,
+}) {
+  return (
+    <div className="page">
+      <header className="page-header">
+        <p className="eyebrow">To-do list</p>
+        <h2>Your tasks</h2>
+        <p>Active work stays visible. Future work appears when your list clears.</p>
+      </header>
+
+      <div className="panel">
+        <div className="panel-header">
+          <h3>Tasks</h3>
+          <button
+            className="small-button"
+            onClick={() => setShowAddTask(!showAddTask)}
+          >
+            {showAddTask ? "Cancel" : "+ Add task"}
+          </button>
+        </div>
+
+        {showAddTask && (
+          <form className="add-task-form" onSubmit={addTask}>
+            <input
+              type="text"
+              placeholder="Subject, e.g. Chemistry"
+              value={newTask.subject}
+              onChange={(event) =>
+                setNewTask({ ...newTask, subject: event.target.value })
+              }
+            />
+
+            <input
+              type="text"
+              placeholder="Task title"
+              value={newTask.title}
+              onChange={(event) =>
+                setNewTask({ ...newTask, title: event.target.value })
+              }
+            />
+
+            <input
+              type="date"
+              value={newTask.dueDate}
+              onChange={(event) =>
+                setNewTask({ ...newTask, dueDate: event.target.value })
+              }
+            />
+
+            <div className="effort-row">
+              <span>Effort</span>
+
+              {[1, 2, 3, 4, 5].map((number) => (
+                <button
+                  key={number}
+                  type="button"
+                  className={
+                    newTask.effort === number
+                      ? "effort-button selected"
+                      : "effort-button"
+                  }
+                  onClick={() => setNewTask({ ...newTask, effort: number })}
+                >
+                  {number}
+                </button>
+              ))}
+            </div>
+
+            <button className="primary-button" type="submit">
+              Add task
+            </button>
+          </form>
+        )}
+
+        {activeTasks.map((task) => (
+          <TaskCard
+            key={task.id}
+            task={task}
+            onToggle={toggleTask}
+            onDelete={deleteTask}
+          />
+        ))}
+
+        {visibleBacklog.length > 0 && (
+          <div className="task-section">
+            <p className="section-label">Coming up</p>
+            {visibleBacklog.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onToggle={toggleTask}
+                onDelete={deleteTask}
+              />
+            ))}
+          </div>
+        )}
+
+        {hiddenBacklogCount > 0 && (
+          <p className="muted-text">
+            + {hiddenBacklogCount} more task
+            {hiddenBacklogCount === 1 ? "" : "s"} in backlog
+          </p>
+        )}
+
+        {noDeadlineTasks.length > 0 && (
+          <div className="task-section">
+            <p className="section-label">No deadline</p>
+            {noDeadlineTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onToggle={toggleTask}
+                onDelete={deleteTask}
+              />
+            ))}
+          </div>
+        )}
+
+        {completedTasks.length > 0 && (
+          <div className="task-section">
+            <p className="section-label">Completed</p>
+            {completedTasks.map((task) => (
+              <TaskCard
+                key={task.id}
+                task={task}
+                onToggle={toggleTask}
+                onDelete={deleteTask}
+                completed
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlanPage({
+  planBlocks,
+  startTime,
+  setStartTime,
+  generatePlan,
+  clearPlan,
+  completeTaskFromPlan,
+  hoursAvailable,
+  setHoursAvailable,
+}) {
+  return (
+    <div className="page">
+      <header className="page-header">
+        <p className="eyebrow">Today’s plan</p>
+        <h2>Build a study plan</h2>
+        <p>Use your available time and task list to generate a simple schedule.</p>
+      </header>
+
+      <div className="panel">
+        <div className="panel-header">
+          <h3>Plan</h3>
+
+          <div className="plan-actions">
+            {planBlocks.length > 0 && (
+              <button className="small-button secondary" onClick={clearPlan}>
+                Clear
+              </button>
+            )}
+
+            <button className="small-button" onClick={generatePlan}>
+              {planBlocks.length > 0 ? "Regenerate" : "Plan my day"}
+            </button>
+          </div>
+        </div>
+
+        <div className="setup-row">
+          <label>
+            <span>Hours available</span>
+            <input
+              type="number"
+              min="0"
+              max="12"
+              value={hoursAvailable}
+              onChange={(event) => setHoursAvailable(event.target.value)}
+            />
+          </label>
+
+          <label>
+            <span>Start time</span>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(event) => setStartTime(event.target.value)}
+            />
+          </label>
+        </div>
+
+        {planBlocks.length === 0 && (
+          <div className="empty-plan">
+            <h3>Ready when you are.</h3>
+            <p>
+              Set your available hours, choose a start time, then generate a
+              simple study plan.
+            </p>
+          </div>
+        )}
+
+        {planBlocks.map((block) => {
+          if (block.type === "message") {
+            return (
+              <div className="empty-plan" key={block.id}>
+                <h3>{block.title}</h3>
+                <p>{block.note}</p>
+              </div>
+            );
+          }
+
+          return (
+            <div
+              className={
+                block.type === "break"
+                  ? "plan-block break-block"
+                  : "plan-block"
+              }
+              key={block.id}
+            >
+              <div className="plan-time">
+                {block.start} – {block.end}
+              </div>
+
+              {block.type === "study" && (
+                <p className="plan-subject">{block.subject}</p>
+              )}
+
+              <h3>{block.title}</h3>
+              <p>{block.tip}</p>
+
+              {block.type === "study" && (
+                <button
+                  className="complete-plan-button"
+                  onClick={() => completeTaskFromPlan(block.taskId)}
+                >
+                  Mark task done
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SettingsPage() {
+  return (
+    <div className="page">
+      <header className="page-header">
+        <p className="eyebrow">Settings</p>
+        <h2>Preferences</h2>
+        <p>
+          Later this is where we’ll add default study times, connected school
+          accounts, subjects, and AI settings.
+        </p>
+      </header>
+
+      <div className="panel">
+        <div className="empty-plan">
+          <h3>Coming soon.</h3>
+          <p>
+            Settings will matter more once we add AI, Google Classroom, and
+            calendar syncing.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="stat-card">
+      <p>{label}</p>
+      <h3>{value}</h3>
+    </div>
   );
 }
 
