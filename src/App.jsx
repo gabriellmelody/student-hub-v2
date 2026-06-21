@@ -63,6 +63,20 @@ function getUrgencyClass(daysLeft) {
   return "safe";
 }
 
+function getEffortLabel(effort) {
+  if (effort === 1) return "Easy";
+  if (effort === 2 || effort === 3) return "Medium";
+  if (effort === 4) return "High";
+  return "Max";
+}
+
+function getEffortClass(effort) {
+  if (effort === 1) return "effort-low";
+  if (effort === 2 || effort === 3) return "effort-medium";
+  if (effort === 4) return "effort-high";
+  return "effort-max";
+}
+
 function formatTime(startTime, minutesToAdd) {
   const [hours, minutes] = startTime.split(":").map(Number);
 
@@ -95,6 +109,18 @@ function getTaskTip(task) {
   }
 
   return "Make steady progress and stop when the block ends.";
+}
+
+function sortTasksForDisplay(taskList) {
+  return [...taskList].sort((a, b) => {
+    const aDays = getDaysLeft(a.dueDate);
+    const bDays = getDaysLeft(b.dueDate);
+    const safeADays = aDays === null ? 999 : aDays;
+    const safeBDays = bDays === null ? 999 : bDays;
+
+    if (safeADays !== safeBDays) return safeADays - safeBDays;
+    return b.effort - a.effort;
+  });
 }
 
 function App() {
@@ -136,17 +162,19 @@ function App() {
     localStorage.setItem("student-hub-start-time", startTime);
   }, [startTime]);
 
-  const activeTasks = tasks.filter((task) => {
-    const daysLeft = getDaysLeft(task.dueDate);
-    return !task.completed && daysLeft !== null && daysLeft <= 14;
-  });
+  const activeTasks = sortTasksForDisplay(
+    tasks.filter((task) => {
+      const daysLeft = getDaysLeft(task.dueDate);
+      return !task.completed && daysLeft !== null && daysLeft <= 14;
+    })
+  );
 
-  const backlogTasks = tasks
-    .filter((task) => {
+  const backlogTasks = sortTasksForDisplay(
+    tasks.filter((task) => {
       const daysLeft = getDaysLeft(task.dueDate);
       return !task.completed && daysLeft !== null && daysLeft > 14;
     })
-    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+  );
 
   const noDeadlineTasks = tasks.filter(
     (task) => !task.completed && !task.dueDate
@@ -198,6 +226,28 @@ function App() {
   function deleteTask(taskId) {
     setTasks(tasks.filter((task) => task.id !== taskId));
     setPlanBlocks(planBlocks.filter((block) => block.taskId !== taskId));
+  }
+
+  function updateTask(taskId, updatedTask) {
+    if (!updatedTask.subject.trim() || !updatedTask.title.trim()) {
+      return;
+    }
+
+    setTasks(
+      tasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              subject: updatedTask.subject.trim(),
+              title: updatedTask.title.trim(),
+              dueDate: updatedTask.dueDate,
+              effort: Number(updatedTask.effort),
+            }
+          : task
+      )
+    );
+
+    setPlanBlocks([]);
   }
 
   function clearPlan() {
@@ -267,19 +317,7 @@ function App() {
       return;
     }
 
-    const sortedTasks = [...candidateTasks].sort((a, b) => {
-      const aDays = getDaysLeft(a.dueDate);
-      const bDays = getDaysLeft(b.dueDate);
-
-      const safeADays = aDays === null ? 999 : aDays;
-      const safeBDays = bDays === null ? 999 : bDays;
-
-      if (safeADays !== safeBDays) {
-        return safeADays - safeBDays;
-      }
-
-      return b.effort - a.effort;
-    });
+    const sortedTasks = sortTasksForDisplay(candidateTasks);
 
     const effortDurations = {
       1: 25,
@@ -310,6 +348,7 @@ function App() {
         start: formatTime(startTime, currentOffset),
         end: formatTime(startTime, currentOffset + duration),
         duration,
+        effort: task.effort,
         tip: getTaskTip(task),
       });
 
@@ -340,22 +379,22 @@ function App() {
     <main className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="brand-row">
-  <div className="brand">
-    <div className="brand-mark">S</div>
-    <div className="brand-text">
-      <h1>Student Hub</h1>
-      <p>School, organised.</p>
-    </div>
-  </div>
+          <div className="brand">
+            <div className="brand-mark">S</div>
+            <div className="brand-text">
+              <h1>Student Hub</h1>
+              <p>School, organised.</p>
+            </div>
+          </div>
 
-  <button
-    className="sidebar-toggle"
-    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-    aria-label="Toggle sidebar"
-  >
-    {sidebarCollapsed ? "→" : "←"}
-  </button>
-</div>
+          <button
+            className="sidebar-toggle"
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            aria-label="Toggle sidebar"
+          >
+            {sidebarCollapsed ? "→" : "←"}
+          </button>
+        </div>
 
         <nav className="nav">
           <NavButton
@@ -385,7 +424,9 @@ function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <p>{completedTasks.length}/{tasks.length} tasks done</p>
+          <p>
+            {completedTasks.length}/{tasks.length} tasks done
+          </p>
           <div className="mini-progress-track">
             <div
               className="mini-progress-fill"
@@ -428,6 +469,7 @@ function App() {
             addTask={addTask}
             toggleTask={toggleTask}
             deleteTask={deleteTask}
+            updateTask={updateTask}
           />
         )}
 
@@ -537,7 +579,12 @@ function HomePage({
             <div className="focus-card">
               <p>{nextTask.subject}</p>
               <h3>{nextTask.title}</h3>
-              <span>{getUrgencyLabel(getDaysLeft(nextTask.dueDate))}</span>
+              <div className="focus-meta-row">
+                <span>{getUrgencyLabel(getDaysLeft(nextTask.dueDate))}</span>
+                <span className={`effort-pill ${getEffortClass(nextTask.effort)}`}>
+                  {getEffortLabel(nextTask.effort)} · {nextTask.effort}/5
+                </span>
+              </div>
             </div>
           ) : (
             <div className="empty-plan">
@@ -590,6 +637,7 @@ function TasksPage({
   addTask,
   toggleTask,
   deleteTask,
+  updateTask,
 }) {
   return (
     <div className="page">
@@ -647,8 +695,8 @@ function TasksPage({
                   type="button"
                   className={
                     newTask.effort === number
-                      ? "effort-button selected"
-                      : "effort-button"
+                      ? `effort-button selected ${getEffortClass(number)}`
+                      : `effort-button ${getEffortClass(number)}`
                   }
                   onClick={() => setNewTask({ ...newTask, effort: number })}
                 >
@@ -669,6 +717,7 @@ function TasksPage({
             task={task}
             onToggle={toggleTask}
             onDelete={deleteTask}
+            onUpdate={updateTask}
           />
         ))}
 
@@ -681,6 +730,7 @@ function TasksPage({
                 task={task}
                 onToggle={toggleTask}
                 onDelete={deleteTask}
+                onUpdate={updateTask}
               />
             ))}
           </div>
@@ -702,6 +752,7 @@ function TasksPage({
                 task={task}
                 onToggle={toggleTask}
                 onDelete={deleteTask}
+                onUpdate={updateTask}
               />
             ))}
           </div>
@@ -716,6 +767,7 @@ function TasksPage({
                 task={task}
                 onToggle={toggleTask}
                 onDelete={deleteTask}
+                onUpdate={updateTask}
                 completed
               />
             ))}
@@ -817,7 +869,12 @@ function PlanPage({
               </div>
 
               {block.type === "study" && (
-                <p className="plan-subject">{block.subject}</p>
+                <div className="plan-study-meta">
+                  <p className="plan-subject">{block.subject}</p>
+                  <span className={`effort-pill ${getEffortClass(block.effort)}`}>
+                    {getEffortLabel(block.effort)} · {block.effort}/5
+                  </span>
+                </div>
               )}
 
               <h3>{block.title}</h3>
@@ -873,10 +930,118 @@ function StatCard({ label, value }) {
   );
 }
 
-function TaskCard({ task, onToggle, onDelete, completed = false }) {
+function TaskCard({ task, onToggle, onDelete, onUpdate, completed = false }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftTask, setDraftTask] = useState({
+    subject: task.subject,
+    title: task.title,
+    dueDate: task.dueDate,
+    effort: task.effort,
+  });
+
+  useEffect(() => {
+    setDraftTask({
+      subject: task.subject,
+      title: task.title,
+      dueDate: task.dueDate,
+      effort: task.effort,
+    });
+  }, [task]);
+
   const daysLeft = getDaysLeft(task.dueDate);
   const urgencyClass = getUrgencyClass(daysLeft);
   const urgencyLabel = getUrgencyLabel(daysLeft);
+  const effortClass = getEffortClass(task.effort);
+  const effortLabel = getEffortLabel(task.effort);
+
+  function saveEdit(event) {
+    event.preventDefault();
+
+    if (!draftTask.subject.trim() || !draftTask.title.trim()) {
+      return;
+    }
+
+    onUpdate(task.id, draftTask);
+    setIsEditing(false);
+  }
+
+  function cancelEdit() {
+    setDraftTask({
+      subject: task.subject,
+      title: task.title,
+      dueDate: task.dueDate,
+      effort: task.effort,
+    });
+
+    setIsEditing(false);
+  }
+
+  if (isEditing) {
+    return (
+      <div className={`task-card editing ${completed ? "completed" : ""}`}>
+        <form className="edit-task-form" onSubmit={saveEdit}>
+          <input
+            type="text"
+            value={draftTask.subject}
+            onChange={(event) =>
+              setDraftTask({ ...draftTask, subject: event.target.value })
+            }
+            placeholder="Subject"
+          />
+
+          <input
+            type="text"
+            value={draftTask.title}
+            onChange={(event) =>
+              setDraftTask({ ...draftTask, title: event.target.value })
+            }
+            placeholder="Task title"
+          />
+
+          <input
+            type="date"
+            value={draftTask.dueDate}
+            onChange={(event) =>
+              setDraftTask({ ...draftTask, dueDate: event.target.value })
+            }
+          />
+
+          <div className="effort-row edit-effort-row">
+            <span>Effort</span>
+
+            {[1, 2, 3, 4, 5].map((number) => (
+              <button
+                key={number}
+                type="button"
+                className={
+                  Number(draftTask.effort) === number
+                    ? `effort-button selected ${getEffortClass(number)}`
+                    : `effort-button ${getEffortClass(number)}`
+                }
+                onClick={() => setDraftTask({ ...draftTask, effort: number })}
+              >
+                {number}
+              </button>
+            ))}
+          </div>
+
+          <div className="edit-form-actions">
+            <button className="save-edit-button" type="submit">
+              Save
+            </button>
+
+            <button
+              className="cancel-edit-button"
+              type="button"
+              onClick={cancelEdit}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className={`task-card ${completed ? "completed" : ""}`}>
@@ -892,17 +1057,32 @@ function TaskCard({ task, onToggle, onDelete, completed = false }) {
           </div>
 
           <h3>{task.title}</h3>
-          <p>Effort level {task.effort}/5</p>
+
+          <div className="task-meta">
+            <span className={`effort-pill ${effortClass}`}>
+              {effortLabel} · {task.effort}/5
+            </span>
+          </div>
         </div>
       </button>
 
-      <button
-        className="delete-button"
-        onClick={() => onDelete(task.id)}
-        aria-label={`Delete ${task.title}`}
-      >
-        ×
-      </button>
+      <div className="task-actions">
+        <button
+          className="edit-button"
+          onClick={() => setIsEditing(true)}
+          aria-label={`Edit ${task.title}`}
+        >
+          Edit
+        </button>
+
+        <button
+          className="delete-button"
+          onClick={() => onDelete(task.id)}
+          aria-label={`Delete ${task.title}`}
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }
