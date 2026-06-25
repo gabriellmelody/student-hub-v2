@@ -408,6 +408,19 @@ button {
   color: #a1a1aa;
 }
 
+.task-sort-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.sort-button.active {
+  background: #7c3aed;
+  border-color: #7c3aed;
+  color: white;
+}
+
 .primary-button,
 .secondary-button {
   width: 100%;

@@ -111,15 +111,50 @@ function getTaskTip(task) {
   return "Make steady progress and stop when the block ends.";
 }
 
-function sortTasksForDisplay(taskList) {
-  return [...taskList].sort((a, b) => {
-    const aDays = getDaysLeft(a.dueDate);
-    const bDays = getDaysLeft(b.dueDate);
-    const safeADays = aDays === null ? 999 : aDays;
-    const safeBDays = bDays === null ? 999 : bDays;
+function compareTasksSmart(a, b) {
+  const aDays = getDaysLeft(a.dueDate);
+  const bDays = getDaysLeft(b.dueDate);
+  const safeADays = aDays === null ? 999 : aDays;
+  const safeBDays = bDays === null ? 999 : bDays;
 
-    if (safeADays !== safeBDays) return safeADays - safeBDays;
-    return b.effort - a.effort;
+  if (safeADays !== safeBDays) return safeADays - safeBDays;
+  return b.effort - a.effort;
+}
+
+function sortTasksForDisplay(taskList) {
+  return [...taskList].sort(compareTasksSmart);
+}
+
+const taskSortOptions = [
+  { value: "smart", label: "Smart" },
+  { value: "dueDate", label: "Due date" },
+  { value: "effort", label: "Effort" },
+  { value: "subject", label: "Subject" },
+];
+
+function sortTasksByMode(taskList, sortMode) {
+  if (sortMode === "smart") {
+    return sortTasksForDisplay(taskList);
+  }
+
+  return [...taskList].sort((a, b) => {
+    if (sortMode === "dueDate") {
+      const aTime = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+      const bTime = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+
+      if (aTime !== bTime) return aTime - bTime;
+      return b.effort - a.effort;
+    }
+
+    if (sortMode === "effort") {
+      if (a.effort !== b.effort) return b.effort - a.effort;
+      return compareTasksSmart(a, b);
+    }
+
+    return (
+      a.subject.localeCompare(b.subject, undefined, { sensitivity: "base" }) ||
+      a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+    );
   });
 }
 
@@ -641,6 +676,12 @@ function TasksPage({
   deleteTask,
   updateTask,
 }) {
+  const [taskSortMode, setTaskSortMode] = useState("smart");
+  const sortedActiveTasks = sortTasksByMode(activeTasks, taskSortMode);
+  const sortedVisibleBacklog = sortTasksByMode(visibleBacklog, taskSortMode);
+  const sortedNoDeadlineTasks = sortTasksByMode(noDeadlineTasks, taskSortMode);
+  const sortedCompletedTasks = sortTasksByMode(completedTasks, taskSortMode);
+
   return (
     <div className="page">
       <header className="page-header">
@@ -658,6 +699,23 @@ function TasksPage({
           >
             {showAddTask ? "Cancel" : "+ Add task"}
           </button>
+        </div>
+
+        <div className="task-sort-row" aria-label="Sort tasks">
+          {taskSortOptions.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={
+                taskSortMode === option.value
+                  ? "small-button sort-button active"
+                  : "small-button sort-button"
+              }
+              onClick={() => setTaskSortMode(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
 
         {showAddTask && (
@@ -713,7 +771,7 @@ function TasksPage({
           </form>
         )}
 
-        {activeTasks.map((task) => (
+        {sortedActiveTasks.map((task) => (
           <TaskCard
             key={task.id}
             task={task}
@@ -723,10 +781,10 @@ function TasksPage({
           />
         ))}
 
-        {visibleBacklog.length > 0 && (
+        {sortedVisibleBacklog.length > 0 && (
           <div className="task-section">
             <p className="section-label">Coming up</p>
-            {visibleBacklog.map((task) => (
+            {sortedVisibleBacklog.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -745,10 +803,10 @@ function TasksPage({
           </p>
         )}
 
-        {noDeadlineTasks.length > 0 && (
+        {sortedNoDeadlineTasks.length > 0 && (
           <div className="task-section">
             <p className="section-label">No deadline</p>
-            {noDeadlineTasks.map((task) => (
+            {sortedNoDeadlineTasks.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
@@ -760,10 +818,10 @@ function TasksPage({
           </div>
         )}
 
-        {completedTasks.length > 0 && (
+        {sortedCompletedTasks.length > 0 && (
           <div className="task-section">
             <p className="section-label">Completed</p>
-            {completedTasks.map((task) => (
+            {sortedCompletedTasks.map((task) => (
               <TaskCard
                 key={task.id}
                 task={task}
