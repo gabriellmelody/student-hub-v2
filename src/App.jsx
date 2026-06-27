@@ -329,6 +329,16 @@ function App() {
   const [accentColor, setAccentColor] = useState(() => {
     return normalizeHexColor(localStorage.getItem("student-hub-accent"));
   });
+  const [layoutDensity, setLayoutDensity] = useState(() => {
+    return localStorage.getItem("student-hub-density") === "comfortable"
+      ? "comfortable"
+      : "compact";
+  });
+  const [homeLayout, setHomeLayout] = useState(() => {
+    return localStorage.getItem("student-hub-home-layout") === "dashboard"
+      ? "dashboard"
+      : "focused";
+  });
 
   const [tasks, setTasks] = useState(loadTasks);
 
@@ -360,6 +370,15 @@ function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("student-hub-theme", theme);
   }, [theme]);
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.density = layoutDensity;
+    localStorage.setItem("student-hub-density", layoutDensity);
+  }, [layoutDensity]);
+
+  useEffect(() => {
+    localStorage.setItem("student-hub-home-layout", homeLayout);
+  }, [homeLayout]);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -707,7 +726,7 @@ function App() {
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             aria-label="Toggle sidebar"
           >
-            {sidebarCollapsed ? "→" : "←"}
+            ←
           </button>
         </div>
 
@@ -769,6 +788,7 @@ function App() {
             nextTask={nextTask}
             generatePlan={generatePlan}
             setActivePage={setActivePage}
+            homeLayout={homeLayout}
           />
         )}
 
@@ -811,6 +831,10 @@ function App() {
             setTheme={setTheme}
             accentColor={accentColor}
             setAccentColor={setAccentColor}
+            layoutDensity={layoutDensity}
+            setLayoutDensity={setLayoutDensity}
+            homeLayout={homeLayout}
+            setHomeLayout={setHomeLayout}
           />
         )}
       </section>
@@ -841,9 +865,10 @@ function HomePage({
   nextTask,
   generatePlan,
   setActivePage,
+  homeLayout,
 }) {
   return (
-    <div className="page">
+    <div className={`page home-layout-${homeLayout}`}>
       <header className="page-header">
         <p className="eyebrow">Home</p>
         <h2>Your school day, organised.</h2>
@@ -853,98 +878,126 @@ function HomePage({
         </p>
       </header>
 
-      <section className="stat-grid">
-        <StatCard label="Active tasks" value={activeTasks.length} />
-        <StatCard label="Completed" value={completedTasks.length} />
-        <StatCard label="No deadline" value={noDeadlineTasks.length} />
-        <StatCard
-          label="Backlog hidden"
-          value={hiddenBacklogCount > 0 ? hiddenBacklogCount : 0}
-        />
-      </section>
+      <section
+        className={`home-dashboard home-dashboard--${homeLayout}`}
+        aria-label="Home dashboard"
+      >
+        <div className="home-widget-grid">
+          <section className="home-widget home-widget--focus">
+            <div className="home-widget-header">
+              <h3>Next focus</h3>
+            </div>
 
-      <section className="home-grid">
-        <div className="panel">
-          <div className="panel-header">
-            <h3>Today setup</h3>
-          </div>
-
-          <div className="setup-row">
-            <label>
-              <span>Hours available</span>
-              <input
-                type="number"
-                min="0"
-                max="12"
-                value={hoursAvailable}
-                onChange={(event) => setHoursAvailable(event.target.value)}
-              />
-            </label>
-
-            <label>
-              <span>Start time</span>
-              <input
-                type="time"
-                value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
-              />
-            </label>
-          </div>
-
-          <button className="primary-button" onClick={generatePlan}>
-            Plan my day
-          </button>
-        </div>
-
-        <div className="panel">
-          <div className="panel-header">
-            <h3>Next focus</h3>
-          </div>
-
-          {nextTask ? (
-            <div className="focus-card">
-              <p>{nextTask.subject}</p>
-              <h3>{nextTask.title}</h3>
-              <div className="focus-meta-row">
-                <span>{getUrgencyLabel(getDaysLeft(nextTask.dueDate))}</span>
-                <span className={`effort-pill ${getEffortClass(nextTask.effort)}`}>
-                  {getEffortLabel(nextTask.effort)} · {nextTask.effort}/5
-                </span>
+            {nextTask ? (
+              <div className="focus-card">
+                <p>{nextTask.subject}</p>
+                <h3>{nextTask.title}</h3>
+                <div className="focus-meta-row">
+                  <span>{getUrgencyLabel(getDaysLeft(nextTask.dueDate))}</span>
+                  <span
+                    className={`effort-pill ${getEffortClass(nextTask.effort)}`}
+                  >
+                    {getEffortLabel(nextTask.effort)} · {nextTask.effort}/5
+                  </span>
+                </div>
               </div>
+            ) : (
+              <div className="empty-plan">
+                <h3>No urgent task.</h3>
+                <p>You’re clear for now.</p>
+              </div>
+            )}
+
+            <button
+              className="secondary-button"
+              onClick={() => setActivePage("tasks")}
+            >
+              Open to-do list
+            </button>
+          </section>
+
+          <section className="home-widget home-widget--setup">
+            <div className="home-widget-header">
+              <h3>Today setup</h3>
             </div>
-          ) : (
-            <div className="empty-plan">
-              <h3>No urgent task.</h3>
-              <p>You’re clear for now.</p>
+
+            <div className="setup-row">
+              <label>
+                <span>Hours available</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="12"
+                  value={hoursAvailable}
+                  onChange={(event) => setHoursAvailable(event.target.value)}
+                />
+              </label>
+
+              <label>
+                <span>Start time</span>
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(event) => setStartTime(event.target.value)}
+                />
+              </label>
             </div>
+
+            <button className="primary-button" onClick={generatePlan}>
+              Plan my day
+            </button>
+          </section>
+
+          {homeLayout === "dashboard" && (
+            <section className="home-widget home-widget--overview">
+              <div className="home-widget-header">
+                <h3>Overview</h3>
+                <span>Current workload</span>
+              </div>
+
+              <div className="home-widget-stats">
+                <HomeStatCard label="Active" value={activeTasks.length} />
+                <HomeStatCard label="Completed" value={completedTasks.length} />
+                <HomeStatCard label="No deadline" value={noDeadlineTasks.length} />
+                <HomeStatCard
+                  label="Backlog"
+                  value={Math.max(hiddenBacklogCount, 0)}
+                />
+              </div>
+            </section>
           )}
 
-          <button
-            className="secondary-button"
-            onClick={() => setActivePage("tasks")}
-          >
-            Open to-do list
-          </button>
-        </div>
-      </section>
+          <section className="home-widget home-widget--summary">
+            <div className="home-widget-header progress-header">
+              <h3>Progress</h3>
+              <span>{progressPercentage}%</span>
+            </div>
 
-      <section className="progress-card">
-        <div className="progress-header">
-          <span>Overall progress</span>
-          <span>{progressPercentage}%</span>
-        </div>
+            <div className="progress-track">
+              <div
+                className="progress-fill"
+                style={{ width: `${progressPercentage}%` }}
+              />
+            </div>
 
-        <div className="progress-track">
-          <div
-            className="progress-fill"
-            style={{ width: `${progressPercentage}%` }}
-          />
+            {homeLayout === "focused" && (
+              <div className="home-task-summary">
+                <span>
+                  <strong>{activeTasks.length}</strong> active
+                </span>
+                <span>
+                  <strong>{completedTasks.length}</strong> completed
+                </span>
+                <span>
+                  <strong>{noDeadlineTasks.length}</strong> no deadline
+                </span>
+                <span>
+                  <strong>{Math.max(hiddenBacklogCount, 0)}</strong> in backlog
+                </span>
+              </div>
+            )}
+          </section>
         </div>
-
-        <p>
-          {completedTasks.length} task
-          {completedTasks.length === 1 ? "" : "s"} completed so far.
-        </p>
       </section>
     </div>
   );
@@ -1381,96 +1434,207 @@ function PlanPage({
   );
 }
 
-function SettingsPage({ theme, setTheme, accentColor, setAccentColor }) {
+function SettingsPage({
+  theme,
+  setTheme,
+  accentColor,
+  setAccentColor,
+  layoutDensity,
+  setLayoutDensity,
+  homeLayout,
+  setHomeLayout,
+}) {
+  const [settingsView, setSettingsView] = useState("hub");
+
   return (
     <div className="page">
       <header className="page-header">
-        <p className="eyebrow">Settings</p>
-        <h2>Preferences</h2>
+        {settingsView === "appearance" && (
+          <button
+            type="button"
+            className="settings-back-button"
+            onClick={() => setSettingsView("hub")}
+          >
+            ← Settings
+          </button>
+        )}
+        <p className="eyebrow">
+          {settingsView === "hub" ? "Settings" : "Appearance"}
+        </p>
+        <h2>{settingsView === "hub" ? "Settings" : "Appearance"}</h2>
         <p>
-          Later this is where we’ll add default study times, connected school
-          accounts, subjects, and AI settings.
+          {settingsView === "hub"
+            ? "Manage your workspace preferences and future connections."
+            : "Personalise how Student Hub looks and feels."}
         </p>
       </header>
 
-      <div className="panel">
-        <div className="panel-header">
-          <h3>Appearance</h3>
+      {settingsView === "hub" ? (
+        <div className="settings-hub-grid">
+          <button
+            type="button"
+            className="settings-hub-card"
+            onClick={() => setSettingsView("appearance")}
+          >
+            <span>
+              <strong>Appearance</strong>
+              <small>Theme, colour, density, and Home layout</small>
+            </span>
+            <span className="settings-hub-arrow" aria-hidden="true">
+              →
+            </span>
+          </button>
+
+          {[
+            ["Account", "Profile and sign-in preferences"],
+            ["Integrations", "Connected services and data sources"],
+            ["Help / FAQ", "Guidance and common questions"],
+          ].map(([title, description]) => (
+            <button
+              key={title}
+              type="button"
+              className="settings-hub-card coming-soon"
+              disabled
+            >
+              <span>
+                <strong>{title}</strong>
+                <small>{description}</small>
+              </span>
+              <span className="settings-coming-soon">Coming soon</span>
+            </button>
+          ))}
         </div>
+      ) : (
+        <div className="panel appearance-panel">
+          <section className="appearance-group">
+            <p className="settings-group-label">Visual</p>
 
-        <div className="theme-setting">
-          <div>
-            <h3>Theme</h3>
-            <p>Choose the appearance that feels most comfortable.</p>
-          </div>
+            <div className="theme-setting">
+              <div>
+                <h3>Theme</h3>
+                <p>Choose the appearance that feels most comfortable.</p>
+              </div>
 
-          <div className="theme-toggle" role="group" aria-label="Theme">
-            {["light", "dark"].map((option) => (
-              <button
-                key={option}
-                type="button"
-                className={theme === option ? "active" : ""}
-                aria-pressed={theme === option}
-                onClick={() => setTheme(option)}
-              >
-                {option === "light" ? "Light" : "Dark"}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="theme-setting accent-setting">
-          <div>
-            <h3>Accent colour</h3>
-            <p>Personalise highlights while keeping task statuses distinct.</p>
-          </div>
-
-          <div className="accent-controls">
-            <div className="accent-presets" aria-label="Accent colour presets">
-              {accentColorPresets.map((preset) => (
-                <button
-                  key={preset.value}
-                  type="button"
-                  className={accentColor === preset.value ? "active" : ""}
-                  style={{
-                    "--preset-color": preset.value,
-                    "--preset-contrast": getContrastText(preset.value),
-                  }}
-                  aria-label={`${preset.label} accent`}
-                  aria-pressed={accentColor === preset.value}
-                  title={preset.label}
-                  onClick={() => setAccentColor(preset.value)}
-                >
-                  <span aria-hidden="true">✓</span>
-                </button>
-              ))}
+              <div className="theme-toggle" role="group" aria-label="Theme">
+                {["light", "dark"].map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={theme === option ? "active" : ""}
+                    aria-pressed={theme === option}
+                    onClick={() => setTheme(option)}
+                  >
+                    {option === "light" ? "Light" : "Dark"}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <label className="accent-picker">
-              <span>Custom</span>
-              <input
-                type="color"
-                value={accentColor}
-                aria-label="Custom accent colour"
-                onChange={(event) => setAccentColor(event.target.value)}
-              />
-            </label>
-          </div>
-        </div>
+            <div className="theme-setting accent-setting">
+              <div>
+                <h3>Accent colour</h3>
+                <p>Personalise highlights while keeping statuses distinct.</p>
+              </div>
 
-        <div className="settings-note">
-          <p>
-            More preferences will appear here as Student Hub grows.
-          </p>
+              <div className="accent-controls">
+                <div
+                  className="accent-presets"
+                  aria-label="Accent colour presets"
+                >
+                  {accentColorPresets.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      className={accentColor === preset.value ? "active" : ""}
+                      style={{
+                        "--preset-color": preset.value,
+                        "--preset-contrast": getContrastText(preset.value),
+                      }}
+                      aria-label={`${preset.label} accent`}
+                      aria-pressed={accentColor === preset.value}
+                      title={preset.label}
+                      onClick={() => setAccentColor(preset.value)}
+                    >
+                      <span aria-hidden="true">✓</span>
+                    </button>
+                  ))}
+                </div>
+
+                <label className="accent-picker">
+                  <span>Custom</span>
+                  <input
+                    type="color"
+                    value={accentColor}
+                    aria-label="Custom accent colour"
+                    onChange={(event) => setAccentColor(event.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+          </section>
+
+          <section className="appearance-group">
+            <p className="settings-group-label">Layout</p>
+
+            <div className="theme-setting density-setting">
+              <div>
+                <h3>Layout density</h3>
+                <p>Choose between breathing room and a tighter workspace.</p>
+              </div>
+
+              <div
+                className="theme-toggle density-toggle"
+                role="group"
+                aria-label="Layout density"
+              >
+                {["comfortable", "compact"].map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={layoutDensity === option ? "active" : ""}
+                    aria-pressed={layoutDensity === option}
+                    onClick={() => setLayoutDensity(option)}
+                  >
+                    {option === "comfortable" ? "Comfortable" : "Compact"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="theme-setting home-layout-setting">
+              <div>
+                <h3>Home layout</h3>
+                <p>Choose a focused workspace or a fuller task overview.</p>
+              </div>
+
+              <div
+                className="theme-toggle home-layout-toggle"
+                role="group"
+                aria-label="Home layout"
+              >
+                {["focused", "dashboard"].map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    className={homeLayout === option ? "active" : ""}
+                    aria-pressed={homeLayout === option}
+                    onClick={() => setHomeLayout(option)}
+                  >
+                    {option === "focused" ? "Focused" : "Dashboard"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
         </div>
-      </div>
+      )}
     </div>
   );
 }
 
-function StatCard({ label, value }) {
+function HomeStatCard({ label, value }) {
   return (
-    <div className="stat-card">
+    <div className="home-stat">
       <p>{label}</p>
       <h3>{value}</h3>
     </div>
