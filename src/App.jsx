@@ -46,6 +46,12 @@ const accentColorPresets = [
   { label: "Pink", value: "#d9468c" },
   { label: "Red", value: "#dc3f4f" },
 ];
+const rightRailWidgetOptions = [
+  { value: "clock", label: "Clock" },
+  { value: "calendar", label: "School calendar" },
+  { value: "deadlines", label: "Upcoming deadlines" },
+  { value: "plan", label: "Today’s plan" },
+];
 
 function normalizeHexColor(value) {
   return /^#[0-9a-f]{6}$/i.test(value || "")
@@ -157,6 +163,25 @@ function loadTasks() {
   }
 }
 
+function loadRightRailWidgets() {
+  const savedWidgets = localStorage.getItem("student-hub-right-rail-widgets");
+  const defaultWidgets = rightRailWidgetOptions.map((option) => option.value);
+
+  if (!savedWidgets) return defaultWidgets;
+
+  try {
+    const parsedWidgets = JSON.parse(savedWidgets);
+
+    if (!Array.isArray(parsedWidgets)) return defaultWidgets;
+
+    return rightRailWidgetOptions
+      .filter((option) => parsedWidgets.includes(option.value))
+      .map((option) => option.value);
+  } catch {
+    return defaultWidgets;
+  }
+}
+
 function getDaysLeft(dueDate) {
   if (!dueDate) return null;
 
@@ -167,6 +192,13 @@ function getDaysLeft(dueDate) {
   due.setHours(0, 0, 0, 0);
 
   return Math.ceil((due - today) / (1000 * 60 * 60 * 24));
+}
+
+function formatDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function getUrgencyLabel(daysLeft) {
@@ -339,6 +371,13 @@ function App() {
       ? "dashboard"
       : "focused";
   });
+  const [rightRailVisible, setRightRailVisible] = useState(() => {
+    return localStorage.getItem("student-hub-right-rail") !== "off";
+  });
+  const [rightRailCollapsed, setRightRailCollapsed] = useState(() => {
+    return localStorage.getItem("student-hub-right-rail-state") === "collapsed";
+  });
+  const [rightRailWidgets, setRightRailWidgets] = useState(loadRightRailWidgets);
 
   const [tasks, setTasks] = useState(loadTasks);
 
@@ -379,6 +418,27 @@ function App() {
   useEffect(() => {
     localStorage.setItem("student-hub-home-layout", homeLayout);
   }, [homeLayout]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "student-hub-right-rail",
+      rightRailVisible ? "on" : "off"
+    );
+  }, [rightRailVisible]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "student-hub-right-rail-state",
+      rightRailCollapsed ? "collapsed" : "expanded"
+    );
+  }, [rightRailCollapsed]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      "student-hub-right-rail-widgets",
+      JSON.stringify(rightRailWidgets)
+    );
+  }, [rightRailWidgets]);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -710,7 +770,11 @@ function App() {
   }
 
   return (
-    <main className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+    <main
+      className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${
+        rightRailVisible ? "right-rail-visible" : ""
+      } ${rightRailCollapsed ? "right-rail-collapsed" : ""}`}
+    >
       <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="brand-row">
           <div className="brand">
@@ -835,9 +899,24 @@ function App() {
             setLayoutDensity={setLayoutDensity}
             homeLayout={homeLayout}
             setHomeLayout={setHomeLayout}
+            rightRailVisible={rightRailVisible}
+            setRightRailVisible={setRightRailVisible}
+            rightRailWidgets={rightRailWidgets}
+            setRightRailWidgets={setRightRailWidgets}
           />
         )}
       </section>
+
+      {rightRailVisible && (
+        <RightRail
+          tasks={tasks}
+          planBlocks={planBlocks}
+          setActivePage={setActivePage}
+          collapsed={rightRailCollapsed}
+          setCollapsed={setRightRailCollapsed}
+          enabledWidgets={rightRailWidgets}
+        />
+      )}
     </main>
   );
 }
@@ -848,6 +927,203 @@ function NavButton({ label, icon, active, onClick }) {
       <span className="nav-icon">{icon}</span>
       <span className="nav-label">{label}</span>
     </button>
+  );
+}
+
+function RightRail({
+  tasks,
+  planBlocks,
+  setActivePage,
+  collapsed,
+  setCollapsed,
+  enabledWidgets,
+}) {
+  const [currentTime, setCurrentTime] = useState(() => new Date());
+
+  useEffect(() => {
+    const clockTimer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(clockTimer);
+  }, []);
+
+  const datedTasks = tasks
+    .filter((task) => !task.completed && task.dueDate)
+    .sort(
+      (firstTask, secondTask) =>
+        firstTask.dueDate.localeCompare(secondTask.dueDate) ||
+        secondTask.effort - firstTask.effort
+    );
+  const upcomingDeadlines = datedTasks.slice(0, 3);
+  const planPreview = planBlocks
+    .filter((block) => block.type === "study")
+    .slice(0, 2);
+  const schoolDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() + index);
+    const dateKey = formatDateKey(date);
+
+    return {
+      dateKey,
+      dayLabel: date.toLocaleDateString(undefined, { weekday: "short" }),
+      dateLabel: date.getDate(),
+      deadlineCount: datedTasks.filter((task) => task.dueDate === dateKey)
+        .length,
+      isToday: index === 0,
+    };
+  });
+  const hasSelectedWidgets = enabledWidgets.length > 0;
+
+  return (
+    <aside
+      className={`right-rail ${collapsed ? "collapsed" : ""}`}
+      aria-label="School widgets"
+    >
+      <div className="right-rail-toolbar">
+        <div className="right-rail-heading">
+          <p className="eyebrow">School widgets</p>
+          <h2>At a glance</h2>
+        </div>
+        <button
+          type="button"
+          className="right-rail-collapse-button"
+          aria-label={collapsed ? "Expand right rail" : "Collapse right rail"}
+          onClick={() => setCollapsed(!collapsed)}
+        >
+          →
+        </button>
+      </div>
+
+      <div className="right-rail-content">
+        {!hasSelectedWidgets && (
+          <div className="right-rail-empty">
+            <strong>No widgets selected.</strong>
+            <p>Choose widgets in Appearance settings.</p>
+          </div>
+        )}
+
+        {enabledWidgets.includes("clock") && (
+          <section className="right-rail-widget right-rail-widget--clock">
+            <div className="rail-widget-header">
+              <h3>Clock</h3>
+              <span>Device time</span>
+            </div>
+            <time dateTime={currentTime.toISOString()}>
+              <strong>
+                {currentTime.toLocaleTimeString(undefined, {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
+              </strong>
+              <span>
+                {currentTime.toLocaleDateString(undefined, {
+                  weekday: "long",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </span>
+            </time>
+          </section>
+        )}
+
+        {enabledWidgets.includes("calendar") && (
+          <section className="right-rail-widget right-rail-widget--calendar">
+            <div className="rail-widget-header">
+              <h3>School calendar</h3>
+              <span>Next 7 days</span>
+            </div>
+
+            <div className="school-week" aria-label="Upcoming school deadlines">
+              {schoolDays.map((day) => (
+                <div
+                  key={day.dateKey}
+                  className={`school-day ${day.isToday ? "today" : ""} ${
+                    day.deadlineCount > 0 ? "has-deadline" : ""
+                  }`}
+                  title={
+                    day.deadlineCount > 0
+                      ? `${day.deadlineCount} task${
+                          day.deadlineCount === 1 ? "" : "s"
+                        } due`
+                      : "No school tasks due"
+                  }
+                >
+                  <span>{day.dayLabel}</span>
+                  <strong>{day.dateLabel}</strong>
+                  <i aria-hidden="true" />
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {enabledWidgets.includes("deadlines") && (
+          <section className="right-rail-widget right-rail-widget--deadlines">
+            <div className="rail-widget-header">
+              <h3>Upcoming deadlines</h3>
+              <button type="button" onClick={() => setActivePage("tasks")}>
+                View tasks
+              </button>
+            </div>
+
+            {upcomingDeadlines.length > 0 ? (
+              <div className="rail-deadline-list">
+                {upcomingDeadlines.map((task) => {
+                  const daysLeft = getDaysLeft(task.dueDate);
+
+                  return (
+                    <button
+                      type="button"
+                      className="rail-deadline"
+                      key={task.id}
+                      onClick={() => setActivePage("tasks")}
+                    >
+                      <span>
+                        <small>{task.subject}</small>
+                        <strong>{task.title}</strong>
+                      </span>
+                      <span className={`urgency ${getUrgencyClass(daysLeft)}`}>
+                        {getUrgencyLabel(daysLeft)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="rail-empty">No upcoming school deadlines.</p>
+            )}
+          </section>
+        )}
+
+        {enabledWidgets.includes("plan") && (
+          <section className="right-rail-widget right-rail-widget--plan">
+            <div className="rail-widget-header">
+              <h3>Today’s plan</h3>
+              <button type="button" onClick={() => setActivePage("plan")}>
+                Open plan
+              </button>
+            </div>
+
+            {planPreview.length > 0 ? (
+              <div className="rail-plan-list">
+                {planPreview.map((block) => (
+                  <div className="rail-plan-item" key={block.taskId}>
+                    <span>{block.start}</span>
+                    <strong>{block.title}</strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rail-plan-empty">
+                <p>No study plan yet.</p>
+                <button type="button" onClick={() => setActivePage("plan")}>
+                  Go to Today’s plan
+                </button>
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+    </aside>
   );
 }
 
@@ -952,7 +1228,14 @@ function HomePage({
             <section className="home-widget home-widget--overview">
               <div className="home-widget-header">
                 <h3>Overview</h3>
-                <span>Current workload</span>
+                <span>{progressPercentage}% complete</span>
+              </div>
+
+              <div className="progress-track overview-progress-track">
+                <div
+                  className="progress-fill"
+                  style={{ width: `${progressPercentage}%` }}
+                />
               </div>
 
               <div className="home-widget-stats">
@@ -967,20 +1250,20 @@ function HomePage({
             </section>
           )}
 
-          <section className="home-widget home-widget--summary">
-            <div className="home-widget-header progress-header">
-              <h3>Progress</h3>
-              <span>{progressPercentage}%</span>
-            </div>
+          {homeLayout === "focused" && (
+            <section className="home-widget home-widget--summary">
+              <div className="home-widget-header progress-header">
+                <h3>Progress</h3>
+                <span>{progressPercentage}%</span>
+              </div>
 
-            <div className="progress-track">
-              <div
-                className="progress-fill"
-                style={{ width: `${progressPercentage}%` }}
-              />
-            </div>
+              <div className="progress-track">
+                <div
+                  className="progress-fill"
+                  style={{ width: `${progressPercentage}%` }}
+                />
+              </div>
 
-            {homeLayout === "focused" && (
               <div className="home-task-summary">
                 <span>
                   <strong>{activeTasks.length}</strong> active
@@ -988,15 +1271,9 @@ function HomePage({
                 <span>
                   <strong>{completedTasks.length}</strong> completed
                 </span>
-                <span>
-                  <strong>{noDeadlineTasks.length}</strong> no deadline
-                </span>
-                <span>
-                  <strong>{Math.max(hiddenBacklogCount, 0)}</strong> in backlog
-                </span>
               </div>
-            )}
-          </section>
+            </section>
+          )}
         </div>
       </section>
     </div>
@@ -1443,11 +1720,27 @@ function SettingsPage({
   setLayoutDensity,
   homeLayout,
   setHomeLayout,
+  rightRailVisible,
+  setRightRailVisible,
+  rightRailWidgets,
+  setRightRailWidgets,
 }) {
   const [settingsView, setSettingsView] = useState("hub");
 
+  function toggleRightRailWidget(widgetId) {
+    setRightRailWidgets((currentWidgets) => {
+      const selectedWidgets = currentWidgets.includes(widgetId)
+        ? currentWidgets.filter((currentWidget) => currentWidget !== widgetId)
+        : [...currentWidgets, widgetId];
+
+      return rightRailWidgetOptions
+        .filter((option) => selectedWidgets.includes(option.value))
+        .map((option) => option.value);
+    });
+  }
+
   return (
-    <div className="page">
+    <div className={`page settings-page settings-view-${settingsView}`}>
       <header className="page-header">
         {settingsView === "appearance" && (
           <button
@@ -1478,7 +1771,7 @@ function SettingsPage({
           >
             <span>
               <strong>Appearance</strong>
-              <small>Theme, colour, density, and Home layout</small>
+              <small>Theme, colour, density, and workspace layout</small>
             </span>
             <span className="settings-hub-arrow" aria-hidden="true">
               →
@@ -1622,6 +1915,54 @@ function SettingsPage({
                   >
                     {option === "focused" ? "Focused" : "Dashboard"}
                   </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="theme-setting right-rail-setting">
+              <div>
+                <h3>Right rail</h3>
+                <p>Show compact school context beside the workspace.</p>
+              </div>
+
+              <div
+                className="theme-toggle right-rail-toggle"
+                role="group"
+                aria-label="Right rail"
+              >
+                {[
+                  ["On", true],
+                  ["Off", false],
+                ].map(([label, value]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    className={rightRailVisible === value ? "active" : ""}
+                    aria-pressed={rightRailVisible === value}
+                    onClick={() => setRightRailVisible(value)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="theme-setting rail-widgets-setting">
+              <div>
+                <h3>Rail widgets</h3>
+                <p>Choose the school context shown in the right rail.</p>
+              </div>
+
+              <div className="rail-widget-options">
+                {rightRailWidgetOptions.map((option) => (
+                  <label className="rail-widget-option" key={option.value}>
+                    <input
+                      type="checkbox"
+                      checked={rightRailWidgets.includes(option.value)}
+                      onChange={() => toggleRightRailWidget(option.value)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
                 ))}
               </div>
             </div>
