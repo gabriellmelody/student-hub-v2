@@ -36,6 +36,37 @@ const defaultTasks = [
   },
 ];
 
+const COMPLETED_TASK_RETENTION_MS = 24 * 60 * 60 * 1000;
+
+function loadTasks() {
+  const savedTasks = localStorage.getItem("student-hub-tasks");
+
+  if (!savedTasks) return defaultTasks;
+
+  try {
+    const parsedTasks = JSON.parse(savedTasks);
+
+    if (!Array.isArray(parsedTasks)) return defaultTasks;
+
+    const now = Date.now();
+
+    return parsedTasks.flatMap((task) => {
+      if (!task.completed) return task;
+
+      const savedCompletedAt = Number(task.completedAt);
+      const completedAt = Number.isFinite(savedCompletedAt)
+        ? savedCompletedAt
+        : now;
+
+      if (now - completedAt >= COMPLETED_TASK_RETENTION_MS) return [];
+
+      return { ...task, completedAt };
+    });
+  } catch {
+    return defaultTasks;
+  }
+}
+
 function getDaysLeft(dueDate) {
   if (!dueDate) return null;
 
@@ -201,10 +232,7 @@ function App() {
   const [activePage, setActivePage] = useState("home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const [tasks, setTasks] = useState(() => {
-    const savedTasks = localStorage.getItem("student-hub-tasks");
-    return savedTasks ? JSON.parse(savedTasks) : defaultTasks;
-  });
+  const [tasks, setTasks] = useState(loadTasks);
 
   const [hoursAvailable, setHoursAvailable] = useState(() => {
     return localStorage.getItem("student-hub-hours") || 2;
@@ -228,6 +256,35 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem("student-hub-tasks", JSON.stringify(tasks));
+  }, [tasks]);
+
+  useEffect(() => {
+    const completedTimestamps = tasks
+      .filter((task) => task.completed)
+      .map((task) => Number(task.completedAt))
+      .filter(Number.isFinite);
+
+    if (completedTimestamps.length === 0) return undefined;
+
+    const nextExpiry =
+      Math.min(...completedTimestamps) + COMPLETED_TASK_RETENTION_MS;
+    const expiryTimer = setTimeout(() => {
+      const now = Date.now();
+
+      setTasks((currentTasks) =>
+        currentTasks.filter((task) => {
+          if (!task.completed) return true;
+
+          const completedAt = Number(task.completedAt);
+          return (
+            !Number.isFinite(completedAt) ||
+            now - completedAt < COMPLETED_TASK_RETENTION_MS
+          );
+        })
+      );
+    }, Math.max(0, nextExpiry - Date.now()));
+
+    return () => clearTimeout(expiryTimer);
   }, [tasks]);
 
   useEffect(() => {
@@ -281,10 +338,17 @@ function App() {
 
   function toggleTask(taskId) {
     const taskBeingChanged = tasks.find((task) => task.id === taskId);
+    const completedAt = Date.now();
 
-    setTasks(
-      tasks.map((task) =>
-        task.id === taskId ? { ...task, completed: !task.completed } : task
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              completed: !task.completed,
+              completedAt: task.completed ? null : completedAt,
+            }
+          : task
       )
     );
 
@@ -294,9 +358,11 @@ function App() {
   }
 
   function completeTaskFromPlan(taskId) {
-    setTasks(
-      tasks.map((task) =>
-        task.id === taskId ? { ...task, completed: true } : task
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        task.id === taskId
+          ? { ...task, completed: true, completedAt: Date.now() }
+          : task
       )
     );
 
@@ -758,6 +824,10 @@ function TasksPage({
   const sortedVisibleBacklog = sortTasksByMode(visibleBacklog, taskSortMode);
   const sortedNoDeadlineTasks = sortTasksByMode(noDeadlineTasks, taskSortMode);
   const sortedCompletedTasks = sortTasksByMode(completedTasks, taskSortMode);
+  const hasActiveTasks =
+    sortedActiveTasks.length > 0 ||
+    sortedVisibleBacklog.length > 0 ||
+    sortedNoDeadlineTasks.length > 0;
 
   return (
     <div className="page">
@@ -846,6 +916,21 @@ function TasksPage({
               Add task
             </button>
           </form>
+        )}
+
+        {!hasActiveTasks && (
+          <div className="task-empty-state">
+            <h3>
+              {sortedCompletedTasks.length > 0
+                ? "All caught up."
+                : "No tasks yet."}
+            </h3>
+            <p>
+              {sortedCompletedTasks.length > 0
+                ? "Your current tasks are complete. Add another when you’re ready."
+                : "Add your first assignment."}
+            </p>
+          </div>
         )}
 
         {sortedActiveTasks.map((task) => (
