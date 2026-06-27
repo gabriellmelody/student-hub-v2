@@ -201,6 +201,45 @@ function formatDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+function parseDateKey(dateKey) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function getTaskCalendarEvents(tasks) {
+  return tasks
+    .filter((task) => task.dueDate)
+    .map((task) => ({
+      id: `task-${task.id}`,
+      source: "task",
+      taskId: task.id,
+      date: task.dueDate,
+      title: task.title,
+      subject: task.subject,
+      completed: task.completed,
+      effort: task.effort,
+    }));
+}
+
+function getMonthCalendarDays(monthDate) {
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const gridStart = new Date(year, month, 1 - firstDay.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(gridStart);
+    date.setDate(gridStart.getDate() + index);
+
+    return {
+      date,
+      dateKey: formatDateKey(date),
+      isCurrentMonth: date.getMonth() === month,
+      isToday: formatDateKey(date) === formatDateKey(new Date()),
+    };
+  });
+}
+
 function getUrgencyLabel(daysLeft) {
   if (daysLeft === null) return "No deadline";
   if (daysLeft < 0) return "Overdue";
@@ -816,6 +855,12 @@ function App() {
             onClick={() => setActivePage("plan")}
           />
           <NavButton
+            label="Calendar"
+            icon="▦"
+            active={activePage === "calendar"}
+            onClick={() => setActivePage("calendar")}
+          />
+          <NavButton
             label="Settings"
             icon="⚙"
             active={activePage === "settings"}
@@ -887,6 +932,10 @@ function App() {
             hoursAvailable={hoursAvailable}
             setHoursAvailable={setHoursAvailable}
           />
+        )}
+
+        {activePage === "calendar" && (
+          <CalendarPage tasks={tasks} setActivePage={setActivePage} />
         )}
 
         {activePage === "settings" && (
@@ -1028,17 +1077,25 @@ function RightRail({
         {enabledWidgets.includes("calendar") && (
           <section className="right-rail-widget right-rail-widget--calendar">
             <div className="rail-widget-header">
-              <h3>School calendar</h3>
+              <button
+                type="button"
+                className="rail-widget-title-button"
+                onClick={() => setActivePage("calendar")}
+              >
+                School calendar
+              </button>
               <span>Next 7 days</span>
             </div>
 
             <div className="school-week" aria-label="Upcoming school deadlines">
               {schoolDays.map((day) => (
-                <div
+                <button
+                  type="button"
                   key={day.dateKey}
                   className={`school-day ${day.isToday ? "today" : ""} ${
                     day.deadlineCount > 0 ? "has-deadline" : ""
                   }`}
+                  onClick={() => setActivePage("calendar")}
                   title={
                     day.deadlineCount > 0
                       ? `${day.deadlineCount} task${
@@ -1050,7 +1107,7 @@ function RightRail({
                   <span>{day.dayLabel}</span>
                   <strong>{day.dateLabel}</strong>
                   <i aria-hidden="true" />
-                </div>
+                </button>
               ))}
             </div>
           </section>
@@ -1276,6 +1333,219 @@ function HomePage({
           )}
         </div>
       </section>
+    </div>
+  );
+}
+
+function CalendarPage({ tasks, setActivePage }) {
+  const today = new Date();
+  const [visibleMonth, setVisibleMonth] = useState(
+    () => new Date(today.getFullYear(), today.getMonth(), 1)
+  );
+  const [selectedDate, setSelectedDate] = useState(() => formatDateKey(today));
+  const calendarEvents = getTaskCalendarEvents(tasks);
+  const calendarDays = getMonthCalendarDays(visibleMonth);
+  const selectedEvents = calendarEvents.filter(
+    (event) => event.date === selectedDate
+  );
+  const selectedDateValue = parseDateKey(selectedDate);
+
+  function changeMonth(offset) {
+    const nextMonth = new Date(
+      visibleMonth.getFullYear(),
+      visibleMonth.getMonth() + offset,
+      1
+    );
+    setVisibleMonth(nextMonth);
+    setSelectedDate(formatDateKey(nextMonth));
+  }
+
+  function showToday() {
+    const currentDate = new Date();
+    setVisibleMonth(
+      new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+    );
+    setSelectedDate(formatDateKey(currentDate));
+  }
+
+  function selectCalendarDay(day) {
+    setSelectedDate(day.dateKey);
+
+    if (!day.isCurrentMonth) {
+      setVisibleMonth(
+        new Date(day.date.getFullYear(), day.date.getMonth(), 1)
+      );
+    }
+  }
+
+  return (
+    <div className="page calendar-page">
+      <header className="page-header">
+        <p className="eyebrow">Calendar</p>
+        <h2>School calendar</h2>
+        <p>Your local assignment deadlines, organised by due date.</p>
+      </header>
+
+      <div className="calendar-layout">
+        <section className="panel calendar-month-panel">
+          <div className="calendar-toolbar">
+            <div>
+              <p className="section-label">Month</p>
+              <h3>
+                {visibleMonth.toLocaleDateString(undefined, {
+                  month: "long",
+                  year: "numeric",
+                })}
+              </h3>
+            </div>
+
+            <div className="calendar-navigation" aria-label="Calendar navigation">
+              <button
+                type="button"
+                aria-label="Previous month"
+                onClick={() => changeMonth(-1)}
+              >
+                ←
+              </button>
+              <button type="button" onClick={showToday}>
+                Today
+              </button>
+              <button
+                type="button"
+                aria-label="Next month"
+                onClick={() => changeMonth(1)}
+              >
+                →
+              </button>
+            </div>
+          </div>
+
+          <div className="calendar-weekdays" aria-hidden="true">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+              (weekday) => (
+                <span key={weekday}>{weekday}</span>
+              )
+            )}
+          </div>
+
+          <div className="calendar-grid">
+            {calendarDays.map((day) => {
+              const dayEvents = calendarEvents.filter(
+                (event) => event.date === day.dateKey
+              );
+              const isSelected = day.dateKey === selectedDate;
+
+              return (
+                <button
+                  type="button"
+                  key={day.dateKey}
+                  className={`calendar-day ${
+                    day.isCurrentMonth ? "" : "outside-month"
+                  } ${day.isToday ? "today" : ""} ${
+                    isSelected ? "selected" : ""
+                  }`}
+                  aria-pressed={isSelected}
+                  aria-label={`${day.date.toLocaleDateString(undefined, {
+                    month: "long",
+                    day: "numeric",
+                  })}, ${dayEvents.length} task${
+                    dayEvents.length === 1 ? "" : "s"
+                  } due`}
+                  onClick={() => selectCalendarDay(day)}
+                >
+                  <span className="calendar-day-number">{day.date.getDate()}</span>
+
+                  <span className="calendar-day-events">
+                    {dayEvents.slice(0, 2).map((event) => (
+                      <span
+                        className={`calendar-event-label ${
+                          event.completed ? "completed" : ""
+                        }`}
+                        data-source={event.source}
+                        key={event.id}
+                      >
+                        <i aria-hidden="true" />
+                        <em>{event.title}</em>
+                      </span>
+                    ))}
+                    {dayEvents.length > 2 && (
+                      <small>+{dayEvents.length - 2} more</small>
+                    )}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <aside className="panel calendar-detail-panel">
+          <div className="calendar-detail-header">
+            <div>
+              <p className="section-label">Selected day</p>
+              <h3>
+                {selectedDateValue.toLocaleDateString(undefined, {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </h3>
+            </div>
+            <span>
+              {selectedEvents.length} task
+              {selectedEvents.length === 1 ? "" : "s"}
+            </span>
+          </div>
+
+          {selectedEvents.length > 0 ? (
+            <div className="calendar-task-list">
+              {selectedEvents.map((event) => {
+                const daysLeft = getDaysLeft(event.date);
+
+                return (
+                  <button
+                    type="button"
+                    className={`calendar-task-item ${
+                      event.completed ? "completed" : ""
+                    }`}
+                    data-source={event.source}
+                    key={event.id}
+                    onClick={() => setActivePage("tasks")}
+                  >
+                    <span>
+                      <small>{event.subject}</small>
+                      <strong>{event.title}</strong>
+                    </span>
+                    <span
+                      className={
+                        event.completed
+                          ? "calendar-task-status completed"
+                          : `calendar-task-status urgency ${getUrgencyClass(
+                              daysLeft
+                            )}`
+                      }
+                    >
+                      {event.completed ? "Completed" : getUrgencyLabel(daysLeft)}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="calendar-empty-state">
+              <h3>No school tasks due.</h3>
+              <p>Select another day or add an assignment from the To-do page.</p>
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="secondary-button calendar-open-tasks"
+            onClick={() => setActivePage("tasks")}
+          >
+            Open to-do list
+          </button>
+        </aside>
+      </div>
     </div>
   );
 }
