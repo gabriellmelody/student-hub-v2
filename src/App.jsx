@@ -37,6 +37,96 @@ const defaultTasks = [
 ];
 
 const COMPLETED_TASK_RETENTION_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_ACCENT_COLOR = "#7c3aed";
+const accentColorPresets = [
+  { label: "Purple", value: "#7c3aed" },
+  { label: "Blue", value: "#2563eb" },
+  { label: "Green", value: "#16865c" },
+  { label: "Orange", value: "#d76516" },
+  { label: "Pink", value: "#d9468c" },
+  { label: "Red", value: "#dc3f4f" },
+];
+
+function normalizeHexColor(value) {
+  return /^#[0-9a-f]{6}$/i.test(value || "")
+    ? value.toLowerCase()
+    : DEFAULT_ACCENT_COLOR;
+}
+
+function hexToRgb(hex) {
+  const value = normalizeHexColor(hex).slice(1);
+
+  return {
+    red: parseInt(value.slice(0, 2), 16),
+    green: parseInt(value.slice(2, 4), 16),
+    blue: parseInt(value.slice(4, 6), 16),
+  };
+}
+
+function rgbToHex({ red, green, blue }) {
+  return `#${[red, green, blue]
+    .map((value) => Math.round(value).toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function mixColors(color, target, amount) {
+  const sourceRgb = hexToRgb(color);
+  const targetRgb = hexToRgb(target);
+
+  return rgbToHex({
+    red: sourceRgb.red + (targetRgb.red - sourceRgb.red) * amount,
+    green: sourceRgb.green + (targetRgb.green - sourceRgb.green) * amount,
+    blue: sourceRgb.blue + (targetRgb.blue - sourceRgb.blue) * amount,
+  });
+}
+
+function getRelativeLuminance(color) {
+  const { red, green, blue } = hexToRgb(color);
+  const channels = [red, green, blue].map((value) => {
+    const channel = value / 255;
+    return channel <= 0.03928
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+
+  return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+}
+
+function getContrastRatio(firstColor, secondColor) {
+  const firstLuminance = getRelativeLuminance(firstColor);
+  const secondLuminance = getRelativeLuminance(secondColor);
+  const lighter = Math.max(firstLuminance, secondLuminance);
+  const darker = Math.min(firstLuminance, secondLuminance);
+
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function getContrastText(accentColor) {
+  const lightText = "#ffffff";
+  const darkText = "#18181b";
+
+  return getContrastRatio(accentColor, lightText) >=
+    getContrastRatio(accentColor, darkText)
+    ? lightText
+    : darkText;
+}
+
+function getReadableAccent(accentColor, theme) {
+  const background = theme === "dark" ? "#0d0d0f" : "#f7f7f5";
+  const target = theme === "dark" ? "#ffffff" : "#18181b";
+
+  for (let step = 0; step <= 10; step += 1) {
+    const candidate = mixColors(accentColor, target, step / 10);
+    if (getContrastRatio(candidate, background) >= 4.5) return candidate;
+  }
+
+  return target;
+}
+
+function colorToRgba(color, alpha) {
+  const { red, green, blue } = hexToRgb(color);
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
 
 function loadTasks() {
   const savedTasks = localStorage.getItem("student-hub-tasks");
@@ -231,6 +321,14 @@ function getPlanBlockKey(block, index) {
 function App() {
   const [activePage, setActivePage] = useState("home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem("student-hub-theme") === "light"
+      ? "light"
+      : "dark";
+  });
+  const [accentColor, setAccentColor] = useState(() => {
+    return normalizeHexColor(localStorage.getItem("student-hub-accent"));
+  });
 
   const [tasks, setTasks] = useState(loadTasks);
 
@@ -257,6 +355,47 @@ function App() {
   useEffect(() => {
     localStorage.setItem("student-hub-tasks", JSON.stringify(tasks));
   }, [tasks]);
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("student-hub-theme", theme);
+  }, [theme]);
+
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    const readableAccent = getReadableAccent(accentColor, theme);
+    const hoverTarget = theme === "dark" ? "#ffffff" : "#18181b";
+    const movedSurface = theme === "dark" ? "#202024" : "#ffffff";
+
+    root.style.setProperty("--accent", accentColor);
+    root.style.setProperty(
+      "--accent-hover",
+      mixColors(accentColor, hoverTarget, 0.12)
+    );
+    root.style.setProperty("--accent-soft", readableAccent);
+    root.style.setProperty("--accent-contrast", getContrastText(accentColor));
+    root.style.setProperty(
+      "--accent-tint",
+      colorToRgba(accentColor, theme === "dark" ? 0.14 : 0.09)
+    );
+    root.style.setProperty(
+      "--accent-border",
+      colorToRgba(accentColor, theme === "dark" ? 0.3 : 0.2)
+    );
+    root.style.setProperty(
+      "--moved-border",
+      colorToRgba(accentColor, theme === "dark" ? 0.72 : 0.48)
+    );
+    root.style.setProperty(
+      "--moved-bg",
+      mixColors(movedSurface, accentColor, theme === "dark" ? 0.1 : 0.06)
+    );
+    root.style.setProperty(
+      "--moved-shadow",
+      colorToRgba(accentColor, theme === "dark" ? 0.16 : 0.12)
+    );
+    localStorage.setItem("student-hub-accent", accentColor);
+  }, [accentColor, theme]);
 
   useEffect(() => {
     const completedTimestamps = tasks
@@ -666,7 +805,14 @@ function App() {
           />
         )}
 
-        {activePage === "settings" && <SettingsPage />}
+        {activePage === "settings" && (
+          <SettingsPage
+            theme={theme}
+            setTheme={setTheme}
+            accentColor={accentColor}
+            setAccentColor={setAccentColor}
+          />
+        )}
       </section>
     </main>
   );
@@ -1235,7 +1381,7 @@ function PlanPage({
   );
 }
 
-function SettingsPage() {
+function SettingsPage({ theme, setTheme, accentColor, setAccentColor }) {
   return (
     <div className="page">
       <header className="page-header">
@@ -1248,11 +1394,73 @@ function SettingsPage() {
       </header>
 
       <div className="panel">
-        <div className="empty-plan">
-          <h3>Coming soon.</h3>
+        <div className="panel-header">
+          <h3>Appearance</h3>
+        </div>
+
+        <div className="theme-setting">
+          <div>
+            <h3>Theme</h3>
+            <p>Choose the appearance that feels most comfortable.</p>
+          </div>
+
+          <div className="theme-toggle" role="group" aria-label="Theme">
+            {["light", "dark"].map((option) => (
+              <button
+                key={option}
+                type="button"
+                className={theme === option ? "active" : ""}
+                aria-pressed={theme === option}
+                onClick={() => setTheme(option)}
+              >
+                {option === "light" ? "Light" : "Dark"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="theme-setting accent-setting">
+          <div>
+            <h3>Accent colour</h3>
+            <p>Personalise highlights while keeping task statuses distinct.</p>
+          </div>
+
+          <div className="accent-controls">
+            <div className="accent-presets" aria-label="Accent colour presets">
+              {accentColorPresets.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  className={accentColor === preset.value ? "active" : ""}
+                  style={{
+                    "--preset-color": preset.value,
+                    "--preset-contrast": getContrastText(preset.value),
+                  }}
+                  aria-label={`${preset.label} accent`}
+                  aria-pressed={accentColor === preset.value}
+                  title={preset.label}
+                  onClick={() => setAccentColor(preset.value)}
+                >
+                  <span aria-hidden="true">✓</span>
+                </button>
+              ))}
+            </div>
+
+            <label className="accent-picker">
+              <span>Custom</span>
+              <input
+                type="color"
+                value={accentColor}
+                aria-label="Custom accent colour"
+                onChange={(event) => setAccentColor(event.target.value)}
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="settings-note">
           <p>
-            Settings will matter more once we add AI, Google Classroom, and
-            calendar syncing.
+            More preferences will appear here as Student Hub grows.
           </p>
         </div>
       </div>
