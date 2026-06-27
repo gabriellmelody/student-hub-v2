@@ -775,6 +775,7 @@ button {
 }
 
 .plan-block {
+  position: relative;
   background: #202024;
   border: 1px solid #2f2f35;
   border-radius: 16px;
@@ -785,6 +786,13 @@ button {
 .plan-block.break-block {
   background: #151518;
   border-style: dashed;
+}
+
+.plan-block.plan-block-moved {
+  border-color: rgba(167, 139, 250, 0.78);
+  background: #26232d;
+  box-shadow: 0 14px 34px rgba(124, 58, 237, 0.16);
+  will-change: transform;
 }
 
 .plan-time {
@@ -821,8 +829,15 @@ button {
   line-height: 1.5;
 }
 
-.complete-plan-button {
+.plan-block-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin-top: 12px;
+}
+
+.move-plan-button,
+.complete-plan-button {
   border: 1px solid #3f3f46;
   background: #18181b;
   color: #d4d4d8;
@@ -832,6 +847,12 @@ button {
   cursor: pointer;
 }
 
+.move-plan-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.move-plan-button:not(:disabled):hover,
 .complete-plan-button:hover {
   background: #27272a;
   color: white;

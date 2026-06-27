@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./App.css";
 
 const defaultTasks = [
@@ -158,6 +158,45 @@ function sortTasksByMode(taskList, sortMode) {
   });
 }
 
+function rebuildPlanFromStudyBlocks(studyBlocks, startTime) {
+  const rebuiltPlan = [];
+  let currentOffset = 0;
+
+  studyBlocks.forEach((block, index) => {
+    const duration = Number(block.duration);
+
+    rebuiltPlan.push({
+      ...block,
+      start: formatTime(startTime, currentOffset),
+      end: formatTime(startTime, currentOffset + duration),
+    });
+
+    currentOffset += duration;
+
+    if (index < studyBlocks.length - 1) {
+      rebuiltPlan.push({
+        id: `break-${block.taskId}-${index}`,
+        type: "break",
+        start: formatTime(startTime, currentOffset),
+        end: formatTime(startTime, currentOffset + 10),
+        duration: 10,
+        title: "Break",
+        tip: "Step away from the screen for a few minutes.",
+      });
+
+      currentOffset += 10;
+    }
+  });
+
+  return rebuiltPlan;
+}
+
+function getPlanBlockKey(block, index) {
+  if (block.type === "study") return `study-${block.taskId}`;
+  if (block.type === "break") return `break-${index}`;
+  return block.id;
+}
+
 function App() {
   const [activePage, setActivePage] = useState("home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -177,6 +216,8 @@ function App() {
 
   const [showAddTask, setShowAddTask] = useState(false);
   const [planBlocks, setPlanBlocks] = useState([]);
+  const [planMoveFeedback, setPlanMoveFeedback] = useState(null);
+  const planMoveFeedbackTimer = useRef(null);
 
   const [newTask, setNewTask] = useState({
     subject: "",
@@ -196,6 +237,10 @@ function App() {
   useEffect(() => {
     localStorage.setItem("student-hub-start-time", startTime);
   }, [startTime]);
+
+  useEffect(() => {
+    return () => clearTimeout(planMoveFeedbackTimer.current);
+  }, []);
 
   const activeTasks = sortTasksForDisplay(
     tasks.filter((task) => {
@@ -410,6 +455,36 @@ function App() {
     setActivePage("plan");
   }
 
+  function movePlanStudyBlock(taskId, direction) {
+    const studyBlocks = planBlocks.filter((block) => block.type === "study");
+    const currentIndex = studyBlocks.findIndex((block) => block.taskId === taskId);
+    const nextIndex = currentIndex + direction;
+
+    if (
+      currentIndex === -1 ||
+      nextIndex < 0 ||
+      nextIndex >= studyBlocks.length
+    ) {
+      return;
+    }
+
+    const reorderedStudyBlocks = [...studyBlocks];
+    const [movedBlock] = reorderedStudyBlocks.splice(currentIndex, 1);
+    reorderedStudyBlocks.splice(nextIndex, 0, movedBlock);
+
+    setPlanBlocks(rebuildPlanFromStudyBlocks(reorderedStudyBlocks, startTime));
+    setPlanMoveFeedback((currentFeedback) => ({
+      taskId,
+      direction,
+      sequence: (currentFeedback?.sequence || 0) + 1,
+    }));
+
+    clearTimeout(planMoveFeedbackTimer.current);
+    planMoveFeedbackTimer.current = setTimeout(() => {
+      setPlanMoveFeedback(null);
+    }, 700);
+  }
+
   return (
     <main className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
@@ -517,6 +592,8 @@ function App() {
             setStartTime={setStartTime}
             generatePlan={generatePlan}
             clearPlan={clearPlan}
+            movePlanStudyBlock={movePlanStudyBlock}
+            planMoveFeedback={planMoveFeedback}
             completeTaskFromPlan={completeTaskFromPlan}
             hoursAvailable={hoursAvailable}
             setHoursAvailable={setHoursAvailable}
@@ -844,10 +921,91 @@ function PlanPage({
   setStartTime,
   generatePlan,
   clearPlan,
+  movePlanStudyBlock,
+  planMoveFeedback,
   completeTaskFromPlan,
   hoursAvailable,
   setHoursAvailable,
 }) {
+  const studyPlanBlocks = planBlocks.filter((block) => block.type === "study");
+  const planBlockRefs = useRef(new Map());
+  const flipFirstRects = useRef(null);
+  const flipAnimationFrame = useRef(null);
+
+  useEffect(() => {
+    return () => cancelAnimationFrame(flipAnimationFrame.current);
+  }, []);
+
+  useLayoutEffect(() => {
+    const firstRects = flipFirstRects.current;
+
+    if (!firstRects) return;
+
+    flipFirstRects.current = null;
+    cancelAnimationFrame(flipAnimationFrame.current);
+
+    const animatedBlocks = [];
+
+    planBlockRefs.current.forEach((node, key) => {
+      const firstRect = firstRects.get(key);
+
+      if (!firstRect) return;
+
+      const lastRect = node.getBoundingClientRect();
+      const deltaX = firstRect.left - lastRect.left;
+      const deltaY = firstRect.top - lastRect.top;
+
+      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
+
+      node.style.transition = "none";
+      node.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+      node.style.zIndex =
+        key === `study-${planMoveFeedback?.taskId}` ? "2" : "1";
+      animatedBlocks.push(node);
+    });
+
+    flipAnimationFrame.current = requestAnimationFrame(() => {
+      animatedBlocks.forEach((node) => {
+        node.style.transition =
+          "transform 460ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms ease, background 220ms ease, box-shadow 220ms ease";
+        node.style.transform = "";
+      });
+    });
+
+    const cleanupTimer = setTimeout(() => {
+      animatedBlocks.forEach((node) => {
+        node.style.transition = "";
+        node.style.transform = "";
+        node.style.zIndex = "";
+      });
+    }, 520);
+
+    return () => clearTimeout(cleanupTimer);
+  }, [planBlocks, planMoveFeedback]);
+
+  function setPlanBlockRef(key, node) {
+    if (node) {
+      planBlockRefs.current.set(key, node);
+    } else {
+      planBlockRefs.current.delete(key);
+    }
+  }
+
+  function getPlanBlockRects() {
+    const rects = new Map();
+
+    planBlockRefs.current.forEach((node, key) => {
+      rects.set(key, node.getBoundingClientRect());
+    });
+
+    return rects;
+  }
+
+  function handleMovePlanStudyBlock(taskId, direction) {
+    flipFirstRects.current = getPlanBlockRects();
+    movePlanStudyBlock(taskId, direction);
+  }
+
   return (
     <div className="page">
       <header className="page-header">
@@ -905,24 +1063,39 @@ function PlanPage({
           </div>
         )}
 
-        {planBlocks.map((block) => {
+        {planBlocks.map((block, index) => {
+          const blockKey = getPlanBlockKey(block, index);
+
           if (block.type === "message") {
             return (
-              <div className="empty-plan" key={block.id}>
+              <div className="empty-plan" key={blockKey}>
                 <h3>{block.title}</h3>
                 <p>{block.note}</p>
               </div>
             );
           }
 
+          const studyIndex =
+            block.type === "study"
+              ? studyPlanBlocks.findIndex(
+                  (studyBlock) => studyBlock.taskId === block.taskId
+                )
+              : -1;
+          const isFirstStudyBlock = studyIndex === 0;
+          const isLastStudyBlock = studyIndex === studyPlanBlocks.length - 1;
+          const isMovedStudyBlock =
+            block.type === "study" && planMoveFeedback?.taskId === block.taskId;
+          const moveClassName = isMovedStudyBlock ? " plan-block-moved" : "";
+
           return (
             <div
               className={
                 block.type === "break"
                   ? "plan-block break-block"
-                  : "plan-block"
+                  : `plan-block${moveClassName}`
               }
-              key={block.id}
+              key={blockKey}
+              ref={(node) => setPlanBlockRef(blockKey, node)}
             >
               <div className="plan-time">
                 {block.start} – {block.end}
@@ -941,12 +1114,33 @@ function PlanPage({
               <p>{block.tip}</p>
 
               {block.type === "study" && (
-                <button
-                  className="complete-plan-button"
-                  onClick={() => completeTaskFromPlan(block.taskId)}
-                >
-                  Mark task done
-                </button>
+                <div className="plan-block-controls">
+                  <button
+                    type="button"
+                    className="move-plan-button"
+                    onClick={() => handleMovePlanStudyBlock(block.taskId, -1)}
+                    disabled={isFirstStudyBlock}
+                  >
+                    Move up
+                  </button>
+
+                  <button
+                    type="button"
+                    className="move-plan-button"
+                    onClick={() => handleMovePlanStudyBlock(block.taskId, 1)}
+                    disabled={isLastStudyBlock}
+                  >
+                    Move down
+                  </button>
+
+                  <button
+                    type="button"
+                    className="complete-plan-button"
+                    onClick={() => completeTaskFromPlan(block.taskId)}
+                  >
+                    Mark task done
+                  </button>
+                </div>
               )}
             </div>
           );
