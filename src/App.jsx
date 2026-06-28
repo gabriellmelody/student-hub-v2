@@ -37,11 +37,26 @@ const defaultTasks = [
 ];
 
 const COMPLETED_TASK_RETENTION_MS = 24 * 60 * 60 * 1000;
-const DEFAULT_ACCENT_COLOR = "#7c3aed";
+const DEFAULT_ACCENT_COLOR = "#6366f1";
 const DEFAULT_SUBJECT_COLOR = "#2563eb";
+const STUDENT_HUB_STORAGE_KEYS = [
+  "student-hub-tasks",
+  "student-hub-subjects",
+  "student-hub-student-profile",
+  "student-hub-theme",
+  "student-hub-accent",
+  "student-hub-density",
+  "student-hub-home-layout",
+  "student-hub-right-rail",
+  "student-hub-right-rail-state",
+  "student-hub-right-rail-widgets",
+  "student-hub-hours",
+  "student-hub-start-time",
+];
 const subjectCourseSystems = ["IB", "AP", "GCSE", "A-level", "Other"];
 const subjectLevels = ["HL", "SL", "AP", "Standard", "Higher", "Other"];
 const accentColorPresets = [
+  { label: "Indigo", value: DEFAULT_ACCENT_COLOR },
   { label: "Purple", value: "#7c3aed" },
   { label: "Blue", value: "#2563eb" },
   { label: "Green", value: "#16865c" },
@@ -473,9 +488,9 @@ function App() {
   const [activePage, setActivePage] = useState("home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem("student-hub-theme") === "light"
-      ? "light"
-      : "dark";
+    return localStorage.getItem("student-hub-theme") === "dark"
+      ? "dark"
+      : "light";
   });
   const [accentColor, setAccentColor] = useState(() => {
     return normalizeHexColor(localStorage.getItem("student-hub-accent"));
@@ -936,6 +951,72 @@ function App() {
     setActivePage("home");
   }
 
+  function resetTasks() {
+    localStorage.removeItem("student-hub-tasks");
+    setTasks([]);
+    setPlanBlocks([]);
+    setPlanMoveFeedback(null);
+    setShowAddTask(false);
+  }
+
+  function resetSubjects() {
+    localStorage.removeItem("student-hub-subjects");
+    setSubjects([]);
+  }
+
+  function resetAppearancePreferences() {
+    [
+      "student-hub-theme",
+      "student-hub-accent",
+      "student-hub-density",
+      "student-hub-home-layout",
+      "student-hub-right-rail",
+      "student-hub-right-rail-state",
+      "student-hub-right-rail-widgets",
+    ].forEach((storageKey) => localStorage.removeItem(storageKey));
+
+    setTheme("light");
+    setAccentColor(DEFAULT_ACCENT_COLOR);
+    setLayoutDensity("compact");
+    setHomeLayout("focused");
+    setRightRailVisible(true);
+    setRightRailCollapsed(false);
+    setRightRailWidgets(
+      rightRailWidgetOptions.map((option) => option.value)
+    );
+  }
+
+  function clearAllStudentHubData() {
+    STUDENT_HUB_STORAGE_KEYS.forEach((storageKey) =>
+      localStorage.removeItem(storageKey)
+    );
+
+    setTasks([]);
+    setSubjects([]);
+    setPlanBlocks([]);
+    setPlanMoveFeedback(null);
+    setShowAddTask(false);
+    setNewTask({ subject: "", title: "", dueDate: "", effort: 2 });
+    setTheme("light");
+    setAccentColor(DEFAULT_ACCENT_COLOR);
+    setLayoutDensity("compact");
+    setHomeLayout("focused");
+    setRightRailVisible(true);
+    setRightRailCollapsed(false);
+    setRightRailWidgets(
+      rightRailWidgetOptions.map((option) => option.value)
+    );
+    setHoursAvailable(2);
+    setStartTime("16:00");
+    setSidebarCollapsed(false);
+    setActivePage("home");
+    setStudentProfile({
+      schoolSystem: "",
+      onboardingCompleted: false,
+      source: "manual",
+    });
+  }
+
   if (!studentProfile.onboardingCompleted) {
     return (
       <OnboardingFlow
@@ -1115,6 +1196,10 @@ function App() {
             rightRailWidgets={rightRailWidgets}
             setRightRailWidgets={setRightRailWidgets}
             restartOnboarding={restartOnboarding}
+            resetTasks={resetTasks}
+            resetSubjects={resetSubjects}
+            resetAppearancePreferences={resetAppearancePreferences}
+            clearAllStudentHubData={clearAllStudentHubData}
           />
         )}
       </section>
@@ -3018,6 +3103,10 @@ function SettingsPage({
   rightRailWidgets,
   setRightRailWidgets,
   restartOnboarding,
+  resetTasks,
+  resetSubjects,
+  resetAppearancePreferences,
+  clearAllStudentHubData,
 }) {
   const [settingsView, setSettingsView] = useState("hub");
   const viewCopy = {
@@ -3035,6 +3124,11 @@ function SettingsPage({
       eyebrow: "Settings / Subjects",
       title: "Subjects",
       description: "Keep your courses and grade goals organised in one place.",
+    },
+    data: {
+      eyebrow: "Settings / Data",
+      title: "Data & reset",
+      description: "Manage local Student Hub data and workspace defaults.",
     },
   };
   const currentViewCopy = viewCopy[settingsView];
@@ -3101,13 +3195,15 @@ function SettingsPage({
           <button
             type="button"
             className="settings-hub-card"
-            onClick={restartOnboarding}
+            onClick={() => setSettingsView("data")}
           >
             <span>
-              <strong>Onboarding</strong>
-              <small>Review your local workspace setup</small>
+              <strong>Data & reset</strong>
+              <small>Local data, workspace resets, and onboarding</small>
             </span>
-            <span className="settings-hub-arrow">Restart</span>
+            <span className="settings-hub-arrow" aria-hidden="true">
+              →
+            </span>
           </button>
 
           {[
@@ -3300,8 +3396,184 @@ function SettingsPage({
             </div>
           </section>
         </div>
-      ) : (
+      ) : settingsView === "subjects" ? (
         <SubjectsSettings subjects={subjects} setSubjects={setSubjects} />
+      ) : (
+        <DataSettings
+          resetTasks={resetTasks}
+          resetSubjects={resetSubjects}
+          resetAppearancePreferences={resetAppearancePreferences}
+          restartOnboarding={restartOnboarding}
+          clearAllStudentHubData={clearAllStudentHubData}
+        />
+      )}
+    </div>
+  );
+}
+
+function DataSettings({
+  resetTasks,
+  resetSubjects,
+  resetAppearancePreferences,
+  restartOnboarding,
+  clearAllStudentHubData,
+}) {
+  const [pendingReset, setPendingReset] = useState(null);
+  const resetOptions = [
+    {
+      id: "tasks",
+      title: "Reset tasks",
+      description: "Remove all tasks and clear the current generated plan.",
+      confirmation: "All active, backlog, and completed tasks will be removed.",
+      confirmLabel: "Reset tasks",
+      action: resetTasks,
+      destructive: true,
+    },
+    {
+      id: "subjects",
+      title: "Reset subjects",
+      description: "Remove Subject Profiles without deleting any tasks.",
+      confirmation:
+        "Saved subjects, course details, grades, and subject colours will be removed. Existing task subject names will remain.",
+      confirmLabel: "Reset subjects",
+      action: resetSubjects,
+      destructive: true,
+    },
+    {
+      id: "appearance",
+      title: "Reset appearance",
+      description: "Restore theme, accent, density, Home, and rail defaults.",
+      confirmation:
+        "Your visual and workspace layout preferences will return to their default values. Tasks and subjects will stay untouched.",
+      confirmLabel: "Reset appearance",
+      action: resetAppearancePreferences,
+    },
+    {
+      id: "onboarding",
+      title: "Restart onboarding",
+      description: "Run local workspace setup again without deleting your work.",
+      confirmation:
+        "Onboarding will open again. Your tasks, subjects, and current preferences will remain available.",
+      confirmLabel: "Restart onboarding",
+      action: restartOnboarding,
+    },
+    {
+      id: "all",
+      title: "Clear all local app data",
+      description: "Return Student Hub to a clean first-time state.",
+      confirmation:
+        "Tasks, subjects, profile, onboarding status, preferences, and the current plan will all be removed from this device.",
+      confirmLabel: "Clear all data",
+      action: clearAllStudentHubData,
+      destructive: true,
+    },
+  ];
+
+  useEffect(() => {
+    if (!pendingReset) return undefined;
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") setPendingReset(null);
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [pendingReset]);
+
+  function confirmReset() {
+    if (!pendingReset) return;
+
+    pendingReset.action();
+    setPendingReset(null);
+  }
+
+  return (
+    <div className="data-settings">
+      <section className="panel data-panel">
+        <div className="data-panel-intro">
+          <div>
+            <p className="settings-group-label">Stored on this device</p>
+            <h3>Local workspace data</h3>
+            <p>
+              These controls only affect Student Hub data saved in this
+              browser. Other site data is never touched.
+            </p>
+          </div>
+          <span>Local only</span>
+        </div>
+
+        <div className="data-reset-list">
+          {resetOptions.map((option) => (
+            <div
+              className={`data-reset-row ${
+                option.destructive ? "destructive" : ""
+              }`}
+              key={option.id}
+            >
+              <div>
+                <h3>{option.title}</h3>
+                <p>{option.description}</p>
+              </div>
+              <button type="button" onClick={() => setPendingReset(option)}>
+                {option.id === "onboarding"
+                  ? "Restart"
+                  : option.id === "all"
+                    ? "Clear"
+                    : "Reset"}
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {pendingReset && (
+        <div
+          className="data-confirmation-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setPendingReset(null);
+          }}
+        >
+          <section
+            className={`data-confirmation ${
+              pendingReset.destructive ? "destructive" : ""
+            }`}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="data-confirmation-title"
+            aria-describedby="data-confirmation-description"
+          >
+            <div>
+              <p className="settings-group-label">Confirm action</p>
+              <h3 id="data-confirmation-title">{pendingReset.title}?</h3>
+              <p id="data-confirmation-description">
+                {pendingReset.confirmation}
+              </p>
+            </div>
+            <div className="data-confirmation-actions">
+              <button
+                type="button"
+                className="data-cancel-button"
+                autoFocus
+                onClick={() => setPendingReset(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="data-confirm-button"
+                onClick={confirmReset}
+              >
+                {pendingReset.confirmLabel}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   );
