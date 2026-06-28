@@ -1,0 +1,274 @@
+/* Original shell and page breakpoint adaptations. */
+
+@media (max-width: 1180px) {
+  .app-shell.right-rail-visible,
+  .app-shell.right-rail-visible.right-rail-collapsed {
+    grid-template-columns: var(--density-sidebar-width) minmax(0, 1fr);
+  }
+
+  .app-shell.sidebar-collapsed.right-rail-visible,
+  .app-shell.sidebar-collapsed.right-rail-visible.right-rail-collapsed {
+    grid-template-columns: var(--density-sidebar-collapsed-width)
+      minmax(0, 1fr);
+  }
+
+  .right-rail {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-shell,
+  .app-shell.sidebar-collapsed,
+  .app-shell.right-rail-visible,
+  .app-shell.right-rail-visible.right-rail-collapsed,
+  .app-shell.sidebar-collapsed.right-rail-visible,
+  .app-shell.sidebar-collapsed.right-rail-visible.right-rail-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar,
+  .sidebar.collapsed {
+    min-height: auto;
+    position: static;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: var(--density-sidebar-mobile-padding);
+  }
+
+  .brand-row,
+  .sidebar.collapsed .brand-row {
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: var(--density-sidebar-mobile-gap);
+  }
+
+  .sidebar.collapsed .brand-text {
+    display: block;
+  }
+
+  .nav {
+    flex: initial;
+    flex-direction: row;
+    min-height: 0;
+    overflow-x: auto;
+  }
+
+  .nav > .nav-button:last-child {
+    margin-top: 0;
+  }
+
+  .nav-indicator {
+    display: none;
+  }
+
+  .nav-button.active {
+    background: var(--accent-tint);
+  }
+
+  .nav-button,
+  .sidebar.collapsed .nav-button {
+    white-space: nowrap;
+    justify-content: flex-start;
+  }
+
+  .sidebar.collapsed .nav-label {
+    display: inline;
+  }
+
+  .sidebar-footer,
+  .sidebar.collapsed .sidebar-footer {
+    display: none;
+  }
+
+  .main-content {
+    padding: var(--density-mobile-main);
+  }
+
+  .setup-row {
+    grid-template-columns: 1fr;
+  }
+
+  .home-widget,
+  .home-dashboard--focused .home-widget--calendar,
+  .home-dashboard--focused .home-widget--summary,
+  .home-dashboard--dashboard .home-widget--calendar,
+  .home-dashboard--dashboard .home-widget--overview {
+    grid-column: 1 / -1;
+  }
+
+  .calendar-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .calendar-detail-panel {
+    position: static;
+  }
+
+  .subject-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .subject-profile-copy {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .theme-setting {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .accent-controls {
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .theme-toggle button {
+    width: 100%;
+  }
+
+  .task-main {
+    padding-right: 96px;
+  }
+}
+
+@media (max-width: 600px) {
+  .sidebar,
+  .sidebar.collapsed {
+    padding: var(--density-sidebar-mobile-padding);
+  }
+
+  .main-content {
+    padding: var(--density-mobile-main);
+  }
+
+  .page-header {
+    margin-bottom: var(--density-header-gap);
+  }
+
+  .page-header h2 {
+    font-size: var(--density-mobile-heading-size);
+  }
+
+  .panel,
+  .home-widget {
+    padding: var(--density-mobile-panel-padding);
+  }
+
+  .home-widget.home-widget--summary {
+    padding: var(--density-panel-header-gap) 2px 0;
+  }
+
+  .settings-hub-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .data-panel-intro,
+  .data-reset-row,
+  .data-confirmation {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .data-panel-intro > span,
+  .data-reset-row > button {
+    align-self: flex-start;
+  }
+
+  .data-confirmation-actions {
+    width: 100%;
+  }
+
+  .data-confirmation-actions button {
+    flex: 1;
+  }
+
+  .data-confirmation-backdrop {
+    padding: 12px;
+  }
+
+  .subject-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .subject-profile-card {
+    grid-template-columns: 5px minmax(0, 1fr);
+  }
+
+  .subject-profile-actions {
+    grid-column: 2;
+  }
+
+  .subject-profile-copy p {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .subject-form-actions button {
+    min-width: 0;
+  }
+
+  .panel.appearance-panel {
+    padding: 0;
+  }
+
+  .appearance-group {
+    padding: var(--density-mobile-panel-padding);
+  }
+
+  .rail-widget-options {
+    grid-template-columns: 1fr;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .home-widget-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .calendar-day {
+    min-height: var(--density-calendar-mobile-height);
+    gap: 3px;
+  }
+
+  .calendar-event-label {
+    width: 6px;
+    height: 6px;
+    padding: 0;
+    background: transparent;
+  }
+
+  .calendar-event-label i {
+    width: 6px;
+    height: 6px;
+  }
+
+  .calendar-event-label em,
+  .calendar-day-events small {
+    display: none;
+  }
+
+  .calendar-day-events {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .home-stat:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .home-stat:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+
+  .accent-controls {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .accent-picker {
+    justify-content: space-between;
+  }
+}

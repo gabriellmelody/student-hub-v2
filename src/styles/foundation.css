@@ -1,0 +1,289 @@
+/* Theme, density, and base element styles. */
+
+* {
+  box-sizing: border-box;
+}
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --app-bg: #0d0d0f;
+  --sidebar-bg: #111113;
+  --surface: #18181b;
+  --surface-raised: #202024;
+  --surface-subtle: #151518;
+  --surface-input: #09090b;
+  --surface-hover: #24242a;
+  --control-bg: #27272a;
+  --control-hover: #323238;
+  --border: #232326;
+  --border-raised: #2b2b30;
+  --border-strong: #3f3f46;
+  --border-hover: #52525b;
+  --indicator-border: #34343b;
+  --text: #f4f4f5;
+  --text-control: #d4d4d8;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --text-eyebrow: #8b8b92;
+  --text-soft: #9b9ba3;
+  --accent: #6366f1;
+  --accent-hover: #7477f5;
+  --accent-soft: #a5b4fc;
+  --accent-contrast: #ffffff;
+  --accent-tint: rgba(99, 102, 241, 0.14);
+  --accent-border: rgba(99, 102, 241, 0.3);
+  --urgent: #fb7185;
+  --soon: #fbbf24;
+  --safe: #34d399;
+  --effort-max: #c084fc;
+  --effort-low-bg: rgba(52, 211, 153, 0.08);
+  --effort-low-border: rgba(52, 211, 153, 0.25);
+  --effort-medium-bg: rgba(251, 191, 36, 0.08);
+  --effort-medium-border: rgba(251, 191, 36, 0.25);
+  --effort-high-bg: rgba(251, 113, 133, 0.08);
+  --effort-high-border: rgba(251, 113, 133, 0.25);
+  --effort-max-bg: rgba(192, 132, 252, 0.1);
+  --effort-max-border: rgba(192, 132, 252, 0.28);
+  --moved-border: rgba(165, 180, 252, 0.78);
+  --moved-bg: #23242e;
+  --moved-shadow: rgba(99, 102, 241, 0.16);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.22);
+  --shadow-card: 0 3px 12px rgba(0, 0, 0, 0.09);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --app-bg: #f7f7f5;
+  --sidebar-bg: #f1f1ef;
+  --surface: #ffffff;
+  --surface-raised: #fafaf9;
+  --surface-subtle: #f5f5f3;
+  --surface-input: #ffffff;
+  --surface-hover: #f4f4f1;
+  --control-bg: #f0f0ed;
+  --control-hover: #e8e8e4;
+  --border: #e7e7e3;
+  --border-raised: #e9e9e5;
+  --border-strong: #d5d5cf;
+  --border-hover: #c4c4bd;
+  --indicator-border: #deded9;
+  --text: #292927;
+  --text-control: #4f4f4b;
+  --text-secondary: #656560;
+  --text-muted: #85857f;
+  --text-eyebrow: #777772;
+  --text-soft: #6f6f6a;
+  --accent: #6366f1;
+  --accent-hover: #5558df;
+  --accent-soft: #4f46e5;
+  --accent-contrast: #ffffff;
+  --accent-tint: rgba(99, 102, 241, 0.09);
+  --accent-border: rgba(99, 102, 241, 0.2);
+  --urgent: #c9364a;
+  --soon: #946200;
+  --safe: #18794e;
+  --effort-max: #7047a3;
+  --effort-low-bg: rgba(24, 121, 78, 0.08);
+  --effort-low-border: rgba(24, 121, 78, 0.22);
+  --effort-medium-bg: rgba(148, 98, 0, 0.08);
+  --effort-medium-border: rgba(148, 98, 0, 0.22);
+  --effort-high-bg: rgba(201, 54, 74, 0.08);
+  --effort-high-border: rgba(201, 54, 74, 0.22);
+  --effort-max-bg: rgba(112, 71, 163, 0.08);
+  --effort-max-border: rgba(112, 71, 163, 0.22);
+  --moved-border: rgba(99, 102, 241, 0.48);
+  --moved-bg: #f5f5ff;
+  --moved-shadow: rgba(67, 70, 190, 0.12);
+  --shadow-sm: 0 1px 2px rgba(31, 31, 28, 0.06);
+  --shadow-card: 0 3px 14px rgba(31, 31, 28, 0.035);
+}
+
+:root,
+:root[data-density="compact"] {
+  --density-main-top: 14px;
+  --density-main-x: clamp(14px, 2vw, 24px);
+  --density-main-bottom: 22px;
+  --density-mobile-main: 12px 10px 18px;
+  --density-mobile-heading-size: 1.3rem;
+  --density-mobile-panel-padding: 12px;
+  --density-sidebar-width: 232px;
+  --density-sidebar-collapsed-width: 68px;
+  --density-rail-width: 240px;
+  --density-rail-collapsed-width: 38px;
+  --density-rail-padding: 10px;
+  --density-rail-collapsed-padding: 4px;
+  --density-rail-gap: 7px;
+  --density-rail-widget-padding: 8px;
+  --density-sidebar-padding: 14px;
+  --density-sidebar-collapsed-padding: 10px;
+  --density-sidebar-mobile-padding: 12px;
+  --density-sidebar-mobile-gap: 10px;
+  --density-brand-size: 32px;
+  --density-toggle-size: 28px;
+  --density-brand-gap: 16px;
+  --density-nav-gap: 4px;
+  --density-nav-height: 36px;
+  --density-nav-step: 40px;
+  --density-nav-padding: 7px 8px;
+  --density-nav-font: 0.8rem;
+  --density-sidebar-footer-padding: 9px 10px;
+  --density-header-gap: 14px;
+  --density-heading-size: 1.45rem;
+  --density-header-text-size: 0.8rem;
+  --density-panel-padding: 14px;
+  --density-panel-header-gap: 10px;
+  --density-home-gap: 10px;
+  --density-stat-padding: 8px 10px;
+  --density-stat-value-size: 1.05rem;
+  --density-setup-gap: 6px;
+  --density-setup-bottom: 8px;
+  --density-setup-padding: 8px;
+  --density-input-height: 32px;
+  --density-input-padding: 6px 8px;
+  --density-button-height: 32px;
+  --density-button-padding: 6px 9px;
+  --density-small-button-height: 28px;
+  --density-small-button-padding: 4px 8px;
+  --density-form-padding: 10px;
+  --density-square-control: 27px;
+  --density-task-y: 8px;
+  --density-task-x: 10px;
+  --density-task-gap: 4px;
+  --density-task-title-size: 0.84rem;
+  --density-task-meta-size: 0.67rem;
+  --density-section-gap: 14px;
+  --density-plan-y: 7px;
+  --density-break-y: 5px;
+  --density-plan-x: 12px;
+  --density-plan-gap: 4px;
+  --density-plan-title-size: 0.82rem;
+  --density-plan-text-size: 0.7rem;
+  --density-plan-control-gap: 4px;
+  --density-plan-control-margin: 6px;
+  --density-plan-button-height: 27px;
+  --density-plan-button-padding: 4px 7px;
+  --density-setting-padding: 14px;
+  --density-setting-gap: 16px;
+  --density-setting-margin: 7px;
+  --density-empty-padding: 18px 16px;
+  --density-calendar-day-height: 68px;
+  --density-calendar-day-padding: 4px;
+  --density-calendar-mobile-height: 52px;
+}
+
+:root[data-density="comfortable"] {
+  --density-main-top: 32px;
+  --density-main-x: clamp(26px, 3vw, 42px);
+  --density-main-bottom: 42px;
+  --density-mobile-main: 20px 18px 28px;
+  --density-mobile-heading-size: 1.65rem;
+  --density-mobile-panel-padding: 20px;
+  --density-sidebar-width: 264px;
+  --density-sidebar-collapsed-width: 82px;
+  --density-rail-width: 266px;
+  --density-rail-collapsed-width: 46px;
+  --density-rail-padding: 14px;
+  --density-rail-collapsed-padding: 6px;
+  --density-rail-gap: 10px;
+  --density-rail-widget-padding: 11px;
+  --density-sidebar-padding: 20px;
+  --density-sidebar-collapsed-padding: 14px;
+  --density-sidebar-mobile-padding: 18px;
+  --density-sidebar-mobile-gap: 16px;
+  --density-brand-size: 38px;
+  --density-toggle-size: 34px;
+  --density-brand-gap: 28px;
+  --density-nav-gap: 8px;
+  --density-nav-height: 44px;
+  --density-nav-step: 52px;
+  --density-nav-padding: 10px 12px;
+  --density-nav-font: 0.9rem;
+  --density-sidebar-footer-padding: 14px 15px;
+  --density-header-gap: 26px;
+  --density-heading-size: 1.9rem;
+  --density-header-text-size: 0.92rem;
+  --density-panel-padding: 24px;
+  --density-panel-header-gap: 18px;
+  --density-home-gap: 20px;
+  --density-stat-padding: 16px 18px;
+  --density-stat-value-size: 1.45rem;
+  --density-setup-gap: 12px;
+  --density-setup-bottom: 16px;
+  --density-setup-padding: 13px;
+  --density-input-height: 40px;
+  --density-input-padding: 9px 11px;
+  --density-button-height: 42px;
+  --density-button-padding: 10px 13px;
+  --density-small-button-height: 36px;
+  --density-small-button-padding: 8px 12px;
+  --density-form-padding: 18px;
+  --density-square-control: 32px;
+  --density-task-y: 15px;
+  --density-task-x: 16px;
+  --density-task-gap: 9px;
+  --density-task-title-size: 0.94rem;
+  --density-task-meta-size: 0.76rem;
+  --density-section-gap: 24px;
+  --density-plan-y: 14px;
+  --density-break-y: 10px;
+  --density-plan-x: 18px;
+  --density-plan-gap: 9px;
+  --density-plan-title-size: 0.94rem;
+  --density-plan-text-size: 0.82rem;
+  --density-plan-control-gap: 8px;
+  --density-plan-control-margin: 12px;
+  --density-plan-button-height: 34px;
+  --density-plan-button-padding: 7px 11px;
+  --density-setting-padding: 22px;
+  --density-setting-gap: 32px;
+  --density-setting-margin: 12px;
+  --density-empty-padding: 32px 26px;
+  --density-calendar-day-height: 96px;
+  --density-calendar-day-padding: 7px;
+  --density-calendar-mobile-height: 64px;
+}
+
+body {
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--text);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted);
+}
+
+input,
+select,
+textarea {
+  transition: border-color 0.16s ease, background 0.16s ease,
+    box-shadow 0.16s ease;
+}

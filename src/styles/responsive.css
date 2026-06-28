@@ -1,0 +1,351 @@
+/* Reduced motion and final narrow-screen safeguards. */
+
+@media (prefers-reduced-motion: reduce) {
+  .page {
+    animation: none;
+  }
+
+  .onboarding-content {
+    animation: none;
+  }
+
+  .onboarding-subject-list > span {
+    animation: none;
+  }
+
+  .data-confirmation {
+    animation: none;
+  }
+
+  .plan-block,
+  .plan-block-header-actions,
+  .plan-drag-handle {
+    transition: none;
+  }
+
+  .plan-block.plan-block-dropped {
+    animation: none;
+  }
+
+  .onboarding-progress > span,
+  .onboarding-progress > span::after,
+  .onboarding-progress i,
+  .onboarding-progress small {
+    transition: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .nav-button.active {
+    background: var(--accent-tint);
+  }
+}
+
+/* Final responsive safeguards intentionally follow animation overrides. */
+html,
+body,
+#root {
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.main-content,
+.page,
+.panel,
+.home-widget,
+.task-card,
+.plan-block,
+.calendar-layout,
+.settings-page,
+.subjects-panel,
+.data-settings {
+  min-width: 0;
+}
+
+input,
+select,
+textarea,
+button {
+  max-width: 100%;
+}
+
+@media (max-width: 900px) {
+  .sidebar.collapsed .brand-text,
+  .sidebar.collapsed .nav-label {
+    display: block;
+    max-width: 180px;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  .sidebar.collapsed .sidebar-toggle {
+    transform: none;
+  }
+
+  .nav {
+    width: 100%;
+    padding-bottom: 2px;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  .nav-button,
+  .sidebar.collapsed .nav-button {
+    width: auto;
+    min-width: max-content;
+    flex: 0 0 auto;
+  }
+
+  .page-header p,
+  .settings-hub-card small,
+  .theme-setting p,
+  .data-reset-row p,
+  .subject-profile-copy,
+  .calendar-task-item,
+  .plan-block {
+    overflow-wrap: anywhere;
+  }
+
+  .calendar-month-panel,
+  .calendar-detail-panel,
+  .appearance-panel,
+  .subjects-panel,
+  .data-panel {
+    width: 100%;
+  }
+}
+
+@media (max-width: 600px) {
+  .brand-row,
+  .sidebar.collapsed .brand-row {
+    gap: 8px;
+  }
+
+  .brand {
+    min-width: 0;
+  }
+
+  .brand-text {
+    min-width: 0;
+  }
+
+  .nav {
+    gap: 4px;
+  }
+
+  .nav-button,
+  .sidebar.collapsed .nav-button {
+    padding: 7px 9px;
+    font-size: 0.76rem;
+  }
+
+  .nav-icon {
+    width: 18px;
+  }
+
+  .panel-header,
+  .calendar-toolbar,
+  .subjects-panel-header,
+  .data-panel-intro {
+    flex-wrap: wrap;
+  }
+
+  .panel-header > div,
+  .calendar-toolbar > div:first-child,
+  .subjects-panel-header > div {
+    min-width: 0;
+  }
+
+  .home-calendar-next {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .home-calendar-next > .urgency {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .home-calendar-date {
+    grid-row: span 2;
+  }
+
+  .home-calendar-deadlines button,
+  .calendar-task-item {
+    align-items: start;
+  }
+
+  .task-main {
+    padding-right: var(--density-task-x);
+  }
+
+  .task-actions {
+    position: static;
+    justify-content: flex-end;
+    padding: 0 var(--density-task-x) var(--density-task-y);
+  }
+
+  .task-topline {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  .edit-task-form,
+  .add-task-form {
+    min-width: 0;
+  }
+
+  .calendar-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .calendar-navigation {
+    width: 100%;
+  }
+
+  .calendar-navigation button:nth-child(2) {
+    flex: 1;
+  }
+
+  .calendar-detail-actions {
+    flex-wrap: wrap;
+  }
+
+  .calendar-weekdays {
+    font-size: 0.56rem;
+  }
+
+  .calendar-day-number {
+    width: 20px;
+    height: 20px;
+    font-size: 0.62rem;
+  }
+
+  .plan-block-header {
+    align-items: flex-start;
+  }
+
+  .plan-block-header-actions {
+    flex-shrink: 0;
+    opacity: 1;
+  }
+
+  .plan-block-controls button,
+  .plan-editor-actions button {
+    flex: 1 1 auto;
+  }
+
+  .complete-plan-button {
+    flex-basis: 100%;
+  }
+
+  .theme-toggle,
+  .accent-controls,
+  .accent-presets {
+    width: 100%;
+  }
+
+  .accent-presets {
+    flex-wrap: wrap;
+  }
+
+  .settings-hub-card {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .settings-coming-soon {
+    white-space: normal;
+    text-align: center;
+  }
+
+  .subject-profile-actions {
+    width: 100%;
+  }
+
+  .subject-profile-actions button {
+    flex: 1;
+  }
+
+  .subject-form-actions {
+    flex-wrap: wrap;
+  }
+
+  .subject-form-actions button {
+    flex: 1 1 120px;
+  }
+
+  .data-confirmation {
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+  }
+
+  .onboarding-topbar,
+  .onboarding-actions {
+    padding-right: 14px;
+    padding-left: 14px;
+  }
+
+  .onboarding-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .onboarding-actions > span {
+    display: none;
+  }
+
+  .onboarding-back,
+  .onboarding-next {
+    width: 100%;
+  }
+
+  .onboarding-subject-form-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .onboarding-subject-form-actions .small-button {
+    width: 100%;
+  }
+
+  .onboarding-subject-list > span {
+    max-width: 100%;
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 380px) {
+  .brand p {
+    display: none;
+  }
+
+  .sidebar-toggle {
+    width: 28px;
+    height: 28px;
+  }
+
+  .home-widget-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .home-stat + .home-stat {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
+  .calendar-weekdays span {
+    overflow: hidden;
+    font-size: 0;
+  }
+
+  .calendar-weekdays span::first-letter {
+    font-size: 0.56rem;
+  }
+
+  .data-confirmation-actions,
+  .calendar-form-actions,
+  .edit-form-actions {
+    flex-direction: column;
+  }
+}

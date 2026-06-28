@@ -25,14 +25,19 @@ function PlanPage({
   const [durationDraft, setDurationDraft] = useState("");
   const [draggedBlockId, setDraggedBlockId] = useState(null);
   const [dragOverBlockId, setDragOverBlockId] = useState(null);
+  const [droppedBlockId, setDroppedBlockId] = useState(null);
   const planBlockNodesRef = useRef(new Map());
   const flipFirstRectsRef = useRef(null);
   const flipAnimationFrameRef = useRef(null);
   const activeDragIdRef = useRef(null);
   const lastDragOverIdRef = useRef(null);
+  const dropSettleTimerRef = useRef(null);
 
   useEffect(() => {
-    return () => cancelAnimationFrame(flipAnimationFrameRef.current);
+    return () => {
+      cancelAnimationFrame(flipAnimationFrameRef.current);
+      clearTimeout(dropSettleTimerRef.current);
+    };
   }, []);
 
   useLayoutEffect(() => {
@@ -47,6 +52,8 @@ function PlanPage({
 
     flipFirstRectsRef.current = null;
     cancelAnimationFrame(flipAnimationFrameRef.current);
+    const isDragReorder = Boolean(activeDragIdRef.current);
+    const transformDuration = isDragReorder ? 210 : 460;
 
     const animatedBlocks = [];
 
@@ -64,14 +71,18 @@ function PlanPage({
       node.style.transition = "none";
       node.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
       node.style.zIndex =
-        key === `study-${planMoveFeedback?.taskId}` ? "2" : "1";
+        node.dataset.planBlockId === activeDragIdRef.current ||
+        key === `study-${planMoveFeedback?.taskId}`
+          ? "2"
+          : "1";
+      node.style.willChange = "transform";
       animatedBlocks.push(node);
     });
 
     flipAnimationFrameRef.current = requestAnimationFrame(() => {
       animatedBlocks.forEach((node) => {
         node.style.transition =
-          "transform 460ms cubic-bezier(0.22, 1, 0.36, 1), border-color 220ms ease, background 220ms ease, box-shadow 220ms ease";
+          `transform ${transformDuration}ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms ease, background 180ms ease, box-shadow 180ms ease`;
         node.style.transform = "";
       });
     });
@@ -81,8 +92,9 @@ function PlanPage({
         node.style.transition = "";
         node.style.transform = "";
         node.style.zIndex = "";
+        node.style.willChange = "";
       });
-    }, 520);
+    }, transformDuration + 60);
 
     return () => clearTimeout(cleanupTimer);
   }, [planBlocks, planMoveFeedback]);
@@ -146,39 +158,75 @@ function PlanPage({
     activeDragIdRef.current = blockId;
     lastDragOverIdRef.current = blockId;
     setDraggedBlockId(blockId);
+    setDroppedBlockId(null);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plan-block", blockId);
-    event.dataTransfer.setDragImage(event.currentTarget, 18, 18);
-  }
-
-  function handleDragEnter(event, overBlockId) {
-    event.preventDefault();
-    const activeBlockId =
-      activeDragIdRef.current || event.dataTransfer.getData("text/plan-block");
-
-    if (
-      !activeBlockId ||
-      activeBlockId === overBlockId ||
-      lastDragOverIdRef.current === overBlockId
-    ) {
-      return;
-    }
-
-    flipFirstRectsRef.current = getPlanBlockRects();
-    lastDragOverIdRef.current = overBlockId;
-    setDragOverBlockId(overBlockId);
-    reorderPlanBlock(activeBlockId, overBlockId);
+    const blockRect = event.currentTarget.getBoundingClientRect();
+    const dragOffsetX = Math.max(
+      16,
+      Math.min(blockRect.width - 16, event.clientX - blockRect.left)
+    );
+    const dragOffsetY = Math.max(
+      12,
+      Math.min(blockRect.height - 12, event.clientY - blockRect.top)
+    );
+    event.dataTransfer.setDragImage(
+      event.currentTarget,
+      dragOffsetX,
+      dragOffsetY
+    );
   }
 
   function handleDragOver(event, overBlockId) {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDragOverBlockId(overBlockId);
+
+    const activeBlockId =
+      activeDragIdRef.current || event.dataTransfer.getData("text/plan-block");
+    const activeIndex = planBlocks.findIndex(
+      (block) => block.id === activeBlockId
+    );
+    const overIndex = planBlocks.findIndex((block) => block.id === overBlockId);
+
+    if (
+      !activeBlockId ||
+      activeBlockId === overBlockId ||
+      activeIndex < 0 ||
+      overIndex < 0 ||
+      lastDragOverIdRef.current === overBlockId
+    ) {
+      return;
+    }
+
+    const overRect = event.currentTarget.getBoundingClientRect();
+    const overMidpoint = overRect.top + overRect.height / 2;
+    const movingDown = activeIndex < overIndex;
+
+    if (
+      (movingDown && event.clientY < overMidpoint) ||
+      (!movingDown && event.clientY > overMidpoint)
+    ) {
+      return;
+    }
+
+    flipFirstRectsRef.current = getPlanBlockRects();
+    lastDragOverIdRef.current = overBlockId;
+    reorderPlanBlock(activeBlockId, overBlockId);
   }
 
   function handleDrop(event) {
     event.preventDefault();
+    const droppedId = activeDragIdRef.current;
     resetDragState();
+
+    if (!droppedId) return;
+
+    clearTimeout(dropSettleTimerRef.current);
+    setDroppedBlockId(droppedId);
+    dropSettleTimerRef.current = setTimeout(() => {
+      setDroppedBlockId(null);
+    }, 240);
   }
 
   function handleDragHandleKeyDown(event, blockId) {
@@ -278,7 +326,9 @@ function PlanPage({
           const moveClassName = isMovedStudyBlock ? " plan-block-moved" : "";
           const dragClassName = `${
             draggedBlockId === block.id ? " plan-block-dragging" : ""
-          }${dragOverBlockId === block.id ? " plan-block-drag-over" : ""}`;
+          }${dragOverBlockId === block.id ? " plan-block-drag-over" : ""}${
+            droppedBlockId === block.id ? " plan-block-dropped" : ""
+          }`;
 
           return (
             <div
@@ -289,8 +339,8 @@ function PlanPage({
               }
               key={blockKey}
               ref={(node) => setPlanBlockRef(blockKey, node)}
+              data-plan-block-id={block.id}
               onDragStart={(event) => handleDragStart(event, block.id)}
-              onDragEnter={(event) => handleDragEnter(event, block.id)}
               onDragOver={(event) => handleDragOver(event, block.id)}
               onDrop={handleDrop}
               onDragEnd={resetDragState}
