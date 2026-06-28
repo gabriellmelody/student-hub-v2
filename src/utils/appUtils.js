@@ -6,6 +6,12 @@ export const defaultTasks = [
     dueDate: "2026-06-22",
     effort: 3,
     completed: false,
+    source: "demo",
+    externalId: null,
+    classroomCourseId: null,
+    classroomCourseName: null,
+    importedAt: null,
+    lastSyncedAt: null,
   },
   {
     id: 2,
@@ -14,6 +20,12 @@ export const defaultTasks = [
     dueDate: "2026-06-25",
     effort: 2,
     completed: false,
+    source: "demo",
+    externalId: null,
+    classroomCourseId: null,
+    classroomCourseName: null,
+    importedAt: null,
+    lastSyncedAt: null,
   },
   {
     id: 3,
@@ -22,6 +34,12 @@ export const defaultTasks = [
     dueDate: "2026-07-02",
     effort: 4,
     completed: false,
+    source: "demo",
+    externalId: null,
+    classroomCourseId: null,
+    classroomCourseName: null,
+    importedAt: null,
+    lastSyncedAt: null,
   },
   {
     id: 4,
@@ -30,12 +48,19 @@ export const defaultTasks = [
     dueDate: "",
     effort: 1,
     completed: false,
+    source: "demo",
+    externalId: null,
+    classroomCourseId: null,
+    classroomCourseName: null,
+    importedAt: null,
+    lastSyncedAt: null,
   },
 ];
 
 export const COMPLETED_TASK_RETENTION_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_ACCENT_COLOR = "#6366f1";
 export const DEFAULT_SUBJECT_COLOR = "#2563eb";
+export const WIDGET_CONFIG_STORAGE_KEY = "student-hub-widget-config";
 export const STUDENT_HUB_STORAGE_KEYS = [
   "student-hub-tasks",
   "student-hub-subjects",
@@ -47,6 +72,7 @@ export const STUDENT_HUB_STORAGE_KEYS = [
   "student-hub-right-rail",
   "student-hub-right-rail-state",
   "student-hub-right-rail-widgets",
+  WIDGET_CONFIG_STORAGE_KEY,
   "student-hub-hours",
   "student-hub-start-time",
 ];
@@ -67,6 +93,133 @@ export const rightRailWidgetOptions = [
   { value: "deadlines", label: "Upcoming deadlines" },
   { value: "plan", label: "Today’s plan" },
 ];
+
+export function getDefaultWidgetConfig(homeLayout = "focused") {
+  const expandedHome = homeLayout === "dashboard";
+
+  return [
+    {
+      id: "home-next-focus",
+      type: "nextFocus",
+      label: "Next focus",
+      area: "home",
+      visible: true,
+      size: "expanded",
+      order: 0,
+      source: "local",
+    },
+    {
+      id: "home-today-plan",
+      type: "todayPlan",
+      label: "Today’s plan",
+      area: "home",
+      visible: true,
+      size: "compact",
+      order: 1,
+      source: "local",
+    },
+    {
+      id: "home-school-calendar",
+      type: "schoolCalendar",
+      label: "School calendar",
+      area: "home",
+      visible: true,
+      size: expandedHome ? "expanded" : "compact",
+      order: 2,
+      source: "local",
+    },
+    {
+      id: "home-progress",
+      type: "progress",
+      label: "Progress",
+      area: "home",
+      visible: true,
+      size: expandedHome ? "expanded" : "compact",
+      order: 3,
+      source: "local",
+    },
+    ...rightRailWidgetOptions.map((option, order) => ({
+      id: `right-rail-${option.value}`,
+      type: option.value,
+      label: option.label,
+      area: "rightRail",
+      visible: true,
+      size: "compact",
+      order,
+      source: "local",
+    })),
+  ];
+}
+
+export function normalizeWidgetConfig(
+  savedConfig,
+  homeLayout = "focused",
+  legacyRightRailWidgets = null
+) {
+  const defaults = getDefaultWidgetConfig(homeLayout);
+
+  return defaults.map((defaultWidget) => {
+    const savedWidget = Array.isArray(savedConfig)
+      ? savedConfig.find((widget) => widget?.id === defaultWidget.id)
+      : null;
+    const legacyVisibility =
+      defaultWidget.area === "rightRail" &&
+      Array.isArray(legacyRightRailWidgets)
+        ? legacyRightRailWidgets.includes(defaultWidget.type)
+        : defaultWidget.visible;
+
+    return {
+      ...defaultWidget,
+      visible:
+        typeof savedWidget?.visible === "boolean"
+          ? savedWidget.visible
+          : legacyVisibility,
+      size:
+        savedWidget?.size === "compact" || savedWidget?.size === "expanded"
+          ? savedWidget.size
+          : defaultWidget.size,
+      order: Number.isFinite(Number(savedWidget?.order))
+        ? Number(savedWidget.order)
+        : defaultWidget.order,
+    };
+  });
+}
+
+export function loadWidgetConfig(homeLayout = "focused") {
+  const legacyRightRailWidgets = loadRightRailWidgets();
+  const savedConfig = localStorage.getItem(WIDGET_CONFIG_STORAGE_KEY);
+
+  if (!savedConfig) {
+    return normalizeWidgetConfig(
+      null,
+      homeLayout,
+      legacyRightRailWidgets
+    );
+  }
+
+  try {
+    return normalizeWidgetConfig(
+      JSON.parse(savedConfig),
+      homeLayout,
+      legacyRightRailWidgets
+    );
+  } catch {
+    return normalizeWidgetConfig(
+      null,
+      homeLayout,
+      legacyRightRailWidgets
+    );
+  }
+}
+
+export function getWidgetsForArea(widgetConfig, area, visibleOnly = true) {
+  return widgetConfig
+    .filter(
+      (widget) =>
+        widget.area === area && (!visibleOnly || widget.visible === true)
+    )
+    .sort((first, second) => first.order - second.order);
+}
 
 export function normalizeHexColor(value) {
   return /^#[0-9a-f]{6}$/i.test(value || "")
@@ -149,6 +302,36 @@ export function colorToRgba(color, alpha) {
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
 }
 
+export function normalizeTask(task, fallbackSource = "manual") {
+  return {
+    ...task,
+    source: task.source || fallbackSource,
+    externalId: task.externalId || null,
+    classroomCourseId: task.classroomCourseId || null,
+    classroomCourseName: task.classroomCourseName || null,
+    importedAt: task.importedAt || null,
+    lastSyncedAt: task.lastSyncedAt || null,
+  };
+}
+
+export function getExternalSourceKey(item) {
+  const source = typeof item?.source === "string" ? item.source.trim() : "";
+  const externalId =
+    typeof item?.externalId === "string" ? item.externalId.trim() : "";
+
+  return source && externalId ? `${source}:${externalId}` : null;
+}
+
+export function findExternalSourceMatch(items, candidate) {
+  const candidateKey = getExternalSourceKey(candidate);
+
+  if (!candidateKey || !Array.isArray(items)) return null;
+
+  return (
+    items.find((item) => getExternalSourceKey(item) === candidateKey) || null
+  );
+}
+
 export function loadTasks() {
   const savedTasks = localStorage.getItem("student-hub-tasks");
 
@@ -162,16 +345,20 @@ export function loadTasks() {
     const now = Date.now();
 
     return parsedTasks.flatMap((task) => {
-      if (!task.completed) return task;
+      if (!task || typeof task !== "object") return [];
 
-      const savedCompletedAt = Number(task.completedAt);
+      const normalizedTask = normalizeTask(task);
+
+      if (!normalizedTask.completed) return normalizedTask;
+
+      const savedCompletedAt = Number(normalizedTask.completedAt);
       const completedAt = Number.isFinite(savedCompletedAt)
         ? savedCompletedAt
         : now;
 
       if (now - completedAt >= COMPLETED_TASK_RETENTION_MS) return [];
 
-      return { ...task, completedAt };
+      return { ...normalizedTask, completedAt };
     });
   } catch {
     return defaultTasks;
@@ -221,6 +408,9 @@ export function loadSubjects() {
           : DEFAULT_SUBJECT_COLOR,
         source: subject.source || "manual",
         classroomCourseId: subject.classroomCourseId || null,
+        externalId: subject.externalId || null,
+        importedAt: subject.importedAt || null,
+        lastSyncedAt: subject.lastSyncedAt || null,
       }))
       .filter((subject) => subject.name);
   } catch {
@@ -302,11 +492,15 @@ export function getTaskCalendarEvents(tasks, subjects = []) {
         id: `task-${task.id}`,
         source: "task",
         taskId: task.id,
+        externalId: task.externalId || null,
         date: task.dueDate,
         title: task.title,
         subject: task.subject,
+        subjectName: task.subject,
         subjectId: subjectProfile?.id || null,
+        colour: subjectProfile?.colour || null,
         subjectColour: subjectProfile?.colour || null,
+        taskSource: task.source || "manual",
         completed: task.completed,
         effort: task.effort,
       };

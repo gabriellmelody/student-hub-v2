@@ -98,6 +98,9 @@ function OnboardingFlow({
         name,
         source: "manual",
         classroomCourseId: null,
+        externalId: null,
+        importedAt: null,
+        lastSyncedAt: null,
       },
     ]);
     setSubjectDraft(

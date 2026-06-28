@@ -3,9 +3,9 @@ import {
   subjectCourseSystems,
   subjectLevels,
   accentColorPresets,
-  rightRailWidgetOptions,
   getContrastText,
   createSubjectDraft,
+  getWidgetsForArea,
 } from "../utils/appUtils.js";
 
 function SettingsPage({
@@ -21,8 +21,9 @@ function SettingsPage({
   setHomeLayout,
   rightRailVisible,
   setRightRailVisible,
-  rightRailWidgets,
-  setRightRailWidgets,
+  widgetConfig,
+  setWidgetConfig,
+  openHomeEditMode,
   restartOnboarding,
   resetTasks,
   resetSubjects,
@@ -54,16 +55,18 @@ function SettingsPage({
   };
   const currentViewCopy = viewCopy[settingsView];
 
-  function toggleRightRailWidget(widgetId) {
-    setRightRailWidgets((currentWidgets) => {
-      const selectedWidgets = currentWidgets.includes(widgetId)
-        ? currentWidgets.filter((currentWidget) => currentWidget !== widgetId)
-        : [...currentWidgets, widgetId];
+  const rightRailWidgets = getWidgetsForArea(
+    widgetConfig,
+    "rightRail",
+    false
+  );
 
-      return rightRailWidgetOptions
-        .filter((option) => selectedWidgets.includes(option.value))
-        .map((option) => option.value);
-    });
+  function updateWidget(widgetId, updates) {
+    setWidgetConfig((currentConfig) =>
+      currentConfig.map((widget) =>
+        widget.id === widgetId ? { ...widget, ...updates } : widget
+      )
+    );
   }
 
   return (
@@ -296,6 +299,21 @@ function SettingsPage({
               </div>
             </div>
 
+            <div className="theme-setting home-edit-launch-setting">
+              <div>
+                <h3>Home page</h3>
+                <p>Customise the blocks that appear on your Home dashboard.</p>
+              </div>
+
+              <button
+                type="button"
+                className="secondary-button settings-edit-home-button"
+                onClick={openHomeEditMode}
+              >
+                Edit Home Page
+              </button>
+            </div>
+
             <div className="theme-setting rail-widgets-setting">
               <div>
                 <h3>Rail widgets</h3>
@@ -303,14 +321,18 @@ function SettingsPage({
               </div>
 
               <div className="rail-widget-options">
-                {rightRailWidgetOptions.map((option) => (
-                  <label className="rail-widget-option" key={option.value}>
+                {rightRailWidgets.map((widget) => (
+                  <label className="rail-widget-option" key={widget.id}>
                     <input
                       type="checkbox"
-                      checked={rightRailWidgets.includes(option.value)}
-                      onChange={() => toggleRightRailWidget(option.value)}
+                      checked={widget.visible}
+                      onChange={() =>
+                        updateWidget(widget.id, {
+                          visible: !widget.visible,
+                        })
+                      }
                     />
-                    <span>{option.label}</span>
+                    <span>{widget.label}</span>
                   </label>
                 ))}
               </div>
@@ -566,6 +588,9 @@ function SubjectsSettings({ subjects, setSubjects }) {
           name,
           source: "manual",
           classroomCourseId: null,
+          externalId: null,
+          importedAt: null,
+          lastSyncedAt: null,
         },
       ]);
     }

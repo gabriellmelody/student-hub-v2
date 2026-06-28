@@ -11,14 +11,14 @@ import {
   COMPLETED_TASK_RETENTION_MS,
   DEFAULT_ACCENT_COLOR,
   STUDENT_HUB_STORAGE_KEYS,
-  rightRailWidgetOptions,
+  WIDGET_CONFIG_STORAGE_KEY,
   normalizeHexColor,
   mixColors,
   getContrastText,
   getReadableAccent,
   colorToRgba,
   loadTasks,
-  loadRightRailWidgets,
+  loadWidgetConfig,
   loadSubjects,
   loadStudentProfile,
   getDaysLeft,
@@ -27,10 +27,13 @@ import {
   sortTasksForDisplay,
   cleanPlanSequence,
   recalculatePlanTimes,
+  getDefaultWidgetConfig,
+  getWidgetsForArea,
 } from "./utils/appUtils.js";
 
 function App() {
   const [activePage, setActivePage] = useState("home");
+  const [homeEditMode, setHomeEditMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem("student-hub-theme") === "dark"
@@ -56,7 +59,9 @@ function App() {
   const [rightRailCollapsed, setRightRailCollapsed] = useState(() => {
     return localStorage.getItem("student-hub-right-rail-state") === "collapsed";
   });
-  const [rightRailWidgets, setRightRailWidgets] = useState(loadRightRailWidgets);
+  const [widgetConfig, setWidgetConfig] = useState(() =>
+    loadWidgetConfig(homeLayout)
+  );
   const [subjects, setSubjects] = useState(loadSubjects);
   const [studentProfile, setStudentProfile] = useState(loadStudentProfile);
 
@@ -81,6 +86,54 @@ function App() {
     dueDate: "",
     effort: 2,
   });
+
+  const rightRailWidgets = getWidgetsForArea(
+    widgetConfig,
+    "rightRail"
+  ).map((widget) => widget.type);
+
+  function setRightRailWidgets(nextWidgetsOrUpdater) {
+    setWidgetConfig((currentConfig) => {
+      const currentWidgets = getWidgetsForArea(
+        currentConfig,
+        "rightRail"
+      ).map((widget) => widget.type);
+      const nextWidgets =
+        typeof nextWidgetsOrUpdater === "function"
+          ? nextWidgetsOrUpdater(currentWidgets)
+          : nextWidgetsOrUpdater;
+
+      return currentConfig.map((widget) =>
+        widget.area === "rightRail"
+          ? { ...widget, visible: nextWidgets.includes(widget.type) }
+          : widget
+      );
+    });
+  }
+
+  function updateHomeLayout(nextLayout) {
+    setHomeLayout(nextLayout);
+    setWidgetConfig((currentConfig) =>
+      currentConfig.map((widget) => {
+        if (
+          widget.area !== "home" ||
+          !["schoolCalendar", "progress"].includes(widget.type)
+        ) {
+          return widget;
+        }
+
+        return {
+          ...widget,
+          size: nextLayout === "dashboard" ? "expanded" : "compact",
+        };
+      })
+    );
+  }
+
+  function openHomeEditMode() {
+    setActivePage("home");
+    setHomeEditMode(true);
+  }
 
   useEffect(() => {
     localStorage.setItem("student-hub-tasks", JSON.stringify(tasks));
@@ -127,10 +180,18 @@ function App() {
 
   useEffect(() => {
     localStorage.setItem(
-      "student-hub-right-rail-widgets",
-      JSON.stringify(rightRailWidgets)
+      WIDGET_CONFIG_STORAGE_KEY,
+      JSON.stringify(widgetConfig)
     );
-  }, [rightRailWidgets]);
+    localStorage.setItem(
+      "student-hub-right-rail-widgets",
+      JSON.stringify(
+        getWidgetsForArea(widgetConfig, "rightRail").map(
+          (widget) => widget.type
+        )
+      )
+    );
+  }, [widgetConfig]);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -343,6 +404,12 @@ function App() {
       dueDate: taskInput.dueDate,
       effort: Number(taskInput.effort),
       completed: false,
+      source: "manual",
+      externalId: null,
+      classroomCourseId: null,
+      classroomCourseName: null,
+      importedAt: null,
+      lastSyncedAt: null,
     };
 
     setTasks((currentTasks) => [...currentTasks, taskToAdd]);
@@ -372,6 +439,11 @@ function App() {
         {
           id: "not-enough-time",
           type: "message",
+          source: "generated",
+          edited: false,
+          locked: false,
+          taskId: null,
+          calendarEventId: null,
           title: "Not enough time to build a proper plan.",
           note: "Try setting at least 20 minutes.",
         },
@@ -391,6 +463,11 @@ function App() {
         {
           id: "no-tasks",
           type: "message",
+          source: "generated",
+          edited: false,
+          locked: false,
+          taskId: null,
+          calendarEventId: null,
           title: "No tasks to plan.",
           note: "You are clear for now.",
         },
@@ -426,7 +503,9 @@ function App() {
         type: "study",
         source: "generated",
         edited: false,
+        locked: false,
         taskId: task.id,
+        calendarEventId: null,
         subject: task.subject,
         title: task.title,
         start: formatTime(startTime, currentOffset),
@@ -445,6 +524,9 @@ function App() {
           type: "break",
           source: "generated",
           edited: false,
+          locked: false,
+          taskId: null,
+          calendarEventId: null,
           start: formatTime(startTime, currentOffset),
           end: formatTime(startTime, currentOffset + 10),
           duration: 10,
@@ -589,6 +671,7 @@ function App() {
       "student-hub-student-profile",
       JSON.stringify(restartedProfile)
     );
+    setHomeEditMode(false);
     setActivePage("home");
   }
 
@@ -614,6 +697,7 @@ function App() {
       "student-hub-right-rail",
       "student-hub-right-rail-state",
       "student-hub-right-rail-widgets",
+      WIDGET_CONFIG_STORAGE_KEY,
     ].forEach((storageKey) => localStorage.removeItem(storageKey));
 
     setTheme("light");
@@ -622,9 +706,7 @@ function App() {
     setHomeLayout("focused");
     setRightRailVisible(true);
     setRightRailCollapsed(false);
-    setRightRailWidgets(
-      rightRailWidgetOptions.map((option) => option.value)
-    );
+    setWidgetConfig(getDefaultWidgetConfig("focused"));
   }
 
   function clearAllStudentHubData() {
@@ -644,12 +726,11 @@ function App() {
     setHomeLayout("focused");
     setRightRailVisible(true);
     setRightRailCollapsed(false);
-    setRightRailWidgets(
-      rightRailWidgetOptions.map((option) => option.value)
-    );
+    setWidgetConfig(getDefaultWidgetConfig("focused"));
     setHoursAvailable(2);
     setStartTime("16:00");
     setSidebarCollapsed(false);
+    setHomeEditMode(false);
     setActivePage("home");
     setStudentProfile({
       schoolSystem: "",
@@ -672,7 +753,7 @@ function App() {
         layoutDensity={layoutDensity}
         setLayoutDensity={setLayoutDensity}
         homeLayout={homeLayout}
-        setHomeLayout={setHomeLayout}
+        setHomeLayout={updateHomeLayout}
         rightRailVisible={rightRailVisible}
         setRightRailVisible={setRightRailVisible}
         rightRailWidgets={rightRailWidgets}
@@ -774,6 +855,10 @@ function App() {
             generatePlan={generatePlan}
             setActivePage={setActivePage}
             homeLayout={homeLayout}
+            widgetConfig={widgetConfig}
+            setWidgetConfig={setWidgetConfig}
+            homeEditMode={homeEditMode}
+            setHomeEditMode={setHomeEditMode}
           />
         )}
 
@@ -834,11 +919,12 @@ function App() {
             layoutDensity={layoutDensity}
             setLayoutDensity={setLayoutDensity}
             homeLayout={homeLayout}
-            setHomeLayout={setHomeLayout}
+            setHomeLayout={updateHomeLayout}
             rightRailVisible={rightRailVisible}
             setRightRailVisible={setRightRailVisible}
-            rightRailWidgets={rightRailWidgets}
-            setRightRailWidgets={setRightRailWidgets}
+            widgetConfig={widgetConfig}
+            setWidgetConfig={setWidgetConfig}
+            openHomeEditMode={openHomeEditMode}
             restartOnboarding={restartOnboarding}
             resetTasks={resetTasks}
             resetSubjects={resetSubjects}
@@ -855,7 +941,7 @@ function App() {
           setActivePage={setActivePage}
           collapsed={rightRailCollapsed}
           setCollapsed={setRightRailCollapsed}
-          enabledWidgets={rightRailWidgets}
+          widgetConfig={widgetConfig}
         />
       )}
     </main>

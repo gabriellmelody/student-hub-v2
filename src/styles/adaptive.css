@@ -161,6 +161,28 @@
     padding: var(--density-panel-header-gap) 2px 0;
   }
 
+  .home-widget.home-widget--editing {
+    padding-top: 48px;
+  }
+
+  .home-widget.home-widget--summary.home-widget--editing {
+    padding: 48px var(--density-mobile-panel-padding)
+      var(--density-mobile-panel-padding);
+  }
+
+  .home-edit-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .home-edit-actions {
+    justify-content: flex-end;
+  }
+
+  .home-add-widget-list {
+    grid-template-columns: 1fr;
+  }
+
   .settings-hub-grid {
     grid-template-columns: 1fr;
   }

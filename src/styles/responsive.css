@@ -33,6 +33,10 @@
   .onboarding-progress small {
     transition: none;
   }
+
+  .home-widget--editing {
+    transition: none;
+  }
 }
 
 @media (max-width: 900px) {
