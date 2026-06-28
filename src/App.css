@@ -252,7 +252,9 @@ body {
 }
 
 button,
-input {
+input,
+select,
+textarea {
   font: inherit;
 }
 
@@ -260,14 +262,28 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 button:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--accent-soft);
   outline-offset: 2px;
 }
 
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: var(--text-muted);
+}
+
+input,
+select,
+textarea {
+  transition: border-color 0.16s ease, background 0.16s ease,
+    box-shadow 0.16s ease;
 }
 
 .app-shell {
@@ -2840,6 +2856,82 @@ input::placeholder {
   gap: var(--density-task-gap);
 }
 
+.plan-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.plan-block-header .plan-time {
+  margin-bottom: 0;
+}
+
+.plan-block-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  opacity: 0.58;
+  transition: opacity 0.16s ease;
+}
+
+.plan-block:hover .plan-block-header-actions,
+.plan-block:focus-within .plan-block-header-actions,
+.plan-block.plan-block-dragging .plan-block-header-actions {
+  opacity: 1;
+}
+
+.plan-time > span {
+  margin-left: 7px;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.6rem;
+  font-weight: 600;
+}
+
+.plan-edit-button {
+  border: 0;
+  padding: 2px 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.plan-edit-button:hover {
+  color: var(--accent-soft);
+}
+
+.plan-drag-handle {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+}
+
+.plan-drag-handle:hover,
+.plan-drag-handle:focus-visible {
+  color: var(--accent-soft);
+}
+
+.plan-drag-handle:active {
+  cursor: grabbing;
+}
+
+.plan-drag-handle:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
 .plan-block {
   position: relative;
   background: var(--surface-raised);
@@ -2865,6 +2957,19 @@ input::placeholder {
   background: var(--moved-bg);
   box-shadow: 0 14px 34px var(--moved-shadow);
   will-change: transform;
+}
+
+.plan-block.plan-block-dragging {
+  z-index: 3;
+  opacity: 0.7;
+  border-color: var(--accent-border);
+  box-shadow: 0 10px 26px var(--accent-tint);
+  cursor: grabbing;
+}
+
+.plan-block.plan-block-drag-over:not(.plan-block-dragging) {
+  border-color: var(--accent-border);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
 }
 
 .plan-time {
@@ -2908,6 +3013,90 @@ input::placeholder {
   line-height: 1.4;
 }
 
+.plan-block-editor {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.plan-block-editor > label > span:first-child {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+}
+
+.plan-duration-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-duration-input input {
+  width: 72px;
+  min-height: var(--density-plan-button-height);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: var(--density-plan-button-padding);
+  background: var(--surface-input);
+  color: var(--text);
+}
+
+.plan-duration-input small {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+}
+
+.plan-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--density-plan-control-gap);
+  margin-left: auto;
+}
+
+.plan-editor-actions button {
+  min-height: var(--density-plan-button-height);
+  border-radius: 7px;
+  padding: var(--density-plan-button-padding);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.remove-plan-block-button,
+.cancel-plan-edit-button {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.remove-plan-block-button:hover {
+  border-color: var(--urgent);
+  color: var(--urgent);
+}
+
+.cancel-plan-edit-button:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.save-plan-edit-button {
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.save-plan-edit-button:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
 .plan-block-controls {
   display: flex;
   flex-wrap: wrap;
@@ -2936,6 +3125,24 @@ input::placeholder {
 .complete-plan-button:hover {
   background: var(--control-bg);
   color: var(--text);
+}
+
+@media (max-width: 600px) {
+  .plan-block-editor {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .plan-editor-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+@media (hover: none) {
+  .plan-block-header-actions {
+    opacity: 1;
+  }
 }
 
 @media (max-width: 1180px) {
@@ -3211,6 +3418,174 @@ input::placeholder {
   }
 }
 
+/* Shared visual language across workspace surfaces and controls. */
+.panel,
+.home-widget:not(.home-widget--summary),
+.settings-hub-card,
+.task-card,
+.plan-block,
+.theme-setting,
+.setup-row label,
+.focus-card,
+.calendar-grid,
+.calendar-add-task-form,
+.calendar-task-item,
+.subject-profile-form,
+.subject-profile-card,
+.data-confirmation,
+.onboarding-value-grid div,
+.onboarding-choice-grid button,
+.onboarding-subject-form,
+.onboarding-summary,
+.sidebar-footer,
+.right-rail-empty {
+  border-radius: 8px;
+}
+
+.brand-mark {
+  border-radius: 8px;
+}
+
+.onboarding-frame {
+  border-radius: 10px;
+}
+
+.add-task-form,
+.task-empty-state,
+.calendar-empty-state,
+.subject-empty-state,
+.empty-plan {
+  border-radius: 8px;
+}
+
+.primary-button {
+  border: 1px solid var(--accent);
+  box-shadow: 0 1px 2px var(--accent-tint);
+}
+
+.secondary-button {
+  border: 1px solid var(--border-strong);
+  background: transparent;
+}
+
+.home-widget--setup .primary-button,
+.home-widget--setup .primary-button:hover {
+  box-shadow: 0 2px 8px var(--accent-tint);
+}
+
+.small-button,
+.primary-button,
+.secondary-button,
+.edit-button,
+.delete-button,
+.move-plan-button,
+.complete-plan-button,
+.plan-edit-button,
+.remove-plan-block-button,
+.cancel-plan-edit-button,
+.save-plan-edit-button,
+.save-edit-button,
+.cancel-edit-button,
+.calendar-navigation button,
+.calendar-detail-actions button,
+.subject-profile-actions button,
+.data-reset-row > button,
+.data-confirmation-actions button {
+  border-radius: 7px;
+}
+
+.add-task-form input,
+.add-task-form select,
+.setup-row input,
+.edit-task-form input,
+.edit-task-form select,
+.calendar-form-grid input,
+.calendar-form-grid select,
+.subject-form-grid input,
+.subject-form-grid select,
+.subject-colour-field > span:last-child {
+  border-radius: 7px;
+}
+
+.section-label,
+.settings-group-label {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+}
+
+.theme-setting p,
+.settings-note p,
+.data-panel-intro > div > p:last-child {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.task-empty-state h3,
+.calendar-empty-state h3,
+.subject-empty-state h3,
+.empty-plan h3 {
+  margin: 0 0 5px;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.task-empty-state p,
+.calendar-empty-state p,
+.subject-empty-state p,
+.empty-plan p,
+.right-rail-empty p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.panel-header h3,
+.home-widget-header h3,
+.calendar-toolbar h3,
+.calendar-detail-header h3,
+.theme-setting h3,
+.data-panel-intro h3 {
+  font-size: 0.94rem;
+  font-weight: 650;
+}
+
+.panel-header span {
+  font-size: 0.72rem;
+}
+
+.data-cancel-button:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.data-confirm-button:hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+}
+
+.data-confirmation.destructive .data-confirm-button:hover {
+  border-color: var(--urgent);
+  background: transparent;
+  color: var(--urgent);
+}
+
+.settings-hub-card,
+.task-card,
+.plan-block,
+.subject-profile-card,
+.right-rail-widget,
+.onboarding-value-grid div,
+.onboarding-choice-grid button {
+  transition: transform 0.18s ease, border-color 0.18s ease,
+    background 0.18s ease, box-shadow 0.18s ease;
+}
+
 .app-shell {
   transition: grid-template-columns 0.28s ease;
 }
@@ -3358,7 +3733,7 @@ input::placeholder {
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
   background: var(--surface);
   box-shadow: 0 18px 55px rgba(0, 0, 0, 0.14);
 }
@@ -3679,7 +4054,7 @@ input::placeholder {
 .onboarding-subject-form {
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--surface-raised);
   box-shadow: var(--shadow-sm);
 }
@@ -4055,6 +4430,12 @@ input::placeholder {
 
   .data-confirmation {
     animation: none;
+  }
+
+  .plan-block,
+  .plan-block-header-actions,
+  .plan-drag-handle {
+    transition: none;
   }
 
   .onboarding-progress > span,
