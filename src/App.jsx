@@ -6,8 +6,10 @@ import HomePage from "./pages/HomePage.jsx";
 import OnboardingFlow from "./pages/Onboarding.jsx";
 import PlanPage from "./pages/PlanPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
+import SubjectsPage from "./pages/SubjectsPage.jsx";
 import TasksPage from "./pages/TasksPage.jsx";
 import {
+  COMPLETED_HISTORY_STORAGE_KEY,
   COMPLETED_TASK_RETENTION_MS,
   DEFAULT_ACCENT_COLOR,
   STUDENT_HUB_STORAGE_KEYS,
@@ -35,7 +37,24 @@ import {
   restoreSavedPlanBlocks,
   saveTodayPlanSnapshot,
   createDemoTasks,
+  loadCompletedTaskHistory,
+  upsertCompletedTaskHistory,
+  removeTaskFromCompletedHistory,
+  normalizeTask,
 } from "./utils/appUtils.js";
+
+function createEmptyTaskDraft() {
+  return {
+    subject: "",
+    title: "",
+    dueDate: "",
+    effort: 2,
+    taskType: "homework",
+    importance: "normal",
+    detectedTags: [],
+    importanceSource: "auto",
+  };
+}
 
 function App() {
   const [activePage, setActivePage] = useState("home");
@@ -73,6 +92,9 @@ function App() {
   const [studentProfile, setStudentProfile] = useState(loadStudentProfile);
 
   const [tasks, setTasks] = useState(loadTasks);
+  const [completedTaskHistory, setCompletedTaskHistory] = useState(() =>
+    loadCompletedTaskHistory(tasks)
+  );
   const [initialSavedPlan] = useState(loadSavedPlanSnapshot);
   const savedPlanIsForToday = isSavedPlanForToday(initialSavedPlan);
 
@@ -109,12 +131,7 @@ function App() {
   const [planMoveFeedback, setPlanMoveFeedback] = useState(null);
   const planMoveFeedbackTimerRef = useRef(null);
 
-  const [newTask, setNewTask] = useState({
-    subject: "",
-    title: "",
-    dueDate: "",
-    effort: 2,
-  });
+  const [newTask, setNewTask] = useState(createEmptyTaskDraft);
 
   const rightRailWidgets = getWidgetsForArea(
     widgetConfig,
@@ -182,6 +199,13 @@ function App() {
   useEffect(() => {
     localStorage.setItem("student-hub-tasks", JSON.stringify(tasks));
   }, [tasks]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      COMPLETED_HISTORY_STORAGE_KEY,
+      JSON.stringify(completedTaskHistory)
+    );
+  }, [completedTaskHistory]);
 
   useEffect(() => {
     localStorage.setItem("student-hub-subjects", JSON.stringify(subjects));
@@ -367,7 +391,9 @@ function App() {
   const nextTask = [...activeTasks, ...visibleBacklog][0];
   const hasDemoTasks = tasks.some((task) => task.source === "demo");
   const hasDemoData =
-    hasDemoTasks || subjects.some((subject) => subject.source === "demo");
+    hasDemoTasks ||
+    subjects.some((subject) => subject.source === "demo") ||
+    completedTaskHistory.some((record) => record.source === "demo");
 
   function toggleTask(taskId) {
     const taskBeingChanged = tasks.find((task) => task.id === taskId);
@@ -386,6 +412,13 @@ function App() {
     );
 
     if (taskBeingChanged && !taskBeingChanged.completed) {
+      setCompletedTaskHistory((currentHistory) =>
+        upsertCompletedTaskHistory(
+          currentHistory,
+          taskBeingChanged,
+          completedAt
+        )
+      );
       setPlanBlocks((currentBlocks) =>
         recalculatePlanTimes(
           cleanPlanSequence(
@@ -393,6 +426,10 @@ function App() {
           ),
           startTime
         )
+      );
+    } else if (taskBeingChanged?.completed) {
+      setCompletedTaskHistory((currentHistory) =>
+        removeTaskFromCompletedHistory(currentHistory, taskId)
       );
     }
   }
@@ -404,10 +441,23 @@ function App() {
 
     if (linkedPlanBlock?.locked) return;
 
+    const taskToComplete = tasks.find((task) => task.id === taskId);
+    const completedAt = Date.now();
+
+    if (taskToComplete) {
+      setCompletedTaskHistory((currentHistory) =>
+        upsertCompletedTaskHistory(
+          currentHistory,
+          taskToComplete,
+          completedAt
+        )
+      );
+    }
+
     setTasks((currentTasks) =>
       currentTasks.map((task) =>
         task.id === taskId
-          ? { ...task, completed: true, completedAt: Date.now() }
+          ? { ...task, completed: true, completedAt }
           : task
       )
     );
@@ -440,17 +490,18 @@ function App() {
     }
 
     setTasks(
-      tasks.map((task) =>
-        task.id === taskId
-          ? {
-              ...task,
-              subject: updatedTask.subject.trim(),
-              title: updatedTask.title.trim(),
-              dueDate: updatedTask.dueDate,
-              effort: Number(updatedTask.effort),
-            }
-          : task
-      )
+      tasks.map((task) => {
+        if (task.id !== taskId) return task;
+
+        return normalizeTask({
+          ...task,
+          ...updatedTask,
+          subject: updatedTask.subject.trim(),
+          title: updatedTask.title.trim(),
+          dueDate: updatedTask.dueDate,
+          effort: Number(updatedTask.effort),
+        });
+      })
     );
 
     setPlanBlocks([]);
@@ -517,7 +568,7 @@ function App() {
       return false;
     }
 
-    const taskToAdd = {
+    const taskToAdd = normalizeTask({
       id: Date.now(),
       subject: taskInput.subject.trim(),
       title: taskInput.title.trim(),
@@ -530,7 +581,11 @@ function App() {
       classroomCourseName: null,
       importedAt: null,
       lastSyncedAt: null,
-    };
+      taskType: taskInput.taskType,
+      importance: taskInput.importance,
+      detectedTags: taskInput.detectedTags,
+      importanceSource: taskInput.importanceSource,
+    });
 
     setTasks((currentTasks) => [...currentTasks, taskToAdd]);
     return true;
@@ -541,12 +596,7 @@ function App() {
 
     if (!addTaskToList(newTask)) return;
 
-    setNewTask({
-      subject: "",
-      title: "",
-      dueDate: "",
-      effort: 2,
-    });
+    setNewTask(createEmptyTaskDraft());
 
     setShowAddTask(false);
   }
@@ -639,6 +689,10 @@ function App() {
         end: formatTime(startTime, currentOffset + duration),
         duration,
         effort: task.effort,
+        taskType: task.taskType,
+        importance: task.importance,
+        detectedTags: task.detectedTags,
+        importanceSource: task.importanceSource,
         tip: getTaskTip(task),
       });
 
@@ -846,8 +900,10 @@ function App() {
 
   function resetTasks() {
     localStorage.removeItem("student-hub-tasks");
+    localStorage.removeItem(COMPLETED_HISTORY_STORAGE_KEY);
     localStorage.removeItem(TODAY_PLAN_STORAGE_KEY);
     setTasks([]);
+    setCompletedTaskHistory([]);
     setPlanBlocks([]);
     setStalePlanDate(null);
     setPlanMoveFeedback(null);
@@ -899,6 +955,9 @@ function App() {
     setSubjects((currentSubjects) =>
       currentSubjects.filter((subject) => subject.source !== "demo")
     );
+    setCompletedTaskHistory((currentHistory) =>
+      currentHistory.filter((record) => record.source !== "demo")
+    );
     setPlanBlocks((currentBlocks) =>
       recalculatePlanTimes(
         cleanPlanSequence(
@@ -938,12 +997,13 @@ function App() {
     );
 
     setTasks([]);
+    setCompletedTaskHistory([]);
     setSubjects([]);
     setPlanBlocks([]);
     setStalePlanDate(null);
     setPlanMoveFeedback(null);
     setShowAddTask(false);
-    setNewTask({ subject: "", title: "", dueDate: "", effort: 2 });
+    setNewTask(createEmptyTaskDraft());
     setTheme("light");
     setAccentColor(DEFAULT_ACCENT_COLOR);
     setLayoutDensity("compact");
@@ -1041,6 +1101,12 @@ function App() {
             onClick={() => setActivePage("calendar")}
           />
           <NavButton
+            label="Subjects"
+            icon="◈"
+            active={activePage === "subjects"}
+            onClick={() => setActivePage("subjects")}
+          />
+          <NavButton
             label="Settings"
             icon="⚙"
             active={activePage === "settings"}
@@ -1134,6 +1200,15 @@ function App() {
             subjects={subjects}
             setActivePage={setActivePage}
             addTaskToList={addTaskToList}
+          />
+        )}
+
+        {activePage === "subjects" && (
+          <SubjectsPage
+            subjects={subjects}
+            tasks={tasks}
+            completedTaskHistory={completedTaskHistory}
+            setActivePage={setActivePage}
           />
         )}
 

@@ -1,10 +1,12 @@
 import { useState } from "react";
 import SubjectField from "../components/SubjectField.jsx";
+import TaskClassificationFields from "../components/TaskClassificationFields.jsx";
 import TaskCard from "../components/TaskCard.jsx";
 import {
   getEffortClass,
   taskSortOptions,
   sortTasksByMode,
+  updateTaskTitleWithDetection,
 } from "../utils/appUtils.js";
 
 function TasksPage({
@@ -85,7 +87,9 @@ function TasksPage({
               placeholder="Task title"
               value={newTask.title}
               onChange={(event) =>
-                setNewTask({ ...newTask, title: event.target.value })
+                setNewTask(
+                  updateTaskTitleWithDetection(newTask, event.target.value)
+                )
               }
             />
 
@@ -95,6 +99,11 @@ function TasksPage({
               onChange={(event) =>
                 setNewTask({ ...newTask, dueDate: event.target.value })
               }
+            />
+
+            <TaskClassificationFields
+              task={newTask}
+              onChange={setNewTask}
             />
 
             <div className="effort-row">
@@ -132,7 +141,7 @@ function TasksPage({
             <p>
               {sortedCompletedTasks.length > 0
                 ? "Your current tasks are complete. Add another when you’re ready."
-                : "Add your first task."}
+                : "Add your first task or load demo data in Settings."}
             </p>
           </div>
         )}

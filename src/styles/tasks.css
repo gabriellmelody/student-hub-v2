@@ -110,6 +110,58 @@
   margin: 3px 0 11px;
 }
 
+.task-classification-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+
+.task-classification-fields label {
+  min-width: 0;
+}
+
+.task-classification-fields label > span {
+  display: block;
+  margin: 0 0 4px;
+  color: var(--text-muted);
+  font-size: 0.64rem;
+}
+
+.task-classification-fields select {
+  width: 100%;
+  min-height: var(--density-input-height);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: var(--density-input-padding);
+  background: var(--surface-input);
+  color: var(--text);
+}
+
+.task-detection-status {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+  color: var(--text-muted);
+  font-size: 0.63rem;
+}
+
+.task-detection-status button {
+  flex-shrink: 0;
+  border: 0;
+  padding: 2px 4px;
+  background: transparent;
+  color: var(--accent-soft);
+  font-size: 0.63rem;
+}
+
+.task-detection-status button:hover {
+  color: var(--text);
+}
+
 .effort-row span {
   color: var(--text-secondary);
   font-size: 0.85rem;
@@ -254,6 +306,48 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 6px;
+}
+
+.task-signal-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.task-signal-badge {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 2px 6px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 0.6rem;
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.task-signal-assessment {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+
+.task-signal-high {
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.task-signal-urgent {
+  border-color: var(--effort-high-border);
+  background: var(--effort-high-bg);
+  color: var(--urgent);
+}
+
+.focus-task-signals {
   margin-top: 6px;
 }
 
@@ -450,4 +544,14 @@
 .empty-plan p {
   margin: 0;
   line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+  .task-classification-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .task-detection-status {
+    grid-column: 1;
+  }
 }

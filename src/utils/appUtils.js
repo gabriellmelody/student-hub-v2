@@ -30,7 +30,7 @@ export const defaultTasks = [
   {
     id: "demo-biology-lab-report",
     subject: "Biology",
-    title: "Lab report",
+    title: "Summative lab report",
     dueDate: "2026-07-02",
     effort: 4,
     completed: false,
@@ -66,10 +66,10 @@ export function createDemoTasks() {
 
     if (dueDateOffset !== null) dueDate.setDate(dueDate.getDate() + dueDateOffset);
 
-    return {
+    return normalizeTask({
       ...task,
       dueDate: dueDateOffset === null ? "" : formatDateKey(dueDate),
-    };
+    });
   });
 }
 
@@ -78,8 +78,12 @@ export const DEFAULT_ACCENT_COLOR = "#6366f1";
 export const DEFAULT_SUBJECT_COLOR = "#2563eb";
 export const WIDGET_CONFIG_STORAGE_KEY = "student-hub-widget-config";
 export const TODAY_PLAN_STORAGE_KEY = "student-hub-today-plan";
+export const COMPLETED_HISTORY_STORAGE_KEY =
+  "student-hub-completed-task-history";
+export const MAX_COMPLETED_HISTORY_RECORDS = 500;
 export const STUDENT_HUB_STORAGE_KEYS = [
   "student-hub-tasks",
+  COMPLETED_HISTORY_STORAGE_KEY,
   "student-hub-subjects",
   "student-hub-student-profile",
   "student-hub-theme",
@@ -96,6 +100,32 @@ export const STUDENT_HUB_STORAGE_KEYS = [
 ];
 export const subjectCourseSystems = ["IB", "AP", "GCSE", "A-level", "Other"];
 export const subjectLevels = ["HL", "SL", "AP", "Standard", "Higher", "Other"];
+export const taskTypeOptions = [
+  { value: "homework", label: "Homework" },
+  { value: "assessment", label: "Assessment" },
+  { value: "revision", label: "Revision" },
+  { value: "project", label: "Project" },
+  { value: "other", label: "Other" },
+];
+export const taskImportanceOptions = [
+  { value: "normal", label: "Normal" },
+  { value: "high", label: "High" },
+  { value: "urgent", label: "Urgent" },
+];
+const assessmentKeywordDefinitions = [
+  ["summative", "Summative"],
+  ["formative", "Formative"],
+  ["coursework", "Coursework"],
+  ["presentation", "Presentation"],
+  ["assessment", "Assessment"],
+  ["exam", "Exam"],
+  ["quiz", "Quiz"],
+  ["test", "Test"],
+  ["mock", "Mock"],
+  ["oral", "Oral"],
+  ["ia", "IA"],
+  ["paper", "Paper"],
+];
 export const accentColorPresets = [
   { label: "Indigo", value: DEFAULT_ACCENT_COLOR },
   { label: "Purple", value: "#7c3aed" },
@@ -321,8 +351,11 @@ export function colorToRgba(color, alpha) {
 }
 
 export function normalizeTask(task, fallbackSource = "manual") {
+  const normalizedMetadata = applyTaskImportanceDetection(task);
+
   return {
     ...task,
+    ...normalizedMetadata,
     source: task.source || fallbackSource,
     externalId: task.externalId || null,
     classroomCourseId: task.classroomCourseId || null,
@@ -330,6 +363,186 @@ export function normalizeTask(task, fallbackSource = "manual") {
     importedAt: task.importedAt || null,
     lastSyncedAt: task.lastSyncedAt || null,
   };
+}
+
+export function detectTaskImportance(title = "") {
+  const detectedTags = assessmentKeywordDefinitions
+    .filter(([keyword]) =>
+      new RegExp(`\\b${keyword}\\b`, "i").test(String(title))
+    )
+    .map(([, label]) => label);
+
+  return {
+    detectedTags,
+    taskType: detectedTags.length > 0 ? "assessment" : "homework",
+    importance: detectedTags.length > 0 ? "high" : "normal",
+  };
+}
+
+export function applyTaskImportanceDetection(task) {
+  const detection = detectTaskImportance(
+    [task?.title, task?.description].filter(Boolean).join(" ")
+  );
+  const hasManualOverride = task?.importanceSource === "manual";
+  const validTaskTypes = new Set(taskTypeOptions.map((option) => option.value));
+  const validImportance = new Set(
+    taskImportanceOptions.map((option) => option.value)
+  );
+
+  return {
+    taskType:
+      hasManualOverride && validTaskTypes.has(task?.taskType)
+        ? task.taskType
+        : detection.taskType,
+    importance:
+      hasManualOverride && validImportance.has(task?.importance)
+        ? task.importance
+        : detection.importance,
+    detectedTags: detection.detectedTags,
+    importanceSource: hasManualOverride ? "manual" : "auto",
+  };
+}
+
+export function updateTaskTitleWithDetection(task, title) {
+  const nextTask = { ...task, title };
+
+  return {
+    ...nextTask,
+    ...applyTaskImportanceDetection(nextTask),
+  };
+}
+
+export function getTaskSignalBadges(task) {
+  const badges = [];
+  const primaryTag = Array.isArray(task?.detectedTags)
+    ? task.detectedTags[0]
+    : null;
+
+  if (task?.taskType === "assessment") {
+    badges.push({
+      label: primaryTag || "Assessment",
+      tone: "assessment",
+    });
+  } else if (task?.taskType === "revision") {
+    badges.push({ label: "Revision", tone: "type" });
+  } else if (task?.taskType === "project") {
+    badges.push({ label: "Project", tone: "type" });
+  }
+
+  if (task?.importance === "urgent") {
+    badges.push({ label: "Urgent importance", tone: "urgent" });
+  } else if (task?.importance === "high") {
+    badges.push({ label: "High importance", tone: "high" });
+  }
+
+  return badges.slice(0, 2);
+}
+
+function normalizeHistorySource(source) {
+  return ["manual", "demo", "classroom"].includes(source)
+    ? source
+    : "manual";
+}
+
+export function createCompletedTaskHistoryRecord(task, completedAt = Date.now()) {
+  const timestamp = Number(completedAt);
+  const safeCompletedAt = Number.isFinite(timestamp) ? timestamp : Date.now();
+  const normalizedMetadata = applyTaskImportanceDetection(task);
+
+  return {
+    id: `history-${String(task.id)}-${safeCompletedAt}`,
+    originalTaskId: task.id ?? null,
+    title: String(task.title || "Untitled task").trim() || "Untitled task",
+    subject: String(task.subject || "").trim(),
+    dueDate: typeof task.dueDate === "string" ? task.dueDate : "",
+    completedAt: safeCompletedAt,
+    source: normalizeHistorySource(task.source),
+    ...normalizedMetadata,
+  };
+}
+
+function normalizeCompletedTaskHistory(records) {
+  if (!Array.isArray(records)) return [];
+
+  const normalizedRecords = records.flatMap((record) => {
+    if (!record || typeof record !== "object") return [];
+
+    const completedAt = Number(record.completedAt);
+
+    if (!Number.isFinite(completedAt)) return [];
+
+    const normalizedMetadata = applyTaskImportanceDetection(record);
+
+    return {
+      id:
+        record.id ||
+        `history-${String(record.originalTaskId ?? "unknown")}-${completedAt}`,
+      originalTaskId: record.originalTaskId ?? null,
+      title:
+        String(record.title || "Untitled task").trim() || "Untitled task",
+      subject: String(record.subject || "").trim(),
+      dueDate: typeof record.dueDate === "string" ? record.dueDate : "",
+      completedAt,
+      source: normalizeHistorySource(record.source),
+      ...normalizedMetadata,
+    };
+  });
+
+  normalizedRecords.sort(
+    (firstRecord, secondRecord) =>
+      secondRecord.completedAt - firstRecord.completedAt
+  );
+
+  const seenTaskIds = new Set();
+
+  return normalizedRecords
+    .filter((record) => {
+      const dedupeKey =
+        record.originalTaskId == null
+          ? `record:${record.id}`
+          : `task:${String(record.originalTaskId)}`;
+
+      if (seenTaskIds.has(dedupeKey)) return false;
+
+      seenTaskIds.add(dedupeKey);
+      return true;
+    })
+    .slice(0, MAX_COMPLETED_HISTORY_RECORDS);
+}
+
+export function loadCompletedTaskHistory(tasks = []) {
+  let savedRecords;
+
+  try {
+    const savedHistory = localStorage.getItem(COMPLETED_HISTORY_STORAGE_KEY);
+    savedRecords = savedHistory ? JSON.parse(savedHistory) : [];
+  } catch {
+    savedRecords = [];
+  }
+
+  const currentCompletedRecords = tasks
+    .filter((task) => task.completed)
+    .map((task) =>
+      createCompletedTaskHistoryRecord(task, task.completedAt || Date.now())
+    );
+
+  return normalizeCompletedTaskHistory([
+    ...(Array.isArray(savedRecords) ? savedRecords : []),
+    ...currentCompletedRecords,
+  ]);
+}
+
+export function upsertCompletedTaskHistory(history, task, completedAt) {
+  return normalizeCompletedTaskHistory([
+    createCompletedTaskHistoryRecord(task, completedAt),
+    ...history,
+  ]);
+}
+
+export function removeTaskFromCompletedHistory(history, taskId) {
+  return history.filter(
+    (record) => String(record.originalTaskId) !== String(taskId)
+  );
 }
 
 export function getExternalSourceKey(item) {
@@ -521,6 +734,10 @@ export function getTaskCalendarEvents(tasks, subjects = []) {
         taskSource: task.source || "manual",
         completed: task.completed,
         effort: task.effort,
+        taskType: task.taskType,
+        importance: task.importance,
+        detectedTags: task.detectedTags,
+        importanceSource: task.importanceSource,
       };
     });
 }
@@ -613,7 +830,27 @@ export function compareTasksSmart(a, b) {
   const safeADays = aDays === null ? 999 : aDays;
   const safeBDays = bDays === null ? 999 : bDays;
 
-  if (safeADays !== safeBDays) return safeADays - safeBDays;
+  const importanceScore = { normal: 0, high: 1, urgent: 2 };
+  const importanceDifference =
+    (importanceScore[b.importance] || 0) -
+    (importanceScore[a.importance] || 0);
+
+  if (safeADays !== safeBDays) {
+    const dueDateGap = Math.abs(safeADays - safeBDays);
+    const bothBeyondImmediateUrgency = safeADays > 1 && safeBDays > 1;
+
+    if (
+      dueDateGap <= 1 &&
+      bothBeyondImmediateUrgency &&
+      importanceDifference !== 0
+    ) {
+      return importanceDifference;
+    }
+
+    return safeADays - safeBDays;
+  }
+
+  if (importanceDifference !== 0) return importanceDifference;
   return b.effort - a.effort;
 }
 
@@ -639,6 +876,12 @@ export function sortTasksByMode(taskList, sortMode) {
       const bTime = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
 
       if (aTime !== bTime) return aTime - bTime;
+      const importanceScore = { normal: 0, high: 1, urgent: 2 };
+      const importanceDifference =
+        (importanceScore[b.importance] || 0) -
+        (importanceScore[a.importance] || 0);
+
+      if (importanceDifference !== 0) return importanceDifference;
       return b.effort - a.effort;
     }
 

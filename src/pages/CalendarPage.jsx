@@ -1,5 +1,6 @@
 import { useState } from "react";
 import SubjectField from "../components/SubjectField.jsx";
+import TaskClassificationFields from "../components/TaskClassificationFields.jsx";
 import {
   getDaysLeft,
   formatDateKey,
@@ -9,7 +10,22 @@ import {
   getUrgencyLabel,
   getUrgencyClass,
   getEffortClass,
+  getTaskSignalBadges,
+  updateTaskTitleWithDetection,
 } from "../utils/appUtils.js";
+
+function createCalendarTaskDraft(dueDate) {
+  return {
+    subject: "",
+    title: "",
+    dueDate,
+    effort: 2,
+    taskType: "homework",
+    importance: "normal",
+    detectedTags: [],
+    importanceSource: "auto",
+  };
+}
 
 function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
   const today = new Date();
@@ -18,12 +34,9 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
   );
   const [selectedDate, setSelectedDate] = useState(() => formatDateKey(today));
   const [showCalendarTaskForm, setShowCalendarTaskForm] = useState(false);
-  const [calendarTaskDraft, setCalendarTaskDraft] = useState(() => ({
-    subject: "",
-    title: "",
-    dueDate: formatDateKey(today),
-    effort: 2,
-  }));
+  const [calendarTaskDraft, setCalendarTaskDraft] = useState(() =>
+    createCalendarTaskDraft(formatDateKey(today))
+  );
   const calendarEvents = getTaskCalendarEvents(tasks, subjects);
   const calendarDays = getMonthCalendarDays(visibleMonth);
   const selectedEvents = calendarEvents.filter(
@@ -67,12 +80,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
   }
 
   function openCalendarTaskForm() {
-    setCalendarTaskDraft({
-      subject: "",
-      title: "",
-      dueDate: selectedDate,
-      effort: 2,
-    });
+    setCalendarTaskDraft(createCalendarTaskDraft(selectedDate));
     setShowCalendarTaskForm(true);
   }
 
@@ -246,10 +254,12 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                     placeholder="Assignment title"
                     required
                     onChange={(event) =>
-                      setCalendarTaskDraft({
-                        ...calendarTaskDraft,
-                        title: event.target.value,
-                      })
+                      setCalendarTaskDraft(
+                        updateTaskTitleWithDetection(
+                          calendarTaskDraft,
+                          event.target.value
+                        )
+                      )
                     }
                   />
                 </label>
@@ -269,6 +279,11 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                   />
                 </label>
               </div>
+
+              <TaskClassificationFields
+                task={calendarTaskDraft}
+                onChange={setCalendarTaskDraft}
+              />
 
               <div className="calendar-effort-row">
                 <span>Effort</span>
@@ -314,6 +329,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
             <div className="calendar-task-list">
               {selectedEvents.map((event) => {
                 const daysLeft = getDaysLeft(event.date);
+                const signalBadges = getTaskSignalBadges(event);
 
                 return (
                   <button
@@ -333,6 +349,18 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                     <span>
                       <small>{event.subject}</small>
                       <strong>{event.title}</strong>
+                      {signalBadges.length > 0 && (
+                        <span className="task-signal-badges">
+                          {signalBadges.map((badge) => (
+                            <span
+                              className={`task-signal-badge task-signal-${badge.tone}`}
+                              key={`${badge.tone}-${badge.label}`}
+                            >
+                              {badge.label}
+                            </span>
+                          ))}
+                        </span>
+                      )}
                     </span>
                     <span
                       className={

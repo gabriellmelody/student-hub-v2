@@ -285,6 +285,10 @@
   transform: translateY(calc(var(--density-nav-step) * 3));
 }
 
+.nav-subjects .nav-indicator {
+  transform: translateY(calc(var(--density-nav-step) * 4));
+}
+
 .nav-settings .nav-indicator {
   top: calc(100% - var(--density-nav-height));
   transform: translateY(0);

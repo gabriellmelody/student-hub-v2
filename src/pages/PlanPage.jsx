@@ -3,6 +3,7 @@ import {
   getEffortLabel,
   getEffortClass,
   getPlanBlockKey,
+  getTaskSignalBadges,
   parseDateKey,
 } from "../utils/appUtils.js";
 
@@ -599,6 +600,7 @@ function PlanPage({
           }${dragOverBlockId === block.id ? " plan-block-drag-over" : ""}${
             droppedBlockId === block.id ? " plan-block-dropped" : ""
           }${openMenuBlockId === block.id ? " plan-block-menu-open" : ""}`;
+          const signalBadges = getTaskSignalBadges(block);
 
           return (
             <div
@@ -729,7 +731,8 @@ function PlanPage({
                 </div>
               </div>
 
-              {block.type === "study" && (block.subject || block.effort) && (
+              {block.type === "study" &&
+                (block.subject || block.effort || signalBadges.length > 0) && (
                 <div className="plan-study-meta">
                   {block.subject && <p className="plan-subject">{block.subject}</p>}
                   {block.effort && (
@@ -737,6 +740,14 @@ function PlanPage({
                       {getEffortLabel(block.effort)} · {block.effort}/5
                     </span>
                   )}
+                  {signalBadges.slice(0, 1).map((badge) => (
+                    <span
+                      className={`task-signal-badge task-signal-${badge.tone}`}
+                      key={`${badge.tone}-${badge.label}`}
+                    >
+                      {badge.label}
+                    </span>
+                  ))}
                 </div>
               )}
 

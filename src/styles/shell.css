@@ -122,7 +122,7 @@
   flex-direction: column;
   gap: var(--density-nav-gap);
   min-height: calc(
-    (var(--density-nav-height) * 5) + (var(--density-nav-gap) * 4)
+    (var(--density-nav-height) * 6) + (var(--density-nav-gap) * 5)
   );
 }
 

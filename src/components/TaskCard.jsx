@@ -1,5 +1,6 @@
 import { useState } from "react";
 import SubjectField from "./SubjectField.jsx";
+import TaskClassificationFields from "./TaskClassificationFields.jsx";
 import {
   findSubjectProfile,
   getDaysLeft,
@@ -7,7 +8,22 @@ import {
   getUrgencyClass,
   getEffortLabel,
   getEffortClass,
+  getTaskSignalBadges,
+  updateTaskTitleWithDetection,
 } from "../utils/appUtils.js";
+
+function createTaskDraft(task) {
+  return {
+    subject: task.subject,
+    title: task.title,
+    dueDate: task.dueDate,
+    effort: task.effort,
+    taskType: task.taskType,
+    importance: task.importance,
+    detectedTags: task.detectedTags,
+    importanceSource: task.importanceSource,
+  };
+}
 
 function TaskCard({
   task,
@@ -18,20 +34,10 @@ function TaskCard({
   completed = false,
 }) {
   const [isEditing, setIsEditing] = useState(false);
-  const [draftTask, setDraftTask] = useState({
-    subject: task.subject,
-    title: task.title,
-    dueDate: task.dueDate,
-    effort: task.effort,
-  });
+  const [draftTask, setDraftTask] = useState(() => createTaskDraft(task));
 
   function startEdit() {
-    setDraftTask({
-      subject: task.subject,
-      title: task.title,
-      dueDate: task.dueDate,
-      effort: task.effort,
-    });
+    setDraftTask(createTaskDraft(task));
     setIsEditing(true);
   }
 
@@ -40,6 +46,7 @@ function TaskCard({
   const urgencyLabel = getUrgencyLabel(daysLeft);
   const effortClass = getEffortClass(task.effort);
   const effortLabel = getEffortLabel(task.effort);
+  const signalBadges = getTaskSignalBadges(task);
   const subjectProfile = findSubjectProfile(subjects, task.subject);
   const subjectStyle = subjectProfile
     ? { "--subject-color": subjectProfile.colour }
@@ -57,12 +64,7 @@ function TaskCard({
   }
 
   function cancelEdit() {
-    setDraftTask({
-      subject: task.subject,
-      title: task.title,
-      dueDate: task.dueDate,
-      effort: task.effort,
-    });
+    setDraftTask(createTaskDraft(task));
 
     setIsEditing(false);
   }
@@ -84,9 +86,19 @@ function TaskCard({
             type="text"
             value={draftTask.title}
             onChange={(event) =>
-              setDraftTask({ ...draftTask, title: event.target.value })
+              setDraftTask(
+                updateTaskTitleWithDetection(
+                  draftTask,
+                  event.target.value
+                )
+              )
             }
             placeholder="Task title"
+          />
+
+          <TaskClassificationFields
+            task={draftTask}
+            onChange={setDraftTask}
           />
 
           <input
@@ -158,6 +170,14 @@ function TaskCard({
             <span className={`effort-pill ${effortClass}`}>
               {effortLabel} · {task.effort}/5
             </span>
+            {signalBadges.map((badge) => (
+              <span
+                className={`task-signal-badge task-signal-${badge.tone}`}
+                key={`${badge.tone}-${badge.label}`}
+              >
+                {badge.label}
+              </span>
+            ))}
           </div>
         </div>
       </button>

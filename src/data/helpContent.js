@@ -42,12 +42,34 @@ export const helpContent = [
       "Completed tasks stay visible for 24 hours before they are removed automatically.",
   },
   {
-    id: "subjects",
-    title: "What are Subject Profiles?",
+    id: "task-importance",
+    title: "How does assessment detection work?",
     status: "available",
     category: "using-student-hub",
     summary:
-      "Save your subjects, course levels, grade goals, and colours in Settings, then use them when adding tasks.",
+      "Student Hub detects assessment words such as test, summative, formative, and exam, then marks the task as high importance.",
+    details:
+      "You can change the task type or importance yourself at any time. This uses simple local rules, not AI.",
+  },
+  {
+    id: "subjects-hub",
+    title: "What is the Subjects Hub?",
+    status: "available",
+    category: "using-student-hub",
+    summary:
+      "Open Subjects to see each class, active workload, next due task, grades, and completed work.",
+    details:
+      "Subject Profiles are still managed in Settings and supply course details, goals, and colours.",
+  },
+  {
+    id: "completed-task-history",
+    title: "Where can I see completed task history?",
+    status: "available",
+    category: "using-student-hub",
+    summary:
+      "The Subjects Hub keeps a compact history of your latest completed tasks, grouped by subject.",
+    details:
+      "Completed cards leave the To-do list after 24 hours, but their lightweight history remains.",
   },
   {
     id: "local-calendar",
@@ -107,7 +129,7 @@ export const helpContent = [
     status: "available",
     category: "workspace",
     summary:
-      "Home widgets show quick school context such as your next focus, progress, setup, and calendar.",
+      "Home widgets show quick school context and can be dragged into your preferred order.",
   },
   {
     id: "home-edit-mode",
@@ -123,7 +145,7 @@ export const helpContent = [
     status: "available",
     category: "workspace",
     summary:
-      "Open Settings, then Appearance and Edit Side Panel. You can reorder, hide, or restore its quick widgets.",
+      "Side Panel widgets show quick context beside your work. Open Appearance and Edit Side Panel to drag, hide, or restore them.",
   },
   {
     id: "appearance",

@@ -447,7 +447,7 @@ function DataSettings({
       title: "Load demo workspace",
       description: hasDemoTasks
         ? "Demo tasks are already available in this workspace."
-        : "Add a small set of clearly marked sample school tasks.",
+        : "No demo data loaded. Add a few clearly marked sample tasks.",
       confirmation:
         "Sample tasks will be added alongside your existing work. No current tasks or subjects will be changed.",
       confirmLabel: "Load demo",
@@ -462,7 +462,7 @@ function DataSettings({
             title: "Remove demo data",
             description: "Remove sample data while keeping your own work.",
             confirmation:
-              "Only tasks and subjects marked as demo data will be removed. Your manual work will stay untouched.",
+              "Only demo tasks, subjects, and completed history will be removed. Your manual work will stay untouched.",
             confirmLabel: "Remove demo data",
             actionLabel: "Remove",
             action: removeDemoData,
@@ -473,8 +473,9 @@ function DataSettings({
     {
       id: "tasks",
       title: "Reset tasks",
-      description: "Remove all tasks and clear the current generated plan.",
-      confirmation: "All active, backlog, and completed tasks will be removed.",
+      description: "Remove tasks, completed history, and the current plan.",
+      confirmation:
+        "All active and completed tasks, completed history, and the current plan will be removed.",
       confirmLabel: "Reset tasks",
       action: resetTasks,
       destructive: true,
@@ -492,7 +493,7 @@ function DataSettings({
     {
       id: "appearance",
       title: "Reset appearance",
-      description: "Restore theme, accent, density, Home, and rail defaults.",
+      description: "Restore theme, accent, density, Home, and Side Panel defaults.",
       confirmation:
         "Your visual and workspace layout preferences will return to their default values. Tasks and subjects will stay untouched.",
       confirmLabel: "Reset appearance",
@@ -512,7 +513,7 @@ function DataSettings({
       title: "Clear all local app data",
       description: "Return Student Hub to a clean first-time state.",
       confirmation:
-        "Tasks, subjects, profile, onboarding status, preferences, and the current plan will all be removed from this device.",
+        "Tasks, completed history, subjects, profile, onboarding, preferences, widgets, and the current plan will all be removed from this device.",
       confirmLabel: "Clear all data",
       action: clearAllStudentHubData,
       destructive: true,

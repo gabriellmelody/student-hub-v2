@@ -310,6 +310,10 @@
   white-space: nowrap;
 }
 
+.calendar-task-item .task-signal-badges {
+  margin-top: 4px;
+}
+
 .calendar-task-item small {
   color: var(--text-muted);
   font-size: 0.62rem;

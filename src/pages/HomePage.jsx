@@ -8,6 +8,7 @@ import {
   getUrgencyClass,
   getEffortLabel,
   getEffortClass,
+  getTaskSignalBadges,
   getWidgetsForArea,
 } from "../utils/appUtils.js";
 
@@ -368,6 +369,20 @@ function HomePage({
             <div className="focus-card">
               <p>{nextTask.subject}</p>
               <h3>{nextTask.title}</h3>
+              {getTaskSignalBadges(nextTask).length > 0 && (
+                <div className="task-signal-badges focus-task-signals">
+                  {getTaskSignalBadges(nextTask)
+                    .slice(0, 2)
+                    .map((badge) => (
+                      <span
+                        className={`task-signal-badge task-signal-${badge.tone}`}
+                        key={`${badge.tone}-${badge.label}`}
+                      >
+                        {badge.label}
+                      </span>
+                    ))}
+                </div>
+              )}
               <div className="focus-meta-row">
                 <span>{getUrgencyLabel(getDaysLeft(nextTask.dueDate))}</span>
                 <span
@@ -379,8 +394,8 @@ function HomePage({
             </div>
           ) : (
             <div className="empty-plan">
-              <h3>Nothing needs focus yet.</h3>
-              <p>Add a task when you’re ready.</p>
+              <h3>No tasks yet.</h3>
+              <p>Add your first task or load demo data in Settings.</p>
             </div>
           )}
 

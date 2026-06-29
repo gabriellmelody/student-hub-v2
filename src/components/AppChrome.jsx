@@ -5,6 +5,7 @@ import {
   getUrgencyLabel,
   getUrgencyClass,
   getWidgetsForArea,
+  sortTasksForDisplay,
 } from "../utils/appUtils.js";
 
 function NavButton({ label, icon, active, onClick }) {
@@ -51,13 +52,9 @@ function RightRail({
     };
   }, []);
 
-  const datedTasks = tasks
-    .filter((task) => !task.completed && task.dueDate)
-    .sort(
-      (firstTask, secondTask) =>
-        firstTask.dueDate.localeCompare(secondTask.dueDate) ||
-        secondTask.effort - firstTask.effort
-    );
+  const datedTasks = sortTasksForDisplay(
+    tasks.filter((task) => !task.completed && task.dueDate)
+  );
   const upcomingDeadlines = datedTasks.slice(0, 3);
   const planPreview = planBlocks
     .filter((block) => block.type === "study")
