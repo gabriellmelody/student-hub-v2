@@ -548,7 +548,7 @@ function HomePage({
         <section className="home-edit-bar" aria-label="Home edit mode">
           <div>
             <strong>Editing Home Page</strong>
-            <p>Choose which blocks appear and how much detail they show.</p>
+            <p>Drag to reorder, then hide or resize your blocks.</p>
           </div>
           <div className="home-edit-actions">
             <button
@@ -624,7 +624,7 @@ function HomePage({
                 <p>
                   {homeEditMode
                     ? "Use Add widget to restore a block."
-                    : "Edit your Home Page from Appearance settings."}
+                    : "Open Appearance settings to edit Home."}
                 </p>
               </div>
             </section>

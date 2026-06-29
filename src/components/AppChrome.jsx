@@ -511,7 +511,7 @@ function RightRail({
         >
           {renderEditControls(widget)}
           <div className="rail-widget-header">
-            <h3>Today’s plan</h3>
+            <h3>Today’s Plan</h3>
             <button type="button" onClick={() => setActivePage("plan")}>
               Open plan
             </button>
@@ -530,7 +530,7 @@ function RightRail({
             <div className="rail-plan-empty">
               <p>No study plan yet.</p>
               <button type="button" onClick={() => setActivePage("plan")}>
-                Go to Today’s plan
+                Go to Today’s Plan
               </button>
             </div>
           )}
@@ -546,7 +546,7 @@ function RightRail({
       className={`right-rail ${collapsed ? "collapsed" : ""} ${
         editMode ? "right-rail--editing" : ""
       }`}
-      aria-label="School widgets"
+      aria-label="Side Panel school widgets"
     >
       <div className="right-rail-toolbar">
         <div className="right-rail-heading">
@@ -558,10 +558,10 @@ function RightRail({
           className="right-rail-collapse-button"
           aria-label={
             editMode
-              ? "Finish editing before collapsing the right rail"
+              ? "Finish editing before collapsing the Side Panel"
               : collapsed
-                ? "Expand right rail"
-                : "Collapse right rail"
+                ? "Expand Side Panel"
+                : "Collapse Side Panel"
           }
           disabled={editMode}
           onClick={() => setCollapsed(!collapsed)}
@@ -574,8 +574,8 @@ function RightRail({
         {editMode && (
           <div className="right-rail-edit-bar">
             <div>
-              <strong>Editing side panel</strong>
-              <p>Drag widgets to reorder them.</p>
+              <strong>Editing Side Panel</strong>
+              <p>Drag to reorder, or hide widgets.</p>
             </div>
             <div className="right-rail-edit-actions">
               <button

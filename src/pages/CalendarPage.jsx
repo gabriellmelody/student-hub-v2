@@ -359,7 +359,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               <p>
                 {calendarEvents.length === 0
                   ? "Add a task with a due date to see it here."
-                  : "Select another day or add a task from the To-do page."}
+                  : "Select another day or add a task here."}
               </p>
             </div>
           )}

@@ -460,7 +460,7 @@ function OnboardingFlow({
               </div>
               <div className="onboarding-setting-row">
                 <div>
-                  <strong>Right rail</strong>
+                  <strong>Side Panel</strong>
                   <span>Show compact school context beside your workspace.</span>
                 </div>
                 <div className="theme-toggle">
@@ -507,7 +507,7 @@ function OnboardingFlow({
                 <span><small>School system</small><strong>{studentProfile.schoolSystem || "Other"}</strong></span>
                 <span><small>Subjects</small><strong>{subjects.length}</strong></span>
                 <span><small>Home</small><strong>{homeLayout === "focused" ? "Focused" : "Dashboard"}</strong></span>
-                <span><small>Right rail</small><strong>{rightRailVisible ? "On" : "Off"}</strong></span>
+                <span><small>Side Panel</small><strong>{rightRailVisible ? "On" : "Off"}</strong></span>
               </div>
             </div>
           )}

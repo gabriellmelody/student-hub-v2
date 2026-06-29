@@ -595,8 +595,8 @@ function App() {
           locked: false,
           taskId: null,
           calendarEventId: null,
-          title: "No tasks to plan.",
-          note: "You are clear for now.",
+          title: "No tasks to plan yet.",
+          note: "Add a task or create a custom block to get started.",
         },
       ]);
       setActivePage("plan");
@@ -1029,7 +1029,7 @@ function App() {
             onClick={() => setActivePage("tasks")}
           />
           <NavButton
-            label="Today’s plan"
+            label="Today’s Plan"
             icon="◷"
             active={activePage === "plan"}
             onClick={() => setActivePage("plan")}

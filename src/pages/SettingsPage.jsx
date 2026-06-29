@@ -6,6 +6,11 @@ import {
   getContrastText,
   createSubjectDraft,
 } from "../utils/appUtils.js";
+import {
+  helpCategories,
+  helpContent,
+  helpStatusLabels,
+} from "../data/helpContent.js";
 
 function SettingsPage({
   subjects,
@@ -53,6 +58,11 @@ function SettingsPage({
       eyebrow: "Settings / Data",
       title: "Data & reset",
       description: "Manage local Student Hub data and workspace defaults.",
+    },
+    help: {
+      eyebrow: "Settings / Help",
+      title: "Help / FAQ",
+      description: "Quick answers for getting comfortable with Student Hub.",
     },
   };
   const currentViewCopy = viewCopy[settingsView];
@@ -118,11 +128,32 @@ function SettingsPage({
             </span>
           </button>
 
+          <button
+            type="button"
+            className="settings-hub-card"
+            onClick={() => setSettingsView("help")}
+          >
+            <span>
+              <strong>Help / FAQ</strong>
+              <small>Guidance, local data, and common questions</small>
+            </span>
+            <span className="settings-hub-arrow" aria-hidden="true">
+              →
+            </span>
+          </button>
+
           {[
-            ["Account", "Profile and sign-in preferences"],
-            ["Integrations", "Connected services and data sources"],
-            ["Help / FAQ", "Guidance and common questions"],
-          ].map(([title, description]) => (
+            {
+              title: "Account",
+              description: "Profile and sign-in preferences",
+              status: "Planned later",
+            },
+            {
+              title: "Integrations",
+              description: "Connected services and data sources",
+              status: "Coming soon",
+            },
+          ].map(({ title, description, status }) => (
             <button
               key={title}
               type="button"
@@ -133,7 +164,7 @@ function SettingsPage({
                 <strong>{title}</strong>
                 <small>{description}</small>
               </span>
-              <span className="settings-coming-soon">Coming soon</span>
+              <span className="settings-coming-soon">{status}</span>
             </button>
           ))}
         </div>
@@ -261,14 +292,14 @@ function SettingsPage({
 
             <div className="theme-setting right-rail-setting">
               <div>
-                <h3>Right rail</h3>
+                <h3>Side Panel</h3>
                 <p>Show compact school context beside the workspace.</p>
               </div>
 
               <div
                 className="theme-toggle right-rail-toggle"
                 role="group"
-                aria-label="Right rail"
+                aria-label="Side Panel"
               >
                 {[
                   ["On", true],
@@ -320,7 +351,7 @@ function SettingsPage({
         </div>
       ) : settingsView === "subjects" ? (
         <SubjectsSettings subjects={subjects} setSubjects={setSubjects} />
-      ) : (
+      ) : settingsView === "data" ? (
         <DataSettings
           resetTasks={resetTasks}
           resetSubjects={resetSubjects}
@@ -332,7 +363,68 @@ function SettingsPage({
           hasDemoTasks={hasDemoTasks}
           hasDemoData={hasDemoData}
         />
+      ) : (
+        <HelpSettings />
       )}
+    </div>
+  );
+}
+
+function HelpSettings() {
+  return (
+    <div className="help-settings">
+      <section className="panel help-panel">
+        <div className="help-local-summary">
+          <div>
+            <p className="settings-group-label">Local for now</p>
+            <h3>Your workspace stays on this device</h3>
+            <p>
+              There are no accounts yet. Google Classroom and AI are not
+              connected, and clearing browser site data may remove your work.
+            </p>
+          </div>
+          <span>Browser saved</span>
+        </div>
+
+        <div className="help-faq-sections">
+          {helpCategories.map((category) => {
+            const categoryItems = helpContent.filter(
+              (item) => item.category === category.id
+            );
+
+            return (
+              <section className="help-faq-section" key={category.id}>
+                <div className="help-faq-section-heading">
+                  <h3>{category.label}</h3>
+                  <p>{category.description}</p>
+                </div>
+
+                <div className="help-faq-list">
+                  {categoryItems.map((item) => (
+                    <details className="help-faq-item" key={item.id}>
+                      <summary>
+                        <span className="help-faq-title">{item.title}</span>
+                        <span
+                          className={`help-status help-status-${item.status}`}
+                        >
+                          {helpStatusLabels[item.status]}
+                        </span>
+                        <span className="help-faq-expand" aria-hidden="true">
+                          +
+                        </span>
+                      </summary>
+                      <div className="help-faq-answer">
+                        <p>{item.summary}</p>
+                        {item.details && <p>{item.details}</p>}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }

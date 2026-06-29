@@ -13,7 +13,8 @@
 
 .settings-page.settings-view-appearance,
 .settings-page.settings-view-subjects,
-.settings-page.settings-view-data {
+.settings-page.settings-view-data,
+.settings-page.settings-view-help {
   animation-name: settings-appearance-enter;
 }
 

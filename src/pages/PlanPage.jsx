@@ -378,7 +378,7 @@ function PlanPage({
   return (
     <div className="page">
       <header className="page-header">
-        <p className="eyebrow">Today’s plan</p>
+        <p className="eyebrow">Today’s Plan</p>
         <h2>Build a study plan</h2>
         <p>Use your available time and task list to generate a simple schedule.</p>
       </header>
@@ -463,7 +463,7 @@ function PlanPage({
                   day: "numeric",
                 })}
               </strong>
-              <p>It was not restored as today’s plan.</p>
+              <p>It was not restored as Today’s Plan.</p>
             </div>
             <button type="button" onClick={startFreshPlan}>
               Start fresh

@@ -208,6 +208,7 @@
   }
 
   .data-panel-intro,
+  .help-local-summary,
   .data-reset-row,
   .data-confirmation {
     align-items: stretch;
@@ -215,8 +216,17 @@
   }
 
   .data-panel-intro > span,
+  .help-local-summary > span,
   .data-reset-row > button {
     align-self: flex-start;
+  }
+
+  .help-faq-item summary {
+    column-gap: 9px;
+  }
+
+  .help-status {
+    padding-inline: 6px;
   }
 
   .data-confirmation-actions {

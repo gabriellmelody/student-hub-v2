@@ -109,7 +109,7 @@ export const rightRailWidgetOptions = [
   { value: "clock", label: "Clock" },
   { value: "calendar", label: "School calendar" },
   { value: "deadlines", label: "Upcoming deadlines" },
-  { value: "plan", label: "Today’s plan" },
+  { value: "plan", label: "Today’s Plan" },
 ];
 
 export function getDefaultWidgetConfig(homeLayout = "focused") {
@@ -129,7 +129,7 @@ export function getDefaultWidgetConfig(homeLayout = "focused") {
     {
       id: "home-today-plan",
       type: "todayPlan",
-      label: "Today’s plan",
+      label: "Today’s Plan",
       area: "home",
       visible: true,
       size: "compact",
