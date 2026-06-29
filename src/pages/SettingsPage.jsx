@@ -5,7 +5,6 @@ import {
   accentColorPresets,
   getContrastText,
   createSubjectDraft,
-  getWidgetsForArea,
 } from "../utils/appUtils.js";
 
 function SettingsPage({
@@ -21,9 +20,8 @@ function SettingsPage({
   setHomeLayout,
   rightRailVisible,
   setRightRailVisible,
-  widgetConfig,
-  setWidgetConfig,
   openHomeEditMode,
+  openRightRailEditMode,
   restartOnboarding,
   resetTasks,
   resetSubjects,
@@ -54,20 +52,6 @@ function SettingsPage({
     },
   };
   const currentViewCopy = viewCopy[settingsView];
-
-  const rightRailWidgets = getWidgetsForArea(
-    widgetConfig,
-    "rightRail",
-    false
-  );
-
-  function updateWidget(widgetId, updates) {
-    setWidgetConfig((currentConfig) =>
-      currentConfig.map((widget) =>
-        widget.id === widgetId ? { ...widget, ...updates } : widget
-      )
-    );
-  }
 
   return (
     <div className={`page settings-page settings-view-${settingsView}`}>
@@ -299,44 +283,35 @@ function SettingsPage({
               </div>
             </div>
 
-            <div className="theme-setting home-edit-launch-setting">
-              <div>
-                <h3>Home page</h3>
-                <p>Customise the blocks that appear on your Home dashboard.</p>
-              </div>
+            <div
+              className="widget-edit-launch-grid"
+              aria-label="Widget customisation"
+            >
+              <button
+                type="button"
+                className="settings-widget-edit-card"
+                onClick={openHomeEditMode}
+              >
+                <span>
+                  <strong>Edit Home Page</strong>
+                  <small>Reorder, hide, and resize Home widgets.</small>
+                </span>
+                <span aria-hidden="true">→</span>
+              </button>
 
               <button
                 type="button"
-                className="secondary-button settings-edit-home-button"
-                onClick={openHomeEditMode}
+                className="settings-widget-edit-card"
+                onClick={openRightRailEditMode}
               >
-                Edit Home Page
+                <span>
+                  <strong>Edit Side Panel</strong>
+                  <small>Reorder or hide quick side widgets.</small>
+                </span>
+                <span aria-hidden="true">→</span>
               </button>
             </div>
 
-            <div className="theme-setting rail-widgets-setting">
-              <div>
-                <h3>Rail widgets</h3>
-                <p>Choose the school context shown in the right rail.</p>
-              </div>
-
-              <div className="rail-widget-options">
-                {rightRailWidgets.map((widget) => (
-                  <label className="rail-widget-option" key={widget.id}>
-                    <input
-                      type="checkbox"
-                      checked={widget.visible}
-                      onChange={() =>
-                        updateWidget(widget.id, {
-                          visible: !widget.visible,
-                        })
-                      }
-                    />
-                    <span>{widget.label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
           </section>
         </div>
       ) : settingsView === "subjects" ? (

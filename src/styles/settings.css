@@ -580,9 +580,7 @@
 .accent-setting,
 .density-setting,
 .home-layout-setting,
-.right-rail-setting,
-.home-edit-launch-setting,
-.rail-widgets-setting {
+.right-rail-setting {
   margin-top: var(--density-setting-margin);
 }
 
@@ -677,50 +675,58 @@
   border-radius: 5px;
 }
 
-.rail-widget-options {
+.widget-edit-launch-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  min-width: 280px;
+  gap: 8px;
+  margin-top: var(--density-setting-margin);
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
 }
 
-.rail-widget-option {
+.settings-widget-edit-card {
   display: flex;
   align-items: center;
-  gap: 7px;
+  justify-content: space-between;
+  gap: 10px;
   min-width: 0;
-  padding: var(--density-small-button-padding);
+  min-height: 64px;
+  padding: 10px 11px;
   border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--text-secondary);
-  font-size: 0.7rem;
-  cursor: pointer;
-}
-
-.rail-widget-option:hover {
-  border-color: var(--border-hover);
+  border-radius: 8px;
+  background: var(--surface-subtle);
   color: var(--text);
+  text-align: left;
 }
 
-.rail-widget-option input {
-  width: 14px;
-  height: 14px;
+.settings-widget-edit-card:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+}
+
+.settings-widget-edit-card > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.settings-widget-edit-card strong {
+  font-size: 0.8rem;
+  font-weight: 680;
+  line-height: 1.25;
+}
+
+.settings-widget-edit-card small {
+  color: var(--text-secondary);
+  font-size: 0.69rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.settings-widget-edit-card > span:last-child {
   flex-shrink: 0;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.rail-widget-option span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.settings-edit-home-button {
-  flex-shrink: 0;
-  min-height: 32px;
-  white-space: nowrap;
+  color: var(--accent);
+  font-size: 0.82rem;
 }
 
 .settings-note {

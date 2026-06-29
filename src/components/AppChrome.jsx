@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   getDaysLeft,
   formatDateKey,
@@ -23,12 +23,32 @@ function RightRail({
   collapsed,
   setCollapsed,
   widgetConfig,
+  setWidgetConfig,
+  editMode,
+  setEditMode,
 }) {
   const [currentTime, setCurrentTime] = useState(() => new Date());
+  const [showAddWidget, setShowAddWidget] = useState(false);
+  const [draggedWidgetId, setDraggedWidgetId] = useState(null);
+  const [dragOverWidgetId, setDragOverWidgetId] = useState(null);
+  const [droppedWidgetId, setDroppedWidgetId] = useState(null);
+  const widgetNodesRef = useRef(new Map());
+  const flipFirstRectsRef = useRef(null);
+  const flipAnimationFrameRef = useRef(null);
+  const activeDragIdRef = useRef(null);
+  const lastDragOverIdRef = useRef(null);
+  const dropSettleTimerRef = useRef(null);
 
   useEffect(() => {
     const clockTimer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(clockTimer);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      cancelAnimationFrame(flipAnimationFrameRef.current);
+      clearTimeout(dropSettleTimerRef.current);
+    };
   }, []);
 
   const datedTasks = tasks
@@ -58,14 +78,310 @@ function RightRail({
     };
   });
   const railWidgets = getWidgetsForArea(widgetConfig, "rightRail");
+  const hiddenRailWidgets = getWidgetsForArea(
+    widgetConfig,
+    "rightRail",
+    false
+  ).filter((widget) => !widget.visible);
+
+  useLayoutEffect(() => {
+    const firstRects = flipFirstRectsRef.current;
+
+    if (!firstRects) return;
+
+    flipFirstRectsRef.current = null;
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    cancelAnimationFrame(flipAnimationFrameRef.current);
+    const animatedWidgets = [];
+
+    widgetNodesRef.current.forEach((node, widgetId) => {
+      const firstRect = firstRects.get(widgetId);
+
+      if (!firstRect) return;
+
+      const lastRect = node.getBoundingClientRect();
+      const deltaY = firstRect.top - lastRect.top;
+
+      if (Math.abs(deltaY) < 1) return;
+
+      node.style.transition = "none";
+      node.style.transform = `translateY(${deltaY}px)`;
+      node.style.zIndex = widgetId === activeDragIdRef.current ? "3" : "2";
+      node.style.willChange = "transform";
+      animatedWidgets.push(node);
+    });
+
+    flipAnimationFrameRef.current = requestAnimationFrame(() => {
+      animatedWidgets.forEach((node) => {
+        node.style.transition =
+          "transform 210ms cubic-bezier(0.22, 1, 0.36, 1), border-color 160ms ease, box-shadow 160ms ease, opacity 160ms ease";
+        node.style.transform = "";
+      });
+    });
+
+    const cleanupTimer = setTimeout(() => {
+      animatedWidgets.forEach((node) => {
+        node.style.transition = "";
+        node.style.transform = "";
+        node.style.zIndex = "";
+        node.style.willChange = "";
+      });
+    }, 270);
+
+    return () => clearTimeout(cleanupTimer);
+  }, [widgetConfig]);
+
+  function setWidgetNode(widgetId, node) {
+    if (node) {
+      widgetNodesRef.current.set(widgetId, node);
+    } else {
+      widgetNodesRef.current.delete(widgetId);
+    }
+  }
+
+  function getWidgetRects() {
+    const rects = new Map();
+
+    widgetNodesRef.current.forEach((node, widgetId) => {
+      rects.set(widgetId, node.getBoundingClientRect());
+    });
+
+    return rects;
+  }
+
+  function updateRailWidget(widgetId, updates) {
+    setWidgetConfig((currentConfig) =>
+      currentConfig.map((widget) =>
+        widget.id === widgetId ? { ...widget, ...updates } : widget
+      )
+    );
+  }
+
+  function reorderRailWidgets(activeWidgetId, overWidgetId) {
+    if (
+      !activeWidgetId ||
+      !overWidgetId ||
+      activeWidgetId === overWidgetId
+    ) {
+      return;
+    }
+
+    setWidgetConfig((currentConfig) => {
+      const orderedRailWidgets = getWidgetsForArea(
+        currentConfig,
+        "rightRail",
+        false
+      );
+      const visibleWidgets = orderedRailWidgets.filter(
+        (widget) => widget.visible
+      );
+      const hiddenWidgets = orderedRailWidgets.filter(
+        (widget) => !widget.visible
+      );
+      const activeIndex = visibleWidgets.findIndex(
+        (widget) => widget.id === activeWidgetId
+      );
+      const overIndex = visibleWidgets.findIndex(
+        (widget) => widget.id === overWidgetId
+      );
+
+      if (activeIndex < 0 || overIndex < 0) return currentConfig;
+
+      const reorderedVisibleWidgets = [...visibleWidgets];
+      const [movedWidget] = reorderedVisibleWidgets.splice(activeIndex, 1);
+      reorderedVisibleWidgets.splice(overIndex, 0, movedWidget);
+
+      const nextRailOrder = [...reorderedVisibleWidgets, ...hiddenWidgets];
+      const orderById = new Map(
+        nextRailOrder.map((widget, order) => [widget.id, order])
+      );
+
+      return currentConfig.map((widget) =>
+        widget.area === "rightRail"
+          ? { ...widget, order: orderById.get(widget.id) }
+          : widget
+      );
+    });
+  }
+
+  function resetDragState() {
+    activeDragIdRef.current = null;
+    lastDragOverIdRef.current = null;
+    setDraggedWidgetId(null);
+    setDragOverWidgetId(null);
+  }
+
+  function handleDragStart(event, widgetId) {
+    if (!editMode) {
+      event.preventDefault();
+      return;
+    }
+
+    const widgetNode = widgetNodesRef.current.get(widgetId);
+
+    if (!widgetNode) return;
+
+    activeDragIdRef.current = widgetId;
+    lastDragOverIdRef.current = widgetId;
+    setDraggedWidgetId(widgetId);
+    setDroppedWidgetId(null);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/right-rail-widget", widgetId);
+
+    const widgetRect = widgetNode.getBoundingClientRect();
+    const dragOffsetX = Math.max(
+      12,
+      Math.min(widgetRect.width - 12, event.clientX - widgetRect.left)
+    );
+    const dragOffsetY = Math.max(
+      10,
+      Math.min(widgetRect.height - 10, event.clientY - widgetRect.top)
+    );
+
+    event.dataTransfer.setDragImage(widgetNode, dragOffsetX, dragOffsetY);
+  }
+
+  function handleDragOver(event, overWidgetId) {
+    if (!editMode) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverWidgetId(overWidgetId);
+
+    const activeWidgetId =
+      activeDragIdRef.current ||
+      event.dataTransfer.getData("text/right-rail-widget");
+    const activeIndex = railWidgets.findIndex(
+      (widget) => widget.id === activeWidgetId
+    );
+    const overIndex = railWidgets.findIndex(
+      (widget) => widget.id === overWidgetId
+    );
+
+    if (
+      !activeWidgetId ||
+      activeWidgetId === overWidgetId ||
+      activeIndex < 0 ||
+      overIndex < 0 ||
+      lastDragOverIdRef.current === overWidgetId
+    ) {
+      return;
+    }
+
+    const overNode = widgetNodesRef.current.get(overWidgetId);
+
+    if (!overNode) return;
+
+    const overRect = overNode.getBoundingClientRect();
+    const movingDown = activeIndex < overIndex;
+    const pointerPastMidpoint =
+      event.clientY > overRect.top + overRect.height / 2;
+
+    if (
+      (movingDown && !pointerPastMidpoint) ||
+      (!movingDown && pointerPastMidpoint)
+    ) {
+      return;
+    }
+
+    flipFirstRectsRef.current = getWidgetRects();
+    lastDragOverIdRef.current = overWidgetId;
+    reorderRailWidgets(activeWidgetId, overWidgetId);
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    const droppedId = activeDragIdRef.current;
+    resetDragState();
+
+    if (!droppedId) return;
+
+    clearTimeout(dropSettleTimerRef.current);
+    setDroppedWidgetId(droppedId);
+    dropSettleTimerRef.current = setTimeout(() => {
+      setDroppedWidgetId(null);
+    }, 230);
+  }
+
+  function handleDragHandleKeyDown(event, widgetId) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+
+    const currentIndex = railWidgets.findIndex(
+      (widget) => widget.id === widgetId
+    );
+    const nextIndex = currentIndex + (event.key === "ArrowUp" ? -1 : 1);
+
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= railWidgets.length) {
+      return;
+    }
+
+    event.preventDefault();
+    flipFirstRectsRef.current = getWidgetRects();
+    reorderRailWidgets(widgetId, railWidgets[nextIndex].id);
+  }
+
+  function getDragClass(widgetId) {
+    if (!editMode) return "";
+
+    return ` right-rail-widget--editing${
+      draggedWidgetId === widgetId ? " right-rail-widget--dragging" : ""
+    }${
+      dragOverWidgetId === widgetId ? " right-rail-widget--drag-over" : ""
+    }${droppedWidgetId === widgetId ? " right-rail-widget--dropped" : ""}`;
+  }
+
+  function getDragProps(widgetId) {
+    return {
+      ref: (node) => setWidgetNode(widgetId, node),
+      "data-right-rail-widget-id": widgetId,
+      onDragOver: editMode
+        ? (event) => handleDragOver(event, widgetId)
+        : undefined,
+      onDrop: editMode ? handleDrop : undefined,
+    };
+  }
+
+  function renderEditControls(widget) {
+    if (!editMode) return null;
+
+    return (
+      <div className="right-rail-widget-edit-controls">
+        <button
+          type="button"
+          className="right-rail-drag-handle"
+          draggable
+          aria-label={`Move ${widget.label}. Use drag or arrow keys.`}
+          title="Drag to reorder"
+          onDragStart={(event) => handleDragStart(event, widget.id)}
+          onDragEnd={resetDragState}
+          onKeyDown={(event) => handleDragHandleKeyDown(event, widget.id)}
+        >
+          <span aria-hidden="true">⠿</span>
+        </button>
+        <button
+          type="button"
+          className="right-rail-widget-hide-button"
+          onClick={() => updateRailWidget(widget.id, { visible: false })}
+        >
+          Hide
+        </button>
+      </div>
+    );
+  }
 
   function renderRailWidget(widget) {
     if (widget.type === "clock") {
       return (
         <section
-          className="right-rail-widget right-rail-widget--clock"
+          className={`right-rail-widget right-rail-widget--clock${getDragClass(
+            widget.id
+          )}`}
           key={widget.id}
+          {...getDragProps(widget.id)}
         >
+          {renderEditControls(widget)}
           <div className="rail-widget-header">
             <h3>Clock</h3>
             <span>Device time</span>
@@ -92,9 +408,13 @@ function RightRail({
     if (widget.type === "calendar") {
       return (
         <section
-          className="right-rail-widget right-rail-widget--calendar"
+          className={`right-rail-widget right-rail-widget--calendar${getDragClass(
+            widget.id
+          )}`}
           key={widget.id}
+          {...getDragProps(widget.id)}
         >
+          {renderEditControls(widget)}
           <div className="rail-widget-header">
             <button
               type="button"
@@ -136,9 +456,13 @@ function RightRail({
     if (widget.type === "deadlines") {
       return (
         <section
-          className="right-rail-widget right-rail-widget--deadlines"
+          className={`right-rail-widget right-rail-widget--deadlines${getDragClass(
+            widget.id
+          )}`}
           key={widget.id}
+          {...getDragProps(widget.id)}
         >
+          {renderEditControls(widget)}
           <div className="rail-widget-header">
             <h3>Upcoming deadlines</h3>
             <button type="button" onClick={() => setActivePage("tasks")}>
@@ -179,9 +503,13 @@ function RightRail({
     if (widget.type === "plan") {
       return (
         <section
-          className="right-rail-widget right-rail-widget--plan"
+          className={`right-rail-widget right-rail-widget--plan${getDragClass(
+            widget.id
+          )}`}
           key={widget.id}
+          {...getDragProps(widget.id)}
         >
+          {renderEditControls(widget)}
           <div className="rail-widget-header">
             <h3>Today’s plan</h3>
             <button type="button" onClick={() => setActivePage("plan")}>
@@ -215,7 +543,9 @@ function RightRail({
 
   return (
     <aside
-      className={`right-rail ${collapsed ? "collapsed" : ""}`}
+      className={`right-rail ${collapsed ? "collapsed" : ""} ${
+        editMode ? "right-rail--editing" : ""
+      }`}
       aria-label="School widgets"
     >
       <div className="right-rail-toolbar">
@@ -226,7 +556,14 @@ function RightRail({
         <button
           type="button"
           className="right-rail-collapse-button"
-          aria-label={collapsed ? "Expand right rail" : "Collapse right rail"}
+          aria-label={
+            editMode
+              ? "Finish editing before collapsing the right rail"
+              : collapsed
+                ? "Expand right rail"
+                : "Collapse right rail"
+          }
+          disabled={editMode}
           onClick={() => setCollapsed(!collapsed)}
         >
           →
@@ -234,10 +571,59 @@ function RightRail({
       </div>
 
       <div className="right-rail-content">
+        {editMode && (
+          <div className="right-rail-edit-bar">
+            <div>
+              <strong>Editing side panel</strong>
+              <p>Drag widgets to reorder them.</p>
+            </div>
+            <div className="right-rail-edit-actions">
+              <button
+                type="button"
+                disabled={hiddenRailWidgets.length === 0}
+                onClick={() =>
+                  setShowAddWidget((currentValue) => !currentValue)
+                }
+              >
+                Add widget
+              </button>
+              <button
+                type="button"
+                className="right-rail-edit-done"
+                onClick={() => {
+                  setShowAddWidget(false);
+                  setEditMode(false);
+                }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        )}
+
+        {editMode && showAddWidget && hiddenRailWidgets.length > 0 && (
+          <div className="right-rail-add-widget-panel">
+            {hiddenRailWidgets.map((widget) => (
+              <button
+                type="button"
+                key={widget.id}
+                onClick={() => updateRailWidget(widget.id, { visible: true })}
+              >
+                <span>{widget.label}</span>
+                <span aria-hidden="true">+</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {railWidgets.length === 0 && (
           <div className="right-rail-empty">
             <strong>No widgets selected.</strong>
-            <p>Choose widgets in Appearance settings.</p>
+            <p>
+              {editMode
+                ? "Use Add widget to restore one."
+                : "Choose widgets in Appearance settings."}
+            </p>
           </div>
         )}
 

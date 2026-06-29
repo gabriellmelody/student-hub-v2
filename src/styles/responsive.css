@@ -34,8 +34,22 @@
     transition: none;
   }
 
-  .home-widget--editing {
+  .home-widget--editing,
+  .home-widget-drag-handle {
     transition: none;
+  }
+
+  .home-widget--dropped {
+    animation: none;
+  }
+
+  .right-rail-widget--editing,
+  .right-rail-drag-handle {
+    transition: none;
+  }
+
+  .right-rail-widget--dropped {
+    animation: none;
   }
 }
 

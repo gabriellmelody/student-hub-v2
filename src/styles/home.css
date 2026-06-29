@@ -140,6 +140,8 @@
 .home-edit-actions button {
   min-height: 32px;
   padding: 6px 11px;
+  font-size: 0.75rem;
+  line-height: 1.2;
 }
 
 .home-edit-actions button:disabled {
@@ -218,7 +220,7 @@
 
 .home-add-widget-list small {
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: 0.69rem;
 }
 
 .home-add-widget-list > button > span:last-child {
@@ -231,7 +233,6 @@
   padding-top: 48px;
   border-color: var(--accent-border);
   box-shadow: var(--shadow-card), 0 0 0 2px var(--accent-tint);
-  transform: translateY(-1px);
   transition: border-color 0.16s ease, box-shadow 0.16s ease,
     transform 0.16s ease;
 }
@@ -255,7 +256,37 @@
   z-index: 2;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 6px;
+  max-width: calc(100% - 18px);
+}
+
+.home-widget-drag-handle {
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+}
+
+.home-widget-drag-handle:hover,
+.home-widget-drag-handle:focus-visible {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.home-widget-drag-handle:active {
+  cursor: grabbing;
 }
 
 .home-widget-size-toggle {
@@ -269,13 +300,14 @@
 
 .home-widget-size-toggle button,
 .home-widget-hide-button {
-  min-height: 26px;
+  min-height: 28px;
   border: 0;
   border-radius: 4px;
-  padding: 4px 7px;
+  padding: 4px 8px;
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: 0.7rem;
+  line-height: 1.2;
   font-weight: 650;
 }
 
@@ -293,6 +325,37 @@
 .home-widget-hide-button:hover {
   border-color: var(--border-hover);
   color: var(--text);
+}
+
+.home-widget--dragging {
+  z-index: 3;
+  opacity: 0.62;
+  border-color: var(--accent-border);
+  background: var(--surface-hover);
+  box-shadow: 0 14px 32px var(--accent-tint);
+  transform: translateY(-3px) scale(1.01);
+  cursor: grabbing;
+}
+
+.home-widget--drag-over:not(.home-widget--dragging) {
+  border-color: var(--accent-border);
+  box-shadow: inset 0 2px 0 var(--accent), var(--shadow-card);
+}
+
+.home-widget--dropped {
+  animation: home-widget-settle 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes home-widget-settle {
+  0% {
+    transform: translateY(-2px) scale(1.008);
+    box-shadow: 0 12px 28px var(--accent-tint);
+  }
+
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow: var(--shadow-card), 0 0 0 2px var(--accent-tint);
+  }
 }
 
 .home-widget--focus,

@@ -34,6 +34,7 @@ import {
 function App() {
   const [activePage, setActivePage] = useState("home");
   const [homeEditMode, setHomeEditMode] = useState(false);
+  const [rightRailEditMode, setRightRailEditMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem("student-hub-theme") === "dark"
@@ -132,7 +133,22 @@ function App() {
 
   function openHomeEditMode() {
     setActivePage("home");
+    setRightRailEditMode(false);
     setHomeEditMode(true);
+  }
+
+  function openRightRailEditMode() {
+    setActivePage("home");
+    setHomeEditMode(false);
+    setRightRailVisible(true);
+    setRightRailCollapsed(false);
+    setRightRailEditMode(true);
+  }
+
+  function updateRightRailVisibility(nextVisible) {
+    setRightRailVisible(nextVisible);
+
+    if (!nextVisible) setRightRailEditMode(false);
   }
 
   useEffect(() => {
@@ -672,6 +688,7 @@ function App() {
       JSON.stringify(restartedProfile)
     );
     setHomeEditMode(false);
+    setRightRailEditMode(false);
     setActivePage("home");
   }
 
@@ -731,6 +748,7 @@ function App() {
     setStartTime("16:00");
     setSidebarCollapsed(false);
     setHomeEditMode(false);
+    setRightRailEditMode(false);
     setActivePage("home");
     setStudentProfile({
       schoolSystem: "",
@@ -921,10 +939,9 @@ function App() {
             homeLayout={homeLayout}
             setHomeLayout={updateHomeLayout}
             rightRailVisible={rightRailVisible}
-            setRightRailVisible={setRightRailVisible}
-            widgetConfig={widgetConfig}
-            setWidgetConfig={setWidgetConfig}
+            setRightRailVisible={updateRightRailVisibility}
             openHomeEditMode={openHomeEditMode}
+            openRightRailEditMode={openRightRailEditMode}
             restartOnboarding={restartOnboarding}
             resetTasks={resetTasks}
             resetSubjects={resetSubjects}
@@ -942,6 +959,9 @@ function App() {
           collapsed={rightRailCollapsed}
           setCollapsed={setRightRailCollapsed}
           widgetConfig={widgetConfig}
+          setWidgetConfig={setWidgetConfig}
+          editMode={rightRailEditMode}
+          setEditMode={setRightRailEditMode}
         />
       )}
     </main>

@@ -284,10 +284,106 @@
   color: var(--text);
 }
 
+.right-rail-collapse-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .right-rail-content {
   opacity: 1;
   visibility: visible;
   transition: opacity 0.16s ease, visibility 0s;
+}
+
+.right-rail-edit-bar {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 7px;
+  padding: 9px;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  background: var(--accent-tint);
+}
+
+.right-rail-edit-bar strong {
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.right-rail-edit-bar p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 0.67rem;
+  line-height: 1.35;
+}
+
+.right-rail-edit-actions {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px;
+}
+
+.right-rail-edit-actions button,
+.right-rail-add-widget-panel button,
+.right-rail-widget-edit-controls button {
+  min-height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 7px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.69rem;
+  font-weight: 650;
+  line-height: 1.2;
+  white-space: normal;
+}
+
+.right-rail-edit-actions button:hover,
+.right-rail-add-widget-panel button:hover,
+.right-rail-widget-edit-controls button:hover {
+  border-color: var(--accent-border);
+  color: var(--text);
+}
+
+.right-rail-edit-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.right-rail-edit-actions .right-rail-edit-done {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.right-rail-add-widget-panel {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 7px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+
+.right-rail-add-widget-panel button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  text-align: left;
+}
+
+.right-rail-add-widget-panel button span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.right-rail-add-widget-panel button span:last-child {
+  color: var(--accent);
+  font-size: 0.85rem;
 }
 
 .right-rail.collapsed .right-rail-toolbar {
@@ -322,6 +418,81 @@
   border-top: 1px solid var(--border);
   border-radius: 0;
   background: transparent;
+}
+
+.right-rail-widget--editing {
+  position: relative;
+  margin-bottom: 6px;
+  padding: 7px;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 0 0 2px var(--accent-tint);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease,
+    transform 0.16s ease, opacity 0.16s ease;
+}
+
+.right-rail-widget--editing > :not(.right-rail-widget-edit-controls) {
+  pointer-events: none;
+}
+
+.right-rail-widget-edit-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.right-rail-widget-edit-controls .right-rail-drag-handle {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  line-height: 1;
+  cursor: grab;
+  user-select: none;
+}
+
+.right-rail-widget-edit-controls .right-rail-drag-handle:active {
+  cursor: grabbing;
+}
+
+.right-rail-widget-edit-controls .right-rail-widget-hide-button {
+  background: transparent;
+}
+
+.right-rail-widget--dragging {
+  z-index: 3;
+  opacity: 0.62;
+  border-color: var(--accent);
+  box-shadow: 0 12px 28px var(--accent-tint);
+  transform: translateY(-2px) scale(1.01);
+  cursor: grabbing;
+}
+
+.right-rail-widget--drag-over:not(.right-rail-widget--dragging) {
+  border-color: var(--accent);
+  box-shadow: inset 0 2px 0 var(--accent), 0 0 0 2px var(--accent-tint);
+}
+
+.right-rail-widget--dropped {
+  animation: right-rail-widget-settle 210ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes right-rail-widget-settle {
+  0% {
+    transform: translateY(-2px) scale(1.008);
+    box-shadow: 0 10px 24px var(--accent-tint);
+  }
+
+  100% {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 2px var(--accent-tint);
+  }
 }
 
 .right-rail-content > .right-rail-widget:first-child {
