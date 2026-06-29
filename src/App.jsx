@@ -12,6 +12,7 @@ import {
   DEFAULT_ACCENT_COLOR,
   STUDENT_HUB_STORAGE_KEYS,
   WIDGET_CONFIG_STORAGE_KEY,
+  TODAY_PLAN_STORAGE_KEY,
   normalizeHexColor,
   mixColors,
   getContrastText,
@@ -29,6 +30,11 @@ import {
   recalculatePlanTimes,
   getDefaultWidgetConfig,
   getWidgetsForArea,
+  loadSavedPlanSnapshot,
+  isSavedPlanForToday,
+  restoreSavedPlanBlocks,
+  saveTodayPlanSnapshot,
+  createDemoTasks,
 } from "./utils/appUtils.js";
 
 function App() {
@@ -67,17 +73,39 @@ function App() {
   const [studentProfile, setStudentProfile] = useState(loadStudentProfile);
 
   const [tasks, setTasks] = useState(loadTasks);
+  const [initialSavedPlan] = useState(loadSavedPlanSnapshot);
+  const savedPlanIsForToday = isSavedPlanForToday(initialSavedPlan);
 
   const [hoursAvailable, setHoursAvailable] = useState(() => {
+    if (savedPlanIsForToday && initialSavedPlan.hoursAvailable != null) {
+      return initialSavedPlan.hoursAvailable;
+    }
+
     return localStorage.getItem("student-hub-hours") || 2;
   });
 
   const [startTime, setStartTime] = useState(() => {
+    if (
+      savedPlanIsForToday &&
+      /^\d{2}:\d{2}$/.test(initialSavedPlan.startTime || "")
+    ) {
+      return initialSavedPlan.startTime;
+    }
+
     return localStorage.getItem("student-hub-start-time") || "16:00";
   });
 
   const [showAddTask, setShowAddTask] = useState(false);
-  const [planBlocks, setPlanBlocks] = useState([]);
+  const [planBlocks, setPlanBlocks] = useState(() =>
+    savedPlanIsForToday
+      ? restoreSavedPlanBlocks(initialSavedPlan, tasks, startTime)
+      : []
+  );
+  const [stalePlanDate, setStalePlanDate] = useState(() =>
+    initialSavedPlan && !savedPlanIsForToday
+      ? initialSavedPlan.generatedDate
+      : null
+  );
   const [planMoveFeedback, setPlanMoveFeedback] = useState(null);
   const planMoveFeedbackTimerRef = useRef(null);
 
@@ -209,6 +237,21 @@ function App() {
     );
   }, [widgetConfig]);
 
+  useEffect(() => {
+    if (stalePlanDate) return;
+
+    if (planBlocks.length === 0) {
+      localStorage.removeItem(TODAY_PLAN_STORAGE_KEY);
+      return;
+    }
+
+    saveTodayPlanSnapshot({
+      blocks: planBlocks,
+      startTime,
+      hoursAvailable,
+    });
+  }, [planBlocks, startTime, hoursAvailable, stalePlanDate]);
+
   useLayoutEffect(() => {
     const root = document.documentElement;
     const readableAccent = getReadableAccent(accentColor, theme);
@@ -322,6 +365,9 @@ function App() {
       : Math.round((completedTasks.length / tasks.length) * 100);
 
   const nextTask = [...activeTasks, ...visibleBacklog][0];
+  const hasDemoTasks = tasks.some((task) => task.source === "demo");
+  const hasDemoData =
+    hasDemoTasks || subjects.some((subject) => subject.source === "demo");
 
   function toggleTask(taskId) {
     const taskBeingChanged = tasks.find((task) => task.id === taskId);
@@ -352,6 +398,12 @@ function App() {
   }
 
   function completeTaskFromPlan(taskId) {
+    const linkedPlanBlock = planBlocks.find(
+      (block) => block.taskId === taskId
+    );
+
+    if (linkedPlanBlock?.locked) return;
+
     setTasks((currentTasks) =>
       currentTasks.map((task) =>
         task.id === taskId
@@ -405,7 +457,59 @@ function App() {
   }
 
   function clearPlan() {
+    setPlanBlocks((currentBlocks) =>
+      recalculatePlanTimes(
+        currentBlocks.filter((block) => block.locked === true),
+        startTime
+      )
+    );
+  }
+
+  function startFreshPlan() {
+    localStorage.removeItem(TODAY_PLAN_STORAGE_KEY);
+    setStalePlanDate(null);
     setPlanBlocks([]);
+    setPlanMoveFeedback(null);
+  }
+
+  function addManualPlanBlock(blockInput) {
+    setStalePlanDate(null);
+    const type = blockInput.type === "break" ? "break" : "study";
+    const numericDuration = Number(blockInput.duration);
+    const minimumDuration = type === "break" ? 5 : 10;
+    const maximumDuration = type === "break" ? 60 : 240;
+    const duration = Math.min(
+      maximumDuration,
+      Math.max(minimumDuration, Math.round(numericDuration || minimumDuration))
+    );
+    const manualBlock = {
+      id: `manual-${type}-${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 7)}`,
+      type,
+      source: "manual",
+      edited: true,
+      locked: false,
+      taskId: null,
+      calendarEventId: null,
+      title:
+        blockInput.title.trim() ||
+        (type === "break" ? "Break" : "Study block"),
+      duration,
+      ...(type === "study"
+        ? { subject: blockInput.subject.trim(), effort: null }
+        : {}),
+    };
+
+    setPlanBlocks((currentBlocks) =>
+      recalculatePlanTimes(
+        [
+          ...currentBlocks.filter((block) => block.type !== "message"),
+          manualBlock,
+        ],
+        startTime
+      )
+    );
   }
 
   function addTaskToList(taskInput) {
@@ -448,6 +552,13 @@ function App() {
   }
 
   function generatePlan() {
+    if (planBlocks.some((block) => block.locked === true)) {
+      setActivePage("plan");
+      return;
+    }
+
+    setStalePlanDate(null);
+
     const availableMinutes = Math.round(Number(hoursAvailable) * 60);
 
     if (!availableMinutes || availableMinutes < 20) {
@@ -559,13 +670,13 @@ function App() {
     setActivePage("plan");
   }
 
-  function movePlanStudyBlock(taskId, direction) {
+  function movePlanStudyBlock(blockId, direction) {
     const studyPositions = planBlocks.reduce((positions, block, index) => {
       if (block.type === "study") positions.push(index);
       return positions;
     }, []);
     const currentStudyIndex = studyPositions.findIndex(
-      (blockIndex) => planBlocks[blockIndex].taskId === taskId
+      (blockIndex) => planBlocks[blockIndex].id === blockId
     );
     const nextStudyIndex = currentStudyIndex + direction;
 
@@ -580,6 +691,18 @@ function App() {
     const reorderedPlan = [...planBlocks];
     const currentPosition = studyPositions[currentStudyIndex];
     const nextPosition = studyPositions[nextStudyIndex];
+    const rangeStart = Math.min(currentPosition, nextPosition);
+    const rangeEnd = Math.max(currentPosition, nextPosition);
+
+    if (
+      planBlocks[currentPosition].locked ||
+      planBlocks
+        .slice(rangeStart, rangeEnd + 1)
+        .some((block) => block.locked)
+    ) {
+      return;
+    }
+
     [reorderedPlan[currentPosition], reorderedPlan[nextPosition]] = [
       reorderedPlan[nextPosition],
       reorderedPlan[currentPosition],
@@ -587,7 +710,7 @@ function App() {
 
     setPlanBlocks(recalculatePlanTimes(reorderedPlan, startTime));
     setPlanMoveFeedback((currentFeedback) => ({
-      taskId,
+      blockId,
       direction,
       sequence: (currentFeedback?.sequence || 0) + 1,
     }));
@@ -603,6 +726,7 @@ function App() {
       recalculatePlanTimes(
         currentBlocks.map((block) => {
           if (block.id !== blockId) return block;
+          if (block.locked) return block;
 
           const numericDuration = Number(nextDuration);
           if (!Number.isFinite(numericDuration)) return block;
@@ -622,12 +746,28 @@ function App() {
   }
 
   function removePlanBlock(blockId) {
-    setPlanBlocks((currentBlocks) =>
-      recalculatePlanTimes(
+    setPlanBlocks((currentBlocks) => {
+      const blockToRemove = currentBlocks.find(
+        (block) => block.id === blockId
+      );
+
+      if (blockToRemove?.locked) return currentBlocks;
+
+      return recalculatePlanTimes(
         cleanPlanSequence(
           currentBlocks.filter((block) => block.id !== blockId)
         ),
         startTime
+      );
+    });
+  }
+
+  function togglePlanBlockLocked(blockId) {
+    setPlanBlocks((currentBlocks) =>
+      currentBlocks.map((block) =>
+        block.id === blockId
+          ? { ...block, locked: !block.locked }
+          : block
       )
     );
   }
@@ -651,6 +791,18 @@ function App() {
       );
 
       if (activeIndex < 0 || overIndex < 0) return currentBlocks;
+
+      const rangeStart = Math.min(activeIndex, overIndex);
+      const rangeEnd = Math.max(activeIndex, overIndex);
+
+      if (
+        currentBlocks[activeIndex].locked ||
+        currentBlocks
+          .slice(rangeStart, rangeEnd + 1)
+          .some((block) => block.locked)
+      ) {
+        return currentBlocks;
+      }
 
       const reorderedBlocks = [...currentBlocks];
       const [movedBlock] = reorderedBlocks.splice(activeIndex, 1);
@@ -694,8 +846,10 @@ function App() {
 
   function resetTasks() {
     localStorage.removeItem("student-hub-tasks");
+    localStorage.removeItem(TODAY_PLAN_STORAGE_KEY);
     setTasks([]);
     setPlanBlocks([]);
+    setStalePlanDate(null);
     setPlanMoveFeedback(null);
     setShowAddTask(false);
   }
@@ -703,6 +857,58 @@ function App() {
   function resetSubjects() {
     localStorage.removeItem("student-hub-subjects");
     setSubjects([]);
+  }
+
+  function loadDemoWorkspace() {
+    setTasks((currentTasks) => {
+      if (currentTasks.some((task) => task.source === "demo")) {
+        return currentTasks;
+      }
+
+      const existingTaskIds = new Set(currentTasks.map((task) => task.id));
+      const existingTaskSignatures = new Set(
+        currentTasks.map(
+          (task) =>
+            `${task.subject.trim().toLocaleLowerCase()}::${task.title
+              .trim()
+              .toLocaleLowerCase()}`
+        )
+      );
+      const demoTasks = createDemoTasks().filter(
+        (task) =>
+          !existingTaskIds.has(task.id) &&
+          !existingTaskSignatures.has(
+            `${task.subject.toLocaleLowerCase()}::${task.title.toLocaleLowerCase()}`
+          )
+      );
+
+      return [...currentTasks, ...demoTasks];
+    });
+  }
+
+  function removeDemoData() {
+    const demoTaskIds = new Set(
+      tasks
+        .filter((task) => task.source === "demo")
+        .map((task) => task.id)
+    );
+
+    setTasks((currentTasks) =>
+      currentTasks.filter((task) => task.source !== "demo")
+    );
+    setSubjects((currentSubjects) =>
+      currentSubjects.filter((subject) => subject.source !== "demo")
+    );
+    setPlanBlocks((currentBlocks) =>
+      recalculatePlanTimes(
+        cleanPlanSequence(
+          currentBlocks.filter(
+            (block) => !demoTaskIds.has(block.taskId)
+          )
+        ),
+        startTime
+      )
+    );
   }
 
   function resetAppearancePreferences() {
@@ -734,6 +940,7 @@ function App() {
     setTasks([]);
     setSubjects([]);
     setPlanBlocks([]);
+    setStalePlanDate(null);
     setPlanMoveFeedback(null);
     setShowAddTask(false);
     setNewTask({ subject: "", title: "", dueDate: "", effort: 2 });
@@ -906,14 +1113,18 @@ function App() {
             setStartTime={updatePlanStartTime}
             generatePlan={generatePlan}
             clearPlan={clearPlan}
+            addManualPlanBlock={addManualPlanBlock}
             movePlanStudyBlock={movePlanStudyBlock}
             updatePlanBlockDuration={updatePlanBlockDuration}
             removePlanBlock={removePlanBlock}
+            togglePlanBlockLocked={togglePlanBlockLocked}
             reorderPlanBlock={reorderPlanBlock}
             planMoveFeedback={planMoveFeedback}
             completeTaskFromPlan={completeTaskFromPlan}
             hoursAvailable={hoursAvailable}
             setHoursAvailable={setHoursAvailable}
+            stalePlanDate={stalePlanDate}
+            startFreshPlan={startFreshPlan}
           />
         )}
 
@@ -947,6 +1158,10 @@ function App() {
             resetSubjects={resetSubjects}
             resetAppearancePreferences={resetAppearancePreferences}
             clearAllStudentHubData={clearAllStudentHubData}
+            loadDemoWorkspace={loadDemoWorkspace}
+            removeDemoData={removeDemoData}
+            hasDemoTasks={hasDemoTasks}
+            hasDemoData={hasDemoData}
           />
         )}
       </section>

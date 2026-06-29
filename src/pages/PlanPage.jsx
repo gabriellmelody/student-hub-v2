@@ -3,7 +3,17 @@ import {
   getEffortLabel,
   getEffortClass,
   getPlanBlockKey,
+  parseDateKey,
 } from "../utils/appUtils.js";
+
+function createManualBlockDraft() {
+  return {
+    type: "study",
+    title: "",
+    subject: "",
+    duration: 30,
+  };
+}
 
 function PlanPage({
   planBlocks,
@@ -11,18 +21,27 @@ function PlanPage({
   setStartTime,
   generatePlan,
   clearPlan,
+  addManualPlanBlock,
   movePlanStudyBlock,
   updatePlanBlockDuration,
   removePlanBlock,
+  togglePlanBlockLocked,
   reorderPlanBlock,
   planMoveFeedback,
   completeTaskFromPlan,
   hoursAvailable,
   setHoursAvailable,
+  stalePlanDate,
+  startFreshPlan,
 }) {
-  const studyPlanBlocks = planBlocks.filter((block) => block.type === "study");
+  const hasLockedBlocks = planBlocks.some((block) => block.locked === true);
   const [editingBlockId, setEditingBlockId] = useState(null);
   const [durationDraft, setDurationDraft] = useState("");
+  const [openMenuBlockId, setOpenMenuBlockId] = useState(null);
+  const [showAddBlockForm, setShowAddBlockForm] = useState(false);
+  const [manualBlockDraft, setManualBlockDraft] = useState(
+    createManualBlockDraft
+  );
   const [draggedBlockId, setDraggedBlockId] = useState(null);
   const [dragOverBlockId, setDragOverBlockId] = useState(null);
   const [droppedBlockId, setDroppedBlockId] = useState(null);
@@ -32,6 +51,7 @@ function PlanPage({
   const activeDragIdRef = useRef(null);
   const lastDragOverIdRef = useRef(null);
   const dropSettleTimerRef = useRef(null);
+  const openMenuRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -39,6 +59,28 @@ function PlanPage({
       clearTimeout(dropSettleTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!openMenuBlockId) return undefined;
+
+    function handlePointerDown(event) {
+      if (!openMenuRef.current?.contains(event.target)) {
+        setOpenMenuBlockId(null);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") setOpenMenuBlockId(null);
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openMenuBlockId]);
 
   useLayoutEffect(() => {
     const firstRects = flipFirstRectsRef.current;
@@ -72,7 +114,7 @@ function PlanPage({
       node.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
       node.style.zIndex =
         node.dataset.planBlockId === activeDragIdRef.current ||
-        key === `study-${planMoveFeedback?.taskId}`
+        node.dataset.planBlockId === planMoveFeedback?.blockId
           ? "2"
           : "1";
       node.style.willChange = "transform";
@@ -117,12 +159,43 @@ function PlanPage({
     return rects;
   }
 
-  function handleMovePlanStudyBlock(taskId, direction) {
+  function handleMovePlanStudyBlock(blockId, direction) {
+    if (!canMoveStudyBlock(blockId, direction)) return;
+
     flipFirstRectsRef.current = getPlanBlockRects();
-    movePlanStudyBlock(taskId, direction);
+    movePlanStudyBlock(blockId, direction);
+    setOpenMenuBlockId(null);
+  }
+
+  function closeAddBlockForm() {
+    setShowAddBlockForm(false);
+    setManualBlockDraft(createManualBlockDraft());
+  }
+
+  function handleManualBlockTypeChange(nextType) {
+    setManualBlockDraft((currentDraft) => ({
+      ...currentDraft,
+      type: nextType,
+      title:
+        nextType === "break"
+          ? currentDraft.title || "Break"
+          : currentDraft.title === "Break"
+            ? ""
+            : currentDraft.title,
+      duration: nextType === "break" ? 10 : 30,
+    }));
+  }
+
+  function submitManualBlock(event) {
+    event.preventDefault();
+    addManualPlanBlock(manualBlockDraft);
+    closeAddBlockForm();
   }
 
   function openBlockEditor(block) {
+    if (block.locked) return;
+
+    setOpenMenuBlockId(null);
     setEditingBlockId(block.id);
     setDurationDraft(String(block.duration));
   }
@@ -143,6 +216,11 @@ function PlanPage({
   }
 
   function handleRemovePlanBlock(blockId) {
+    const block = planBlocks.find((planBlock) => planBlock.id === blockId);
+
+    if (block?.locked) return;
+
+    setOpenMenuBlockId(null);
     removePlanBlock(blockId);
     cancelBlockEdit();
   }
@@ -154,7 +232,54 @@ function PlanPage({
     setDragOverBlockId(null);
   }
 
+  function canReorderBlock(activeBlockId, overBlockId) {
+    const activeIndex = planBlocks.findIndex(
+      (block) => block.id === activeBlockId
+    );
+    const overIndex = planBlocks.findIndex((block) => block.id === overBlockId);
+
+    if (activeIndex < 0 || overIndex < 0) return false;
+
+    const rangeStart = Math.min(activeIndex, overIndex);
+    const rangeEnd = Math.max(activeIndex, overIndex);
+
+    return !planBlocks
+      .slice(rangeStart, rangeEnd + 1)
+      .some((block) => block.locked);
+  }
+
+  function canMoveStudyBlock(blockId, direction) {
+    const studyPositions = planBlocks.reduce((positions, block, index) => {
+      if (block.type === "study") positions.push(index);
+      return positions;
+    }, []);
+    const currentStudyIndex = studyPositions.findIndex(
+      (blockIndex) => planBlocks[blockIndex].id === blockId
+    );
+    const nextStudyIndex = currentStudyIndex + direction;
+
+    if (
+      currentStudyIndex < 0 ||
+      nextStudyIndex < 0 ||
+      nextStudyIndex >= studyPositions.length
+    ) {
+      return false;
+    }
+
+    return canReorderBlock(
+      blockId,
+      planBlocks[studyPositions[nextStudyIndex]].id
+    );
+  }
+
   function handleDragStart(event, blockId) {
+    const block = planBlocks.find((planBlock) => planBlock.id === blockId);
+
+    if (block?.locked) {
+      event.preventDefault();
+      return;
+    }
+
     activeDragIdRef.current = blockId;
     lastDragOverIdRef.current = blockId;
     setDraggedBlockId(blockId);
@@ -180,7 +305,6 @@ function PlanPage({
   function handleDragOver(event, overBlockId) {
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    setDragOverBlockId(overBlockId);
 
     const activeBlockId =
       activeDragIdRef.current || event.dataTransfer.getData("text/plan-block");
@@ -194,10 +318,15 @@ function PlanPage({
       activeBlockId === overBlockId ||
       activeIndex < 0 ||
       overIndex < 0 ||
-      lastDragOverIdRef.current === overBlockId
+      lastDragOverIdRef.current === overBlockId ||
+      !canReorderBlock(activeBlockId, overBlockId)
     ) {
+      setDragOverBlockId(null);
+      event.dataTransfer.dropEffect = "none";
       return;
     }
+
+    setDragOverBlockId(overBlockId);
 
     const overRect = event.currentTarget.getBoundingClientRect();
     const overMidpoint = overRect.top + overRect.height / 2;
@@ -239,6 +368,8 @@ function PlanPage({
       return;
     }
 
+    if (!canReorderBlock(blockId, planBlocks[nextIndex].id)) return;
+
     event.preventDefault();
     flipFirstRectsRef.current = getPlanBlockRects();
     reorderPlanBlock(blockId, planBlocks[nextIndex].id);
@@ -257,13 +388,43 @@ function PlanPage({
           <h3>Plan</h3>
 
           <div className="plan-actions">
+            <button
+              type="button"
+              className="small-button secondary plan-add-block-button"
+              aria-expanded={showAddBlockForm}
+              onClick={() =>
+                showAddBlockForm
+                  ? closeAddBlockForm()
+                  : setShowAddBlockForm(true)
+              }
+            >
+              Add block
+            </button>
+
             {planBlocks.length > 0 && (
-              <button className="small-button secondary" onClick={clearPlan}>
+              <button
+                className="small-button secondary"
+                title={
+                  hasLockedBlocks
+                    ? "Locked blocks will remain in the plan"
+                    : undefined
+                }
+                onClick={clearPlan}
+              >
                 Clear
               </button>
             )}
 
-            <button className="small-button" onClick={generatePlan}>
+            <button
+              className="small-button"
+              disabled={hasLockedBlocks}
+              title={
+                hasLockedBlocks
+                  ? "Unlock all blocks before regenerating"
+                  : undefined
+              }
+              onClick={generatePlan}
+            >
               {planBlocks.length > 0 ? "Regenerate" : "Plan my day"}
             </button>
           </div>
@@ -291,13 +452,125 @@ function PlanPage({
           </label>
         </div>
 
+        {stalePlanDate && (
+          <div className="stale-plan-notice">
+            <div>
+              <strong>
+                Saved plan from{" "}
+                {parseDateKey(stalePlanDate).toLocaleDateString(undefined, {
+                  weekday: "long",
+                  month: "short",
+                  day: "numeric",
+                })}
+              </strong>
+              <p>It was not restored as today’s plan.</p>
+            </div>
+            <button type="button" onClick={startFreshPlan}>
+              Start fresh
+            </button>
+          </div>
+        )}
+
+        {showAddBlockForm && (
+          <form className="manual-plan-block-form" onSubmit={submitManualBlock}>
+            <div className="manual-plan-block-heading">
+              <div>
+                <h3>Add a custom block</h3>
+                <p>Append a study or break block to the current plan.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close add block form"
+                onClick={closeAddBlockForm}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="manual-plan-block-fields">
+              <label>
+                <span>Type</span>
+                <select
+                  value={manualBlockDraft.type}
+                  onChange={(event) =>
+                    handleManualBlockTypeChange(event.target.value)
+                  }
+                >
+                  <option value="study">Study block</option>
+                  <option value="break">Break block</option>
+                </select>
+              </label>
+
+              <label>
+                <span>Title</span>
+                <input
+                  type="text"
+                  value={manualBlockDraft.title}
+                  placeholder={
+                    manualBlockDraft.type === "break" ? "Break" : "Study block"
+                  }
+                  required
+                  onChange={(event) =>
+                    setManualBlockDraft((currentDraft) => ({
+                      ...currentDraft,
+                      title: event.target.value,
+                    }))
+                  }
+                />
+              </label>
+
+              {manualBlockDraft.type === "study" && (
+                <label>
+                  <span>Subject <small>Optional</small></span>
+                  <input
+                    type="text"
+                    value={manualBlockDraft.subject}
+                    placeholder="e.g. Maths"
+                    onChange={(event) =>
+                      setManualBlockDraft((currentDraft) => ({
+                        ...currentDraft,
+                        subject: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              )}
+
+              <label>
+                <span>Duration</span>
+                <span className="manual-plan-duration-input">
+                  <input
+                    type="number"
+                    min={manualBlockDraft.type === "break" ? 5 : 10}
+                    max={manualBlockDraft.type === "break" ? 60 : 240}
+                    step="5"
+                    value={manualBlockDraft.duration}
+                    required
+                    onChange={(event) =>
+                      setManualBlockDraft((currentDraft) => ({
+                        ...currentDraft,
+                        duration: event.target.value,
+                      }))
+                    }
+                  />
+                  <small>minutes</small>
+                </span>
+              </label>
+            </div>
+
+            <div className="manual-plan-block-actions">
+              <button type="button" onClick={closeAddBlockForm}>
+                Cancel
+              </button>
+              <button type="submit">Add block</button>
+            </div>
+          </form>
+        )}
+
         {planBlocks.length === 0 && (
           <div className="empty-plan">
             <h3>Ready when you are.</h3>
-            <p>
-              Set your available hours, choose a start time, then generate a
-              simple study plan.
-            </p>
+            <p>Add tasks or create a custom block to build your plan.</p>
           </div>
         )}
 
@@ -313,29 +586,26 @@ function PlanPage({
             );
           }
 
-          const studyIndex =
-            block.type === "study"
-              ? studyPlanBlocks.findIndex(
-                  (studyBlock) => studyBlock.taskId === block.taskId
-                )
-              : -1;
-          const isFirstStudyBlock = studyIndex === 0;
-          const isLastStudyBlock = studyIndex === studyPlanBlocks.length - 1;
+          const canMoveStudyUp =
+            block.type === "study" && canMoveStudyBlock(block.id, -1);
+          const canMoveStudyDown =
+            block.type === "study" && canMoveStudyBlock(block.id, 1);
           const isMovedStudyBlock =
-            block.type === "study" && planMoveFeedback?.taskId === block.taskId;
+            block.type === "study" && planMoveFeedback?.blockId === block.id;
           const moveClassName = isMovedStudyBlock ? " plan-block-moved" : "";
+          const lockClassName = block.locked ? " plan-block-locked" : "";
           const dragClassName = `${
             draggedBlockId === block.id ? " plan-block-dragging" : ""
           }${dragOverBlockId === block.id ? " plan-block-drag-over" : ""}${
             droppedBlockId === block.id ? " plan-block-dropped" : ""
-          }`;
+          }${openMenuBlockId === block.id ? " plan-block-menu-open" : ""}`;
 
           return (
             <div
               className={
                 block.type === "break"
-                  ? `plan-block break-block${dragClassName}`
-                  : `plan-block${moveClassName}${dragClassName}`
+                  ? `plan-block break-block${lockClassName}${dragClassName}`
+                  : `plan-block${moveClassName}${lockClassName}${dragClassName}`
               }
               key={blockKey}
               ref={(node) => setPlanBlockRef(blockKey, node)}
@@ -349,47 +619,129 @@ function PlanPage({
                 <div className="plan-time">
                   {block.start} – {block.end}
                   {block.edited && <span>Adjusted</span>}
+                  {block.locked && (
+                    <span className="plan-lock-indicator">Locked</span>
+                  )}
                 </div>
                 <div className="plan-block-header-actions">
                   <button
                     type="button"
                     className="plan-drag-handle"
-                    draggable={editingBlockId !== block.id}
-                    disabled={editingBlockId === block.id}
-                    aria-label={`Move ${block.title}. Use drag or arrow keys.`}
-                    title="Drag to reorder"
+                    draggable={!block.locked && editingBlockId !== block.id}
+                    disabled={block.locked || editingBlockId === block.id}
+                    aria-label={
+                      block.locked
+                        ? `${block.title} is locked`
+                        : `Move ${block.title}. Use drag or arrow keys.`
+                    }
+                    title={block.locked ? "Unlock to reorder" : "Drag to reorder"}
                     onKeyDown={(event) =>
                       handleDragHandleKeyDown(event, block.id)
                     }
                   >
                     <span aria-hidden="true">⠿</span>
                   </button>
-                  <button
-                    type="button"
-                    className="plan-edit-button"
-                    aria-expanded={editingBlockId === block.id}
-                    onClick={() =>
-                      editingBlockId === block.id
-                        ? cancelBlockEdit()
-                        : openBlockEditor(block)
-                    }
-                  >
-                    {editingBlockId === block.id ? "Close" : "Edit"}
-                  </button>
+                  {editingBlockId !== block.id && (
+                    <div
+                      className="plan-more-menu-wrap"
+                      ref={
+                        openMenuBlockId === block.id ? openMenuRef : undefined
+                      }
+                    >
+                      <button
+                        type="button"
+                        className="plan-more-button"
+                        aria-label={`More actions for ${block.title}`}
+                        title="More actions"
+                        aria-haspopup="menu"
+                        aria-expanded={openMenuBlockId === block.id}
+                        onClick={() =>
+                          setOpenMenuBlockId((currentBlockId) =>
+                            currentBlockId === block.id ? null : block.id
+                          )
+                        }
+                      >
+                        <span aria-hidden="true">⋯</span>
+                      </button>
+
+                      {openMenuBlockId === block.id && (
+                        <div className="plan-more-menu" role="menu">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={() => {
+                              togglePlanBlockLocked(block.id);
+                              setOpenMenuBlockId(null);
+                            }}
+                          >
+                            {block.locked ? "Unlock block" : "Lock block"}
+                          </button>
+
+                          <button
+                            type="button"
+                            role="menuitem"
+                            disabled={block.locked}
+                            onClick={() => openBlockEditor(block)}
+                          >
+                            Edit duration
+                          </button>
+
+                          {block.type === "study" && (
+                            <>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={!canMoveStudyUp}
+                                onClick={() =>
+                                  handleMovePlanStudyBlock(block.id, -1)
+                                }
+                              >
+                                Move up
+                              </button>
+                              <button
+                                type="button"
+                                role="menuitem"
+                                disabled={!canMoveStudyDown}
+                                onClick={() =>
+                                  handleMovePlanStudyBlock(block.id, 1)
+                                }
+                              >
+                                Move down
+                              </button>
+                            </>
+                          )}
+
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="plan-menu-remove"
+                            disabled={block.locked}
+                            onClick={() => handleRemovePlanBlock(block.id)}
+                          >
+                            {block.type === "break"
+                              ? "Remove break"
+                              : "Remove from plan"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {block.type === "study" && (
+              {block.type === "study" && (block.subject || block.effort) && (
                 <div className="plan-study-meta">
-                  <p className="plan-subject">{block.subject}</p>
-                  <span className={`effort-pill ${getEffortClass(block.effort)}`}>
-                    {getEffortLabel(block.effort)} · {block.effort}/5
-                  </span>
+                  {block.subject && <p className="plan-subject">{block.subject}</p>}
+                  {block.effort && (
+                    <span className={`effort-pill ${getEffortClass(block.effort)}`}>
+                      {getEffortLabel(block.effort)} · {block.effort}/5
+                    </span>
+                  )}
                 </div>
               )}
 
               <h3>{block.title}</h3>
-              <p>{block.tip}</p>
+              {block.tip && <p>{block.tip}</p>}
 
               {editingBlockId === block.id && (
                 <form className="plan-block-editor" onSubmit={saveBlockDuration}>
@@ -412,13 +764,6 @@ function PlanPage({
                   <div className="plan-editor-actions">
                     <button
                       type="button"
-                      className="remove-plan-block-button"
-                      onClick={() => handleRemovePlanBlock(block.id)}
-                    >
-                      {block.type === "break" ? "Remove break" : "Remove from plan"}
-                    </button>
-                    <button
-                      type="button"
                       className="cancel-plan-edit-button"
                       onClick={cancelBlockEdit}
                     >
@@ -431,32 +776,18 @@ function PlanPage({
                 </form>
               )}
 
-              {block.type === "study" && editingBlockId !== block.id && (
+              {block.type === "study" &&
+                block.taskId !== null &&
+                editingBlockId !== block.id && (
                 <div className="plan-block-controls">
                   <button
                     type="button"
-                    className="move-plan-button"
-                    onClick={() => handleMovePlanStudyBlock(block.taskId, -1)}
-                    disabled={isFirstStudyBlock}
-                  >
-                    Move up
-                  </button>
-
-                  <button
-                    type="button"
-                    className="move-plan-button"
-                    onClick={() => handleMovePlanStudyBlock(block.taskId, 1)}
-                    disabled={isLastStudyBlock}
-                  >
-                    Move down
-                  </button>
-
-                  <button
-                    type="button"
                     className="complete-plan-button"
+                    disabled={block.locked}
+                    title={block.locked ? "Unlock to mark this task done" : undefined}
                     onClick={() => completeTaskFromPlan(block.taskId)}
                   >
-                    Mark task done
+                    Mark done
                   </button>
                 </div>
               )}

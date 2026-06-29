@@ -27,6 +27,10 @@ function SettingsPage({
   resetSubjects,
   resetAppearancePreferences,
   clearAllStudentHubData,
+  loadDemoWorkspace,
+  removeDemoData,
+  hasDemoTasks,
+  hasDemoData,
 }) {
   const [settingsView, setSettingsView] = useState("hub");
   const viewCopy = {
@@ -323,6 +327,10 @@ function SettingsPage({
           resetAppearancePreferences={resetAppearancePreferences}
           restartOnboarding={restartOnboarding}
           clearAllStudentHubData={clearAllStudentHubData}
+          loadDemoWorkspace={loadDemoWorkspace}
+          removeDemoData={removeDemoData}
+          hasDemoTasks={hasDemoTasks}
+          hasDemoData={hasDemoData}
         />
       )}
     </div>
@@ -335,9 +343,41 @@ function DataSettings({
   resetAppearancePreferences,
   restartOnboarding,
   clearAllStudentHubData,
+  loadDemoWorkspace,
+  removeDemoData,
+  hasDemoTasks,
+  hasDemoData,
 }) {
   const [pendingReset, setPendingReset] = useState(null);
   const resetOptions = [
+    {
+      id: "load-demo",
+      title: "Load demo workspace",
+      description: hasDemoTasks
+        ? "Demo tasks are already available in this workspace."
+        : "Add a small set of clearly marked sample school tasks.",
+      confirmation:
+        "Sample tasks will be added alongside your existing work. No current tasks or subjects will be changed.",
+      confirmLabel: "Load demo",
+      actionLabel: hasDemoTasks ? "Loaded" : "Load",
+      action: loadDemoWorkspace,
+      disabled: hasDemoTasks,
+    },
+    ...(hasDemoData
+      ? [
+          {
+            id: "remove-demo",
+            title: "Remove demo data",
+            description: "Remove sample data while keeping your own work.",
+            confirmation:
+              "Only tasks and subjects marked as demo data will be removed. Your manual work will stay untouched.",
+            confirmLabel: "Remove demo data",
+            actionLabel: "Remove",
+            action: removeDemoData,
+            destructive: true,
+          },
+        ]
+      : []),
     {
       id: "tasks",
       title: "Reset tasks",
@@ -438,12 +478,17 @@ function DataSettings({
                 <h3>{option.title}</h3>
                 <p>{option.description}</p>
               </div>
-              <button type="button" onClick={() => setPendingReset(option)}>
-                {option.id === "onboarding"
-                  ? "Restart"
-                  : option.id === "all"
-                    ? "Clear"
-                    : "Reset"}
+              <button
+                type="button"
+                disabled={option.disabled}
+                onClick={() => setPendingReset(option)}
+              >
+                {option.actionLabel ||
+                  (option.id === "onboarding"
+                    ? "Restart"
+                    : option.id === "all"
+                      ? "Clear"
+                      : "Reset")}
               </button>
             </div>
           ))}

@@ -132,7 +132,7 @@ function TasksPage({
             <p>
               {sortedCompletedTasks.length > 0
                 ? "Your current tasks are complete. Add another when you’re ready."
-                : "Add your first assignment."}
+                : "Add your first task."}
             </p>
           </div>
         )}

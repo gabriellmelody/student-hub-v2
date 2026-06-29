@@ -1,6 +1,6 @@
 export const defaultTasks = [
   {
-    id: 1,
+    id: "demo-english-essay",
     subject: "English",
     title: "Essay draft",
     dueDate: "2026-06-22",
@@ -14,7 +14,7 @@ export const defaultTasks = [
     lastSyncedAt: null,
   },
   {
-    id: 2,
+    id: "demo-maths-problem-set",
     subject: "Maths",
     title: "Problem set",
     dueDate: "2026-06-25",
@@ -28,7 +28,7 @@ export const defaultTasks = [
     lastSyncedAt: null,
   },
   {
-    id: 3,
+    id: "demo-biology-lab-report",
     subject: "Biology",
     title: "Lab report",
     dueDate: "2026-07-02",
@@ -42,7 +42,7 @@ export const defaultTasks = [
     lastSyncedAt: null,
   },
   {
-    id: 4,
+    id: "demo-history-reading",
     subject: "History",
     title: "Chapter reading",
     dueDate: "",
@@ -57,10 +57,27 @@ export const defaultTasks = [
   },
 ];
 
+export function createDemoTasks() {
+  const dueDateOffsets = [1, 3, 7, null];
+
+  return defaultTasks.map((task, index) => {
+    const dueDateOffset = dueDateOffsets[index];
+    const dueDate = new Date();
+
+    if (dueDateOffset !== null) dueDate.setDate(dueDate.getDate() + dueDateOffset);
+
+    return {
+      ...task,
+      dueDate: dueDateOffset === null ? "" : formatDateKey(dueDate),
+    };
+  });
+}
+
 export const COMPLETED_TASK_RETENTION_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_ACCENT_COLOR = "#6366f1";
 export const DEFAULT_SUBJECT_COLOR = "#2563eb";
 export const WIDGET_CONFIG_STORAGE_KEY = "student-hub-widget-config";
+export const TODAY_PLAN_STORAGE_KEY = "student-hub-today-plan";
 export const STUDENT_HUB_STORAGE_KEYS = [
   "student-hub-tasks",
   "student-hub-subjects",
@@ -73,6 +90,7 @@ export const STUDENT_HUB_STORAGE_KEYS = [
   "student-hub-right-rail-state",
   "student-hub-right-rail-widgets",
   WIDGET_CONFIG_STORAGE_KEY,
+  TODAY_PLAN_STORAGE_KEY,
   "student-hub-hours",
   "student-hub-start-time",
 ];
@@ -335,12 +353,12 @@ export function findExternalSourceMatch(items, candidate) {
 export function loadTasks() {
   const savedTasks = localStorage.getItem("student-hub-tasks");
 
-  if (!savedTasks) return defaultTasks;
+  if (!savedTasks) return [];
 
   try {
     const parsedTasks = JSON.parse(savedTasks);
 
-    if (!Array.isArray(parsedTasks)) return defaultTasks;
+    if (!Array.isArray(parsedTasks)) return [];
 
     const now = Date.now();
 
@@ -361,7 +379,7 @@ export function loadTasks() {
       return { ...normalizedTask, completedAt };
     });
   } catch {
-    return defaultTasks;
+    return [];
   }
 }
 
@@ -641,6 +659,7 @@ export function cleanPlanSequence(blocks) {
 
   return blocks.filter((block, index) => {
     if (block.type !== "break") return true;
+    if (block.source === "manual") return true;
 
     const hasStudyBefore = blocks
       .slice(0, index)
@@ -678,9 +697,86 @@ export function recalculatePlanTimes(blocks, startTime) {
 }
 
 export function getPlanBlockKey(block, index) {
-  if (block.type === "study") return `study-${block.taskId}`;
+  if (block.type === "study") return block.id || `study-${block.taskId}`;
   if (block.type === "break") return block.id || `break-${index}`;
   return block.id;
+}
+
+export function loadSavedPlanSnapshot() {
+  const savedPlan = localStorage.getItem(TODAY_PLAN_STORAGE_KEY);
+
+  if (!savedPlan) return null;
+
+  try {
+    const parsedPlan = JSON.parse(savedPlan);
+
+    if (
+      !parsedPlan ||
+      typeof parsedPlan !== "object" ||
+      !Array.isArray(parsedPlan.blocks) ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(parsedPlan.generatedDate || "")
+    ) {
+      return null;
+    }
+
+    return parsedPlan;
+  } catch {
+    return null;
+  }
+}
+
+export function isSavedPlanForToday(savedPlan) {
+  return savedPlan?.generatedDate === formatDateKey(new Date());
+}
+
+export function restoreSavedPlanBlocks(savedPlan, tasks, startTime) {
+  if (!savedPlan || !Array.isArray(savedPlan.blocks)) return [];
+
+  const taskIds = new Set(tasks.map((task) => task.id));
+  const normalizedBlocks = savedPlan.blocks
+    .filter(
+      (block) =>
+        block &&
+        typeof block === "object" &&
+        ["study", "break", "message"].includes(block.type)
+    )
+    .map((block, index) => {
+      const hasValidTaskLink =
+        block.taskId == null || taskIds.has(block.taskId);
+      const taskId = hasValidTaskLink ? (block.taskId ?? null) : null;
+
+      return {
+        ...block,
+        id: block.id || `restored-${block.type}-${index}`,
+        source:
+          !hasValidTaskLink && block.source === "generated"
+            ? "manual"
+            : block.source || (taskId == null ? "manual" : "generated"),
+        taskId,
+        edited: block.edited === true,
+        locked: block.locked === true,
+        calendarEventId: block.calendarEventId || null,
+      };
+    });
+
+  return recalculatePlanTimes(normalizedBlocks, startTime);
+}
+
+export function saveTodayPlanSnapshot({
+  blocks,
+  startTime,
+  hoursAvailable,
+}) {
+  localStorage.setItem(
+    TODAY_PLAN_STORAGE_KEY,
+    JSON.stringify({
+      generatedDate: formatDateKey(new Date()),
+      savedAt: new Date().toISOString(),
+      startTime,
+      hoursAvailable,
+      blocks,
+    })
+  );
 }
 
 export function createSubjectDraft(courseSystem = "IB") {

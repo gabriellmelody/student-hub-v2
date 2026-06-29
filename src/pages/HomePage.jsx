@@ -379,8 +379,8 @@ function HomePage({
             </div>
           ) : (
             <div className="empty-plan">
-              <h3>No urgent task.</h3>
-              <p>You’re clear for now.</p>
+              <h3>Nothing needs focus yet.</h3>
+              <p>Add a task when you’re ready.</p>
             </div>
           )}
 

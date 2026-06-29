@@ -351,8 +351,16 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
             </div>
           ) : (
             <div className="calendar-empty-state">
-              <h3>No school tasks due.</h3>
-              <p>Select another day or add an assignment from the To-do page.</p>
+              <h3>
+                {calendarEvents.length === 0
+                  ? "No due dates yet."
+                  : "No school tasks due."}
+              </h3>
+              <p>
+                {calendarEvents.length === 0
+                  ? "Add a task with a due date to see it here."
+                  : "Select another day or add a task from the To-do page."}
+              </p>
             </div>
           )}
 

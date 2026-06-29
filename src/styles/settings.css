@@ -185,6 +185,17 @@
   color: var(--text);
 }
 
+.data-reset-row > button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.data-reset-row > button:disabled:hover {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
 .data-reset-row.destructive {
   background: var(--surface-subtle);
 }

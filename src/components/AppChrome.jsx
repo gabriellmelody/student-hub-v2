@@ -520,7 +520,7 @@ function RightRail({
           {planPreview.length > 0 ? (
             <div className="rail-plan-list">
               {planPreview.map((block) => (
-                <div className="rail-plan-item" key={block.taskId}>
+                <div className="rail-plan-item" key={block.id}>
                   <span>{block.start}</span>
                   <strong>{block.title}</strong>
                 </div>
