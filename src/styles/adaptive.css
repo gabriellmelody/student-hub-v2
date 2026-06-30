@@ -209,10 +209,52 @@
 
   .data-panel-intro,
   .help-local-summary,
+  .help-video-empty,
+  .integration-control-intro,
+  .classroom-preview-intro,
+  .classroom-preview-footer,
   .data-reset-row,
   .data-confirmation {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .integration-control-intro > span {
+    align-self: flex-start;
+  }
+
+  .classroom-preview-intro-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .integration-card {
+    min-height: 0;
+  }
+
+  .classroom-assignment {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .classroom-assignment-meta {
+    grid-column: 2;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .classroom-course-heading {
+    align-items: flex-start;
+  }
+
+  .classroom-course-actions {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+
+  .classroom-import-button {
+    align-self: flex-start;
   }
 
   .data-panel-intro > span,

@@ -157,11 +157,11 @@ export const helpContent = [
   },
   {
     id: "demo-data",
-    title: "What is demo data?",
+    title: "What is the Demo workspace?",
     status: "available",
     category: "workspace",
     summary:
-      "Demo data is an optional set of sample school tasks for exploring the app.",
+      "The Demo workspace is an optional set of sample school tasks for exploring the app.",
     details:
       "Load or remove it from Data & reset without affecting your own work.",
   },
@@ -176,13 +176,23 @@ export const helpContent = [
       "There are no accounts or cloud sync yet, so clearing browser site data may remove your work.",
   },
   {
+    id: "mock-classroom-preview",
+    title: "What is the Mock Classroom Preview?",
+    status: "available",
+    category: "workspace",
+    summary:
+      "It lets you review local sample classes and choose assignments to import as tasks.",
+    details:
+      "The assignments are local mock data, not real Google data. Google Classroom is still not connected.",
+  },
+  {
     id: "google-classroom",
     title: "Google Classroom",
     status: "comingSoon",
     category: "future",
     summary: "This is not connected yet.",
     details:
-      "Later, Student Hub may import classes, assignments, and due dates from Google Classroom.",
+      "The Mock Classroom Preview uses local sample data only. Later, Student Hub may import classes, assignments, and due dates from Google Classroom.",
   },
   {
     id: "ai-planning",

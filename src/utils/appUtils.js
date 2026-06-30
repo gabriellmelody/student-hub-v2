@@ -361,6 +361,7 @@ export function normalizeTask(task, fallbackSource = "manual") {
     classroomCourseId: task.classroomCourseId || null,
     classroomCourseName: task.classroomCourseName || null,
     importedAt: task.importedAt || null,
+    sourceUpdatedAt: task.sourceUpdatedAt || null,
     lastSyncedAt: task.lastSyncedAt || null,
   };
 }
@@ -431,7 +432,10 @@ export function getTaskSignalBadges(task) {
 
   if (task?.importance === "urgent") {
     badges.push({ label: "Urgent importance", tone: "urgent" });
-  } else if (task?.importance === "high") {
+  } else if (
+    task?.importance === "high" &&
+    task?.taskType !== "assessment"
+  ) {
     badges.push({ label: "High importance", tone: "high" });
   }
 
@@ -439,7 +443,7 @@ export function getTaskSignalBadges(task) {
 }
 
 function normalizeHistorySource(source) {
-  return ["manual", "demo", "classroom"].includes(source)
+  return ["manual", "demo", "classroom", "classroom-mock"].includes(source)
     ? source
     : "manual";
 }

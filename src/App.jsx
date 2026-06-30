@@ -42,6 +42,7 @@ import {
   removeTaskFromCompletedHistory,
   normalizeTask,
 } from "./utils/appUtils.js";
+import { createTaskFromMockAssignment } from "./utils/classroomMockUtils.js";
 
 function createEmptyTaskDraft() {
   return {
@@ -599,6 +600,59 @@ function App() {
     setNewTask(createEmptyTaskDraft());
 
     setShowAddTask(false);
+  }
+
+  function importMockClassroomAssignments(assignments) {
+    const requestedAssignments = Array.isArray(assignments) ? assignments : [];
+    const existingExternalIds = new Set(
+      tasks
+        .filter((task) => task.source === "classroom-mock")
+        .map((task) => task.externalId)
+        .filter(Boolean)
+    );
+    const uniqueAssignments = [];
+    const requestedExternalIds = new Set();
+
+    requestedAssignments.forEach((assignment) => {
+      if (
+        !assignment?.externalId ||
+        existingExternalIds.has(assignment.externalId) ||
+        requestedExternalIds.has(assignment.externalId)
+      ) {
+        return;
+      }
+
+      requestedExternalIds.add(assignment.externalId);
+      uniqueAssignments.push(assignment);
+    });
+
+    const importedAt = new Date().toISOString();
+    const importedTasks = uniqueAssignments.map((assignment) =>
+      createTaskFromMockAssignment(assignment, subjects, importedAt)
+    );
+
+    if (importedTasks.length > 0) {
+      setTasks((currentTasks) => {
+        const currentExternalIds = new Set(
+          currentTasks
+            .filter((task) => task.source === "classroom-mock")
+            .map((task) => task.externalId)
+            .filter(Boolean)
+        );
+        const tasksToAdd = importedTasks.filter(
+          (task) => !currentExternalIds.has(task.externalId)
+        );
+
+        return tasksToAdd.length > 0
+          ? [...currentTasks, ...tasksToAdd]
+          : currentTasks;
+      });
+    }
+
+    return {
+      importedCount: importedTasks.length,
+      skippedCount: requestedAssignments.length - importedTasks.length,
+    };
   }
 
   function generatePlan() {
@@ -1214,6 +1268,7 @@ function App() {
 
         {activePage === "settings" && (
           <SettingsPage
+            tasks={tasks}
             subjects={subjects}
             setSubjects={setSubjects}
             theme={theme}
@@ -1237,6 +1292,7 @@ function App() {
             removeDemoData={removeDemoData}
             hasDemoTasks={hasDemoTasks}
             hasDemoData={hasDemoData}
+            importMockClassroomAssignments={importMockClassroomAssignments}
           />
         )}
       </section>

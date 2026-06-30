@@ -141,7 +141,7 @@ function TasksPage({
             <p>
               {sortedCompletedTasks.length > 0
                 ? "Your current tasks are complete. Add another when you’re ready."
-                : "Add your first task or load demo data in Settings."}
+                : "Add your first task or load the Demo workspace in Settings."}
             </p>
           </div>
         )}

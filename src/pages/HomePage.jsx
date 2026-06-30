@@ -395,7 +395,7 @@ function HomePage({
           ) : (
             <div className="empty-plan">
               <h3>No tasks yet.</h3>
-              <p>Add your first task or load demo data in Settings.</p>
+              <p>Add your first task or load the Demo workspace in Settings.</p>
             </div>
           )}
 

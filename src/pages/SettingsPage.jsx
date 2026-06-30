@@ -11,8 +11,18 @@ import {
   helpContent,
   helpStatusLabels,
 } from "../data/helpContent.js";
+import { mockClassroomData } from "../data/mockClassroomData.js";
+import {
+  integrationCatalog,
+  integrationStatusLabels,
+} from "../data/integrationCatalog.js";
+import {
+  buildMockClassroomPreview,
+  formatMockClassroomDueDate,
+} from "../utils/classroomMockUtils.js";
 
 function SettingsPage({
+  tasks,
   subjects,
   setSubjects,
   theme,
@@ -36,6 +46,7 @@ function SettingsPage({
   removeDemoData,
   hasDemoTasks,
   hasDemoData,
+  importMockClassroomAssignments,
 }) {
   const [settingsView, setSettingsView] = useState("hub");
   const viewCopy = {
@@ -63,6 +74,11 @@ function SettingsPage({
       eyebrow: "Settings / Help",
       title: "Help / FAQ",
       description: "Quick answers for getting comfortable with Student Hub.",
+    },
+    integrations: {
+      eyebrow: "Settings / Integrations",
+      title: "Integrations",
+      description: "Manage future school connections and local previews.",
     },
   };
   const currentViewCopy = viewCopy[settingsView];
@@ -142,31 +158,34 @@ function SettingsPage({
             </span>
           </button>
 
-          {[
-            {
-              title: "Account",
-              description: "Profile and sign-in preferences",
-              status: "Planned later",
-            },
-            {
-              title: "Integrations",
-              description: "Connected services and data sources",
-              status: "Coming soon",
-            },
-          ].map(({ title, description, status }) => (
-            <button
-              key={title}
-              type="button"
-              className="settings-hub-card coming-soon"
-              disabled
-            >
-              <span>
-                <strong>{title}</strong>
-                <small>{description}</small>
+          <button
+            type="button"
+            className="settings-hub-card"
+            onClick={() => setSettingsView("integrations")}
+          >
+            <span>
+              <strong>Integrations</strong>
+              <small>Future school connections and local previews</small>
+            </span>
+            <span className="settings-hub-meta">
+              <span className="settings-preview-status">Preview</span>
+              <span className="settings-hub-arrow" aria-hidden="true">
+                →
               </span>
-              <span className="settings-coming-soon">{status}</span>
-            </button>
-          ))}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="settings-hub-card coming-soon"
+            disabled
+          >
+            <span>
+              <strong>Account</strong>
+              <small>Profile and sign-in preferences</small>
+            </span>
+            <span className="settings-coming-soon">Planned later</span>
+          </button>
         </div>
       ) : settingsView === "appearance" ? (
         <div className="panel appearance-panel">
@@ -363,9 +382,334 @@ function SettingsPage({
           hasDemoTasks={hasDemoTasks}
           hasDemoData={hasDemoData}
         />
+      ) : settingsView === "integrations" ? (
+        <IntegrationsSettings
+          tasks={tasks}
+          importMockClassroomAssignments={importMockClassroomAssignments}
+        />
       ) : (
         <HelpSettings />
       )}
+    </div>
+  );
+}
+
+function IntegrationsSettings({
+  tasks,
+  importMockClassroomAssignments,
+}) {
+  const [showMockPreview, setShowMockPreview] = useState(false);
+
+  return (
+    <div className="integrations-settings">
+      <section className="panel integration-control-panel">
+        <div className="integration-control-intro">
+          <div>
+            <p className="settings-group-label">Connections</p>
+            <h3>School tools in one place</h3>
+            <p>
+              Nothing is linked yet. These cards show what is planned without
+              connecting to an external service.
+            </p>
+          </div>
+          <span>Local workspace</span>
+        </div>
+
+        <div className="integration-card-grid">
+          {integrationCatalog.map((integration) => (
+            <IntegrationCard
+              integration={integration}
+              key={integration.id}
+              onPreview={() => setShowMockPreview(true)}
+            />
+          ))}
+        </div>
+      </section>
+
+      {showMockPreview && (
+        <MockClassroomPreview
+          tasks={tasks}
+          onImport={importMockClassroomAssignments}
+          onClose={() => setShowMockPreview(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function IntegrationCard({ integration, onPreview }) {
+  const isLinked = integration.status === "linked";
+  const canUsePrimaryAction = isLinked
+    ? integration.canUnlink
+    : integration.status === "not-linked" && integration.canLink;
+  const primaryActionLabel = isLinked
+    ? "Unlink"
+    : integration.status === "not-linked"
+      ? "Link"
+      : integrationStatusLabels[integration.status];
+
+  return (
+    <article className="integration-card">
+      <div className="integration-card-heading">
+        <span className="integration-provider-mark" aria-hidden="true">
+          {integration.id === "ai-planner" ? "AI" : "G"}
+        </span>
+        <div>
+          <h3>{integration.name}</h3>
+          <p>{integration.provider}</p>
+        </div>
+        <span
+          className={`integration-status integration-status-${integration.status}`}
+        >
+          {integrationStatusLabels[integration.status]}
+        </span>
+      </div>
+
+      <p className="integration-description">{integration.description}</p>
+
+      <div className="integration-card-actions">
+        {integration.previewAvailable && (
+          <button
+            type="button"
+            className="integration-preview-button"
+            onClick={onPreview}
+          >
+            View mock preview
+          </button>
+        )}
+        <button
+          type="button"
+          className={`integration-link-button ${
+            isLinked ? "unlink-action" : "link-action"
+          }`}
+          disabled={!canUsePrimaryAction}
+          aria-label={`${primaryActionLabel} ${integration.name}`}
+        >
+          {primaryActionLabel}
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function MockClassroomPreview({ tasks, onImport, onClose }) {
+  const [selectedAssignmentIds, setSelectedAssignmentIds] = useState(
+    () => new Set()
+  );
+  const [importMessage, setImportMessage] = useState("");
+  const previewCourses = buildMockClassroomPreview(mockClassroomData);
+  const previewAssignments = previewCourses.flatMap(
+    (course) => course.assignments
+  );
+  const assignmentById = new Map(
+    previewAssignments.map((assignment) => [assignment.externalId, assignment])
+  );
+  const importedAssignmentIds = new Set(
+    tasks
+      .filter((task) => task.source === "classroom-mock")
+      .map((task) => task.externalId)
+      .filter(Boolean)
+  );
+  const assignmentCount = previewCourses.reduce(
+    (total, course) => total + course.assignments.length,
+    0
+  );
+  const importedCount = previewAssignments.filter((assignment) =>
+    importedAssignmentIds.has(assignment.externalId)
+  ).length;
+
+  function toggleAssignment(externalId) {
+    if (importedAssignmentIds.has(externalId)) return;
+
+    setImportMessage("");
+    setSelectedAssignmentIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+
+      if (nextIds.has(externalId)) nextIds.delete(externalId);
+      else nextIds.add(externalId);
+
+      return nextIds;
+    });
+  }
+
+  function toggleCourseAssignments(course) {
+    const availableIds = course.assignments
+      .map((assignment) => assignment.externalId)
+      .filter((externalId) => !importedAssignmentIds.has(externalId));
+    const allSelected = availableIds.every((externalId) =>
+      selectedAssignmentIds.has(externalId)
+    );
+
+    setImportMessage("");
+    setSelectedAssignmentIds((currentIds) => {
+      const nextIds = new Set(currentIds);
+
+      availableIds.forEach((externalId) => {
+        if (allSelected) nextIds.delete(externalId);
+        else nextIds.add(externalId);
+      });
+
+      return nextIds;
+    });
+  }
+
+  function importSelectedAssignments() {
+    const assignmentsToImport = [...selectedAssignmentIds]
+      .map((externalId) => assignmentById.get(externalId))
+      .filter(Boolean);
+    const result = onImport(assignmentsToImport);
+
+    setSelectedAssignmentIds(new Set());
+    setImportMessage(
+      result.importedCount > 0
+        ? `${result.importedCount} mock assignment${
+            result.importedCount === 1 ? "" : "s"
+          } imported to your To-do list.`
+        : "Those assignments are already imported."
+    );
+  }
+
+  return (
+    <div className="classroom-preview-settings" aria-label="Mock Classroom Preview">
+      <section className="panel classroom-preview-panel">
+        <div className="classroom-preview-intro">
+          <div>
+            <p className="settings-group-label">Prototype 3 foundation</p>
+            <h3>Mock Classroom Preview</h3>
+            <p>
+              Google Classroom is not connected. Review local sample assignments
+              here, then choose which ones to import into your task list.
+            </p>
+          </div>
+          <div className="classroom-preview-intro-actions">
+            <span>Local sample data only</span>
+            <button type="button" onClick={onClose}>
+              Hide preview
+            </button>
+          </div>
+        </div>
+
+        <div className="classroom-preview-summary" aria-label="Preview summary">
+          <span>{previewCourses.length} mock classes</span>
+          <span>{assignmentCount} sample assignments</span>
+          <span>{importedCount} already imported</span>
+        </div>
+
+        <div className="classroom-course-list">
+          {previewCourses.map((course) => (
+            <section className="classroom-course" key={course.externalId}>
+              <header className="classroom-course-heading">
+                <div>
+                  <h3>{course.name}</h3>
+                  <p>
+                    {course.section || "Class"} · {course.assignments.length}{" "}
+                    assignments
+                  </p>
+                </div>
+                <div className="classroom-course-actions">
+                  <span className="classroom-mock-badge">Mock</span>
+                  <button
+                    type="button"
+                    onClick={() => toggleCourseAssignments(course)}
+                    disabled={course.assignments.every((assignment) =>
+                      importedAssignmentIds.has(assignment.externalId)
+                    )}
+                  >
+                    {course.assignments
+                      .filter(
+                        (assignment) =>
+                          !importedAssignmentIds.has(assignment.externalId)
+                      )
+                      .every((assignment) =>
+                        selectedAssignmentIds.has(assignment.externalId)
+                      )
+                      ? "Clear"
+                      : "Select all"}
+                  </button>
+                </div>
+              </header>
+
+              <div className="classroom-assignment-list">
+                {course.assignments.map((assignment) => (
+                  <article
+                    className={`classroom-assignment ${
+                      selectedAssignmentIds.has(assignment.externalId)
+                        ? "is-selected"
+                        : ""
+                    } ${
+                      importedAssignmentIds.has(assignment.externalId)
+                        ? "is-imported"
+                        : ""
+                    }`}
+                    key={assignment.externalId}
+                  >
+                    <label className="classroom-assignment-select">
+                      <input
+                        type="checkbox"
+                        checked={selectedAssignmentIds.has(
+                          assignment.externalId
+                        )}
+                        disabled={importedAssignmentIds.has(
+                          assignment.externalId
+                        )}
+                        onChange={() =>
+                          toggleAssignment(assignment.externalId)
+                        }
+                      />
+                      <span className="sr-only">
+                        Select {assignment.title}
+                      </span>
+                    </label>
+                    <div className="classroom-assignment-copy">
+                      <strong>{assignment.title}</strong>
+                      {assignment.description && <p>{assignment.description}</p>}
+                    </div>
+                    <div className="classroom-assignment-meta">
+                      <span>{formatMockClassroomDueDate(assignment.dueAt)}</span>
+                      <span className="classroom-source-badge">Mock</span>
+                      <span
+                        className={`classroom-import-status ${
+                          importedAssignmentIds.has(assignment.externalId)
+                            ? "is-imported"
+                            : selectedAssignmentIds.has(assignment.externalId)
+                              ? "is-selected"
+                              : ""
+                        }`}
+                      >
+                        {importedAssignmentIds.has(assignment.externalId)
+                          ? "Already imported"
+                          : selectedAssignmentIds.has(assignment.externalId)
+                            ? "Selected"
+                            : "Not imported"}
+                      </span>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+
+        <div className="classroom-preview-footer">
+          <div>
+            <strong>Local mock import</strong>
+            <p>No Google account or external data is used.</p>
+            {importMessage && (
+              <p className="classroom-import-message" aria-live="polite">
+                {importMessage}
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            className="primary-button classroom-import-button"
+            disabled={selectedAssignmentIds.size === 0}
+            onClick={importSelectedAssignments}
+          >
+            Import selected ({selectedAssignmentIds.size})
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -424,6 +768,14 @@ function HelpSettings() {
             );
           })}
         </div>
+
+        <div className="help-video-empty">
+          <div>
+            <strong>Video guides</strong>
+            <p>Short walkthroughs are not available yet.</p>
+          </div>
+          <span>Coming soon</span>
+        </div>
       </section>
     </div>
   );
@@ -447,7 +799,7 @@ function DataSettings({
       title: "Load demo workspace",
       description: hasDemoTasks
         ? "Demo tasks are already available in this workspace."
-        : "No demo data loaded. Add a few clearly marked sample tasks.",
+        : "The Demo workspace is not loaded. Add a few sample tasks.",
       confirmation:
         "Sample tasks will be added alongside your existing work. No current tasks or subjects will be changed.",
       confirmLabel: "Load demo",
