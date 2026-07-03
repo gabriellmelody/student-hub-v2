@@ -224,8 +224,9 @@
   }
 
   .classroom-preview-intro-actions {
-    align-items: flex-start;
-    flex-direction: column;
+    align-items: center;
+    flex-direction: row;
+    flex-wrap: wrap;
   }
 
   .integration-card {
@@ -234,7 +235,8 @@
 
   .classroom-assignment {
     grid-template-columns: auto minmax(0, 1fr);
-    gap: 6px;
+    align-items: start;
+    gap: 7px;
   }
 
   .classroom-assignment-meta {
@@ -246,6 +248,39 @@
 
   .classroom-course-heading {
     align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .classroom-subject-link {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .classroom-subject-link-status span {
+    white-space: normal;
+  }
+
+  .classroom-subject-link-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .classroom-subject-link-actions label {
+    flex: 1 1 180px;
+  }
+
+  .classroom-subject-link-actions select {
+    width: 100%;
+  }
+
+  .classroom-course-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .classroom-preview-footer .classroom-import-button {
+    align-self: stretch;
+    width: 100%;
   }
 
   .classroom-course-actions {

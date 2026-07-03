@@ -5,6 +5,8 @@ import {
   accentColorPresets,
   getContrastText,
   createSubjectDraft,
+  MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
+  normalizeSubjectName,
 } from "../utils/appUtils.js";
 import {
   helpCategories,
@@ -18,7 +20,11 @@ import {
 } from "../data/integrationCatalog.js";
 import {
   buildMockClassroomPreview,
+  createMockClassroomCourseLink,
+  createSubjectFromMockCourse,
+  findLinkedSubjectForMockCourse,
   formatMockClassroomDueDate,
+  loadMockClassroomCourseLinks,
 } from "../utils/classroomMockUtils.js";
 
 function SettingsPage({
@@ -385,6 +391,8 @@ function SettingsPage({
       ) : settingsView === "integrations" ? (
         <IntegrationsSettings
           tasks={tasks}
+          subjects={subjects}
+          setSubjects={setSubjects}
           importMockClassroomAssignments={importMockClassroomAssignments}
         />
       ) : (
@@ -396,6 +404,8 @@ function SettingsPage({
 
 function IntegrationsSettings({
   tasks,
+  subjects,
+  setSubjects,
   importMockClassroomAssignments,
 }) {
   const [showMockPreview, setShowMockPreview] = useState(false);
@@ -408,8 +418,7 @@ function IntegrationsSettings({
             <p className="settings-group-label">Connections</p>
             <h3>School tools in one place</h3>
             <p>
-              Nothing is linked yet. These cards show what is planned without
-              connecting to an external service.
+              Preview what is planned. No external services are connected yet.
             </p>
           </div>
           <span>Local workspace</span>
@@ -429,6 +438,8 @@ function IntegrationsSettings({
       {showMockPreview && (
         <MockClassroomPreview
           tasks={tasks}
+          subjects={subjects}
+          setSubjects={setSubjects}
           onImport={importMockClassroomAssignments}
           onClose={() => setShowMockPreview(false)}
         />
@@ -474,7 +485,7 @@ function IntegrationCard({ integration, onPreview }) {
             className="integration-preview-button"
             onClick={onPreview}
           >
-            View mock preview
+            Preview sample data
           </button>
         )}
         <button
@@ -492,12 +503,45 @@ function IntegrationCard({ integration, onPreview }) {
   );
 }
 
-function MockClassroomPreview({ tasks, onImport, onClose }) {
+function MockClassroomPreview({
+  tasks,
+  subjects,
+  setSubjects,
+  onImport,
+  onClose,
+}) {
+  const previewCourses = buildMockClassroomPreview(mockClassroomData);
   const [selectedAssignmentIds, setSelectedAssignmentIds] = useState(
     () => new Set()
   );
   const [importMessage, setImportMessage] = useState("");
-  const previewCourses = buildMockClassroomPreview(mockClassroomData);
+  const [courseSubjectLinks, setCourseSubjectLinks] = useState(() => {
+    const savedLinks = loadMockClassroomCourseLinks().filter((link) =>
+      subjects.some((subject) => subject.id === link.subjectId)
+    );
+    const initialLinks = [...savedLinks];
+
+    previewCourses.forEach((course) => {
+      if (
+        initialLinks.some(
+          (link) => link.classroomCourseId === course.externalId
+        )
+      ) {
+        return;
+      }
+
+      const exactSubject = subjects.find(
+        (subject) =>
+          normalizeSubjectName(subject.name) === normalizeSubjectName(course.name)
+      );
+
+      if (exactSubject) {
+        initialLinks.push(createMockClassroomCourseLink(course, exactSubject));
+      }
+    });
+
+    return initialLinks;
+  });
   const previewAssignments = previewCourses.flatMap(
     (course) => course.assignments
   );
@@ -517,6 +561,48 @@ function MockClassroomPreview({ tasks, onImport, onClose }) {
   const importedCount = previewAssignments.filter((assignment) =>
     importedAssignmentIds.has(assignment.externalId)
   ).length;
+
+  useEffect(() => {
+    localStorage.setItem(
+      MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
+      JSON.stringify(courseSubjectLinks)
+    );
+  }, [courseSubjectLinks]);
+
+  function updateCourseSubjectLink(course, subjectId) {
+    const subject = subjects.find((item) => item.id === subjectId);
+
+    setCourseSubjectLinks((currentLinks) => {
+      const otherLinks = currentLinks.filter(
+        (link) => link.classroomCourseId !== course.externalId
+      );
+
+      return subject
+        ? [...otherLinks, createMockClassroomCourseLink(course, subject)]
+        : otherLinks;
+    });
+    setImportMessage("");
+  }
+
+  function createAndLinkSubject(course) {
+    const existingSubject = subjects.find(
+      (subject) =>
+        normalizeSubjectName(subject.name) === normalizeSubjectName(course.name)
+    );
+    const subject = existingSubject || createSubjectFromMockCourse(course);
+
+    if (!existingSubject) {
+      setSubjects((currentSubjects) => [...currentSubjects, subject]);
+    }
+
+    setCourseSubjectLinks((currentLinks) => [
+      ...currentLinks.filter(
+        (link) => link.classroomCourseId !== course.externalId
+      ),
+      createMockClassroomCourseLink(course, subject),
+    ]);
+    setImportMessage(`${course.name} is linked to ${subject.name}.`);
+  }
 
   function toggleAssignment(externalId) {
     if (importedAssignmentIds.has(externalId)) return;
@@ -556,7 +642,22 @@ function MockClassroomPreview({ tasks, onImport, onClose }) {
   function importSelectedAssignments() {
     const assignmentsToImport = [...selectedAssignmentIds]
       .map((externalId) => assignmentById.get(externalId))
-      .filter(Boolean);
+      .filter(Boolean)
+      .map((assignment) => {
+        const course = previewCourses.find(
+          (item) => item.externalId === assignment.classroomCourseId
+        );
+        const linkedSubject = findLinkedSubjectForMockCourse(
+          course,
+          subjects,
+          courseSubjectLinks
+        );
+
+        return {
+          ...assignment,
+          linkedSubjectId: linkedSubject?.id || null,
+        };
+      });
     const result = onImport(assignmentsToImport);
 
     setSelectedAssignmentIds(new Set());
@@ -577,26 +678,34 @@ function MockClassroomPreview({ tasks, onImport, onClose }) {
             <p className="settings-group-label">Prototype 3 foundation</p>
             <h3>Mock Classroom Preview</h3>
             <p>
-              Google Classroom is not connected. Review local sample assignments
-              here, then choose which ones to import into your task list.
+              Google Classroom is not connected yet. Select assignments to
+              import as Student Hub tasks.
             </p>
           </div>
           <div className="classroom-preview-intro-actions">
             <span>Local sample data only</span>
-            <button type="button" onClick={onClose}>
-              Hide preview
+            <button type="button" onClick={onClose} aria-label="Close mock preview">
+              Close
             </button>
           </div>
         </div>
 
         <div className="classroom-preview-summary" aria-label="Preview summary">
-          <span>{previewCourses.length} mock classes</span>
-          <span>{assignmentCount} sample assignments</span>
-          <span>{importedCount} already imported</span>
+          <span><strong>{previewCourses.length}</strong> classes</span>
+          <span><strong>{assignmentCount}</strong> assignments</span>
+          <span><strong>{importedCount}</strong> already imported</span>
         </div>
 
-        <div className="classroom-course-list">
-          {previewCourses.map((course) => (
+        {previewCourses.length > 0 ? (
+          <div className="classroom-course-list">
+            {previewCourses.map((course) => {
+              const linkedSubject = findLinkedSubjectForMockCourse(
+                course,
+                subjects,
+                courseSubjectLinks
+              );
+
+              return (
             <section className="classroom-course" key={course.externalId}>
               <header className="classroom-course-heading">
                 <div>
@@ -629,8 +738,48 @@ function MockClassroomPreview({ tasks, onImport, onClose }) {
                 </div>
               </header>
 
-              <div className="classroom-assignment-list">
-                {course.assignments.map((assignment) => (
+              <div
+                className={`classroom-subject-link ${
+                  linkedSubject ? "is-linked" : ""
+                }`}
+              >
+                <div className="classroom-subject-link-status">
+                  <strong>
+                    {linkedSubject ? "Linked to subject" : "Not linked yet"}
+                  </strong>
+                  <span>{linkedSubject?.name || "Choose or create a subject."}</span>
+                </div>
+                <div className="classroom-subject-link-actions">
+                  <label>
+                    <span>Choose subject</span>
+                    <select
+                      value={linkedSubject?.id || ""}
+                      onChange={(event) =>
+                        updateCourseSubjectLink(course, event.target.value)
+                      }
+                    >
+                      <option value="">Not linked yet</option>
+                      {subjects.map((subject) => (
+                        <option value={subject.id} key={subject.id}>
+                          {subject.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {!linkedSubject && (
+                    <button
+                      type="button"
+                      onClick={() => createAndLinkSubject(course)}
+                    >
+                      Create subject
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {course.assignments.length > 0 ? (
+                <div className="classroom-assignment-list">
+                  {course.assignments.map((assignment) => (
                   <article
                     className={`classroom-assignment ${
                       selectedAssignmentIds.has(assignment.externalId)
@@ -646,6 +795,7 @@ function MockClassroomPreview({ tasks, onImport, onClose }) {
                     <label className="classroom-assignment-select">
                       <input
                         type="checkbox"
+                        aria-label={`Select ${assignment.title}`}
                         checked={selectedAssignmentIds.has(
                           assignment.externalId
                         )}
@@ -656,16 +806,16 @@ function MockClassroomPreview({ tasks, onImport, onClose }) {
                           toggleAssignment(assignment.externalId)
                         }
                       />
-                      <span className="sr-only">
-                        Select {assignment.title}
-                      </span>
+                      <span className="classroom-checkbox-mark" aria-hidden="true" />
                     </label>
                     <div className="classroom-assignment-copy">
                       <strong>{assignment.title}</strong>
                       {assignment.description && <p>{assignment.description}</p>}
                     </div>
                     <div className="classroom-assignment-meta">
-                      <span>{formatMockClassroomDueDate(assignment.dueAt)}</span>
+                      <time dateTime={assignment.dueAt}>
+                        Due {formatMockClassroomDueDate(assignment.dueAt)}
+                      </time>
                       <span className="classroom-source-badge">Mock</span>
                       <span
                         className={`classroom-import-status ${
@@ -684,16 +834,26 @@ function MockClassroomPreview({ tasks, onImport, onClose }) {
                       </span>
                     </div>
                   </article>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="classroom-course-empty">No sample assignments.</p>
+              )}
             </section>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="classroom-preview-empty">
+            <strong>No sample classes available</strong>
+            <p>Local preview data will appear here when available.</p>
+          </div>
+        )}
 
         <div className="classroom-preview-footer">
           <div>
-            <strong>Local mock import</strong>
-            <p>No Google account or external data is used.</p>
+            <strong>{selectedAssignmentIds.size} selected</strong>
+            <p>Imports create local tasks. No Google account is used.</p>
             {importMessage && (
               <p className="classroom-import-message" aria-live="polite">
                 {importMessage}

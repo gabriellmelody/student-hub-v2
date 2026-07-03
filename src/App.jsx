@@ -966,6 +966,7 @@ function App() {
 
   function resetSubjects() {
     localStorage.removeItem("student-hub-subjects");
+    localStorage.removeItem("student-hub-mock-classroom-course-links");
     setSubjects([]);
   }
 

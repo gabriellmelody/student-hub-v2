@@ -78,6 +78,8 @@ export const DEFAULT_ACCENT_COLOR = "#6366f1";
 export const DEFAULT_SUBJECT_COLOR = "#2563eb";
 export const WIDGET_CONFIG_STORAGE_KEY = "student-hub-widget-config";
 export const TODAY_PLAN_STORAGE_KEY = "student-hub-today-plan";
+export const MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY =
+  "student-hub-mock-classroom-course-links";
 export const COMPLETED_HISTORY_STORAGE_KEY =
   "student-hub-completed-task-history";
 export const MAX_COMPLETED_HISTORY_RECORDS = 500;
@@ -95,6 +97,7 @@ export const STUDENT_HUB_STORAGE_KEYS = [
   "student-hub-right-rail-widgets",
   WIDGET_CONFIG_STORAGE_KEY,
   TODAY_PLAN_STORAGE_KEY,
+  MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   "student-hub-hours",
   "student-hub-start-time",
 ];
@@ -682,15 +685,21 @@ export function loadStudentProfile() {
 }
 
 export function findSubjectProfile(subjects, subjectName) {
-  const normalizedName = subjectName?.trim().toLocaleLowerCase();
+  const normalizedName = normalizeSubjectName(subjectName);
 
   if (!normalizedName) return null;
 
   return (
     subjects.find(
-      (subject) => subject.name.trim().toLocaleLowerCase() === normalizedName
+      (subject) => normalizeSubjectName(subject.name) === normalizedName
     ) || null
   );
+}
+
+export function normalizeSubjectName(subjectName) {
+  return typeof subjectName === "string"
+    ? subjectName.trim().toLocaleLowerCase().replace(/\s+/g, " ")
+    : "";
 }
 
 export function getDaysLeft(dueDate) {

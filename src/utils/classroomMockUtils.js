@@ -1,4 +1,6 @@
 import {
+  DEFAULT_SUBJECT_COLOR,
+  MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   findSubjectProfile,
   formatDateKey,
   normalizeTask,
@@ -105,6 +107,83 @@ export function formatMockClassroomDueDate(dueAt) {
   }).format(date);
 }
 
+export function loadMockClassroomCourseLinks() {
+  const savedLinks = localStorage.getItem(
+    MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY
+  );
+
+  if (!savedLinks) return [];
+
+  try {
+    const parsedLinks = JSON.parse(savedLinks);
+
+    if (!Array.isArray(parsedLinks)) return [];
+
+    return parsedLinks
+      .filter(
+        (link) =>
+          link?.source === MOCK_CLASSROOM_SOURCE &&
+          safeString(link.classroomCourseId) &&
+          safeString(link.subjectId)
+      )
+      .map((link) => ({
+        classroomCourseId: safeString(link.classroomCourseId),
+        classroomCourseName: safeString(link.classroomCourseName),
+        subjectId: safeString(link.subjectId),
+        subjectName: safeString(link.subjectName),
+        source: MOCK_CLASSROOM_SOURCE,
+        linkedAt: safeDateTime(link.linkedAt) || new Date().toISOString(),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+export function findLinkedSubjectForMockCourse(course, subjects, links = []) {
+  const savedLink = links.find(
+    (link) => link.classroomCourseId === course?.externalId
+  );
+  const savedSubject = savedLink
+    ? subjects.find((subject) => subject.id === savedLink.subjectId)
+    : null;
+
+  return savedSubject || findSubjectProfile(subjects, course?.name);
+}
+
+export function createSubjectFromMockCourse(course) {
+  const courseName = safeString(course?.name, "Untitled class");
+  const courseLevel = safeString(course?.section);
+  const isIbLevel = courseLevel === "HL" || courseLevel === "SL";
+
+  return {
+    id: `subject-${MOCK_CLASSROOM_SOURCE}-${course?.externalId}`,
+    name: courseName,
+    courseSystem: isIbLevel ? "IB" : "Other",
+    level: ["HL", "SL", "AP", "Standard", "Higher"].includes(courseLevel)
+      ? courseLevel
+      : "Other",
+    currentGrade: "",
+    targetGrade: "",
+    colour: DEFAULT_SUBJECT_COLOR,
+    source: MOCK_CLASSROOM_SOURCE,
+    classroomCourseId: course?.externalId || null,
+    externalId: course?.externalId || null,
+    importedAt: new Date().toISOString(),
+    lastSyncedAt: null,
+  };
+}
+
+export function createMockClassroomCourseLink(course, subject) {
+  return {
+    classroomCourseId: course.externalId,
+    classroomCourseName: course.name,
+    subjectId: subject.id,
+    subjectName: subject.name,
+    source: MOCK_CLASSROOM_SOURCE,
+    linkedAt: new Date().toISOString(),
+  };
+}
+
 export function createTaskFromMockAssignment(
   assignment,
   subjects = [],
@@ -118,6 +197,9 @@ export function createTaskFromMockAssignment(
     subjects,
     normalizedAssignment.classroomCourseName
   );
+  const linkedSubject =
+    subjects.find((subject) => subject.id === assignment?.linkedSubjectId) ||
+    matchedSubject;
   const dueDate = normalizedAssignment.dueAt
     ? formatDateKey(new Date(normalizedAssignment.dueAt))
     : "";
@@ -126,8 +208,7 @@ export function createTaskFromMockAssignment(
     id: `${MOCK_CLASSROOM_SOURCE}-${normalizedAssignment.externalId}`,
     title: normalizedAssignment.title,
     description: normalizedAssignment.description,
-    subject:
-      matchedSubject?.name || normalizedAssignment.classroomCourseName || "School",
+    subject: linkedSubject?.name || "",
     dueDate,
     effort: 2,
     completed: false,
