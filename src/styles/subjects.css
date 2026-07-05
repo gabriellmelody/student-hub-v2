@@ -237,6 +237,34 @@
 .subject-task-list,
 .subject-history-list {
   display: grid;
+  align-content: start;
+  max-height: 220px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 5px;
+  scrollbar-color: var(--border-hover) transparent;
+  scrollbar-width: thin;
+}
+
+.subject-task-list::-webkit-scrollbar,
+.subject-history-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.subject-task-list::-webkit-scrollbar-track,
+.subject-history-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.subject-task-list::-webkit-scrollbar-thumb,
+.subject-history-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: var(--border-hover);
+}
+
+.subject-task-list::-webkit-scrollbar-thumb:hover,
+.subject-history-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
 
 .subject-task-row,
@@ -349,6 +377,11 @@
 }
 
 @media (max-width: 600px) {
+  .subject-task-list,
+  .subject-history-list {
+    max-height: 210px;
+  }
+
   .subjects-page-header,
   .subject-detail-header {
     align-items: stretch;
