@@ -54,6 +54,7 @@ function SettingsPage({
   hasDemoTasks,
   hasDemoData,
   importMockClassroomAssignments,
+  removeMockClassroomTasks,
 }) {
   const [settingsView, setSettingsView] = useState("hub");
   const viewCopy = {
@@ -395,6 +396,7 @@ function SettingsPage({
           subjects={subjects}
           setSubjects={setSubjects}
           importMockClassroomAssignments={importMockClassroomAssignments}
+          removeMockClassroomTasks={removeMockClassroomTasks}
         />
       ) : (
         <HelpSettings />
@@ -408,6 +410,7 @@ function IntegrationsSettings({
   subjects,
   setSubjects,
   importMockClassroomAssignments,
+  removeMockClassroomTasks,
 }) {
   const sampleCourses = buildMockClassroomPreview(mockClassroomData);
   const importedCount = tasks.filter(
@@ -507,6 +510,12 @@ function IntegrationsSettings({
       setSyncMessage(
         "Sample Classroom unlinked. Imported tasks remain in Student Hub."
       );
+    } else if (pendingAction === "remove") {
+      const removedCount = removeMockClassroomTasks();
+
+      setSyncMessage(
+        `${removedCount} sample task${removedCount === 1 ? "" : "s"} removed. Manual tasks were kept.`
+      );
     }
 
     setPendingAction(null);
@@ -537,6 +546,7 @@ function IntegrationsSettings({
               onLink={() => setPendingAction("link")}
               onSync={() => syncSampleClassroom()}
               onUnlink={() => setPendingAction("unlink")}
+              onRemove={() => setPendingAction("remove")}
               onPreview={() => setShowMockPreview(true)}
             />
           ))}
@@ -571,6 +581,7 @@ function IntegrationCard({
   onLink,
   onSync,
   onUnlink,
+  onRemove,
   onPreview,
 }) {
   const isClassroom = integration.id === "google-classroom";
@@ -665,6 +676,15 @@ function IntegrationCard({
             Preview sample data
           </button>
         )}
+        {isClassroom && importedCount > 0 && (
+          <button
+            type="button"
+            className="integration-link-button unlink-action"
+            onClick={onRemove}
+          >
+            Remove sample tasks
+          </button>
+        )}
         {!isClassroom && (
           <button type="button" className="integration-link-button" disabled>
             {integrationStatusLabels[status]}
@@ -677,12 +697,13 @@ function IntegrationCard({
 
 function ClassroomConnectionConfirmation({ action, onCancel, onConfirm }) {
   const isUnlink = action === "unlink";
+  const isRemove = action === "remove";
 
   return (
     <div className="data-confirmation-backdrop" role="presentation">
       <section
         className={`data-confirmation integration-confirmation ${
-          isUnlink ? "destructive" : ""
+          isUnlink || isRemove ? "destructive" : ""
         }`}
         role="dialog"
         aria-modal="true"
@@ -691,12 +712,18 @@ function ClassroomConnectionConfirmation({ action, onCancel, onConfirm }) {
         <div>
           <p className="settings-group-label">Sample Classroom</p>
           <h3 id="classroom-confirmation-title">
-            {isUnlink ? "Unlink sample Classroom?" : "Link sample Classroom?"}
+            {isRemove
+              ? "Remove imported sample tasks?"
+              : isUnlink
+                ? "Unlink sample Classroom?"
+                : "Link sample Classroom?"}
           </h3>
           <p>
-            {isUnlink
-              ? "This disconnects local sample mode. Imported sample tasks remain in Student Hub."
-              : "This uses local demo data only. No Google account will be connected."}
+            {isRemove
+              ? "Only tasks imported from Sample Classroom will be removed. Manual tasks will be kept."
+              : isUnlink
+                ? "This disconnects local sample mode. Imported sample tasks remain in Student Hub."
+                : "This uses local demo data only. No Google account will be connected."}
           </p>
         </div>
         <div className="data-confirmation-actions">
@@ -708,7 +735,7 @@ function ClassroomConnectionConfirmation({ action, onCancel, onConfirm }) {
             className="data-confirm-button"
             onClick={onConfirm}
           >
-            {isUnlink ? "Unlink" : "Link sample"}
+            {isRemove ? "Remove sample tasks" : isUnlink ? "Unlink" : "Link sample"}
           </button>
         </div>
       </section>

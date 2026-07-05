@@ -663,6 +663,31 @@ function App() {
     };
   }
 
+  function removeMockClassroomTasks() {
+    const sampleTaskIds = new Set(
+      tasks
+        .filter((task) => task.source === "classroom-mock")
+        .map((task) => task.id)
+    );
+
+    setTasks((currentTasks) =>
+      currentTasks.filter((task) => task.source !== "classroom-mock")
+    );
+    setCompletedTaskHistory((currentHistory) =>
+      currentHistory.filter((record) => record.source !== "classroom-mock")
+    );
+    setPlanBlocks((currentBlocks) =>
+      recalculatePlanTimes(
+        cleanPlanSequence(
+          currentBlocks.filter((block) => !sampleTaskIds.has(block.taskId))
+        ),
+        startTime
+      )
+    );
+
+    return sampleTaskIds.size;
+  }
+
   function generatePlan() {
     if (planBlocks.some((block) => block.locked === true)) {
       setActivePage("plan");
@@ -1306,6 +1331,7 @@ function App() {
             hasDemoTasks={hasDemoTasks}
             hasDemoData={hasDemoData}
             importMockClassroomAssignments={importMockClassroomAssignments}
+            removeMockClassroomTasks={removeMockClassroomTasks}
           />
         )}
       </section>
