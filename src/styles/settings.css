@@ -439,11 +439,65 @@
   color: var(--safe);
 }
 
+.integration-status-linked-sample {
+  border-color: var(--effort-low-border);
+  background: var(--effort-low-bg);
+  color: var(--safe);
+}
+
 .integration-description {
   margin-top: 11px !important;
   color: var(--text-secondary);
   font-size: 0.7rem;
   line-height: 1.48;
+}
+
+.integration-helper,
+.integration-card-message {
+  margin: 7px 0 0 !important;
+  font-size: 0.65rem;
+  line-height: 1.45;
+}
+
+.integration-helper {
+  color: var(--text-muted);
+}
+
+.integration-card-message {
+  color: var(--safe);
+  font-weight: 620;
+}
+
+.integration-sync-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 9px 0 0;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+
+.integration-sync-meta > div:first-child {
+  grid-column: 1 / -1;
+}
+
+.integration-sync-meta dt,
+.integration-sync-meta dd {
+  margin: 0;
+}
+
+.integration-sync-meta dt {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+}
+
+.integration-sync-meta dd {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 0.67rem;
+  font-weight: 650;
 }
 
 .integration-card-actions {
@@ -455,6 +509,23 @@
   padding-top: 13px;
 }
 
+.integration-card-actions button,
+.classroom-preview-intro-actions button,
+.classroom-course-actions button,
+.classroom-subject-link-actions button {
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  box-shadow: none;
+  font-family: inherit;
+  font-weight: 620;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease,
+    color 0.15s ease, opacity 0.15s ease;
+}
+
 .integration-card-actions button {
   min-width: 0;
   min-height: var(--density-small-button-height);
@@ -462,6 +533,17 @@
   font-size: 0.68rem;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.integration-sync-button {
+  border-color: var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.integration-sync-button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .integration-preview-button {
@@ -477,7 +559,7 @@
 }
 
 .integration-link-button {
-  margin-left: auto;
+  margin-left: 0;
 }
 
 .integration-link-button.link-action:not(:disabled) {
@@ -492,11 +574,23 @@
   color: var(--urgent);
 }
 
+.integration-link-button.unlink-action:not(:disabled):hover {
+  border-color: var(--urgent);
+  background: color-mix(in srgb, var(--urgent) 13%, transparent);
+}
+
 .integration-link-button:disabled {
   border-color: var(--border-soft);
   background: var(--surface-subtle);
   color: var(--text-muted);
   opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.integration-confirmation:not(.destructive) .data-confirm-button {
+  border-color: var(--effort-low-border);
+  background: var(--effort-low-bg);
+  color: var(--safe);
 }
 
 .classroom-preview-settings {
@@ -561,11 +655,16 @@
 .classroom-preview-intro-actions button {
   min-height: var(--density-small-button-height);
   padding: var(--density-small-button-padding);
-  border-color: var(--border-strong);
   background: var(--surface-subtle);
   color: var(--text-secondary);
   font-size: 0.68rem;
   white-space: nowrap;
+}
+
+.classroom-preview-intro-actions button:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .classroom-preview-summary {
@@ -776,6 +875,10 @@
   background: var(--surface-subtle);
   transition: border-color 150ms ease, background 150ms ease,
     box-shadow 150ms ease;
+}
+
+.classroom-assignment-readonly {
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .classroom-assignment.is-selected {

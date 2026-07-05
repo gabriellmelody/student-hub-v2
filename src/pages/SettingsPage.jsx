@@ -6,6 +6,7 @@ import {
   getContrastText,
   createSubjectDraft,
   MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
+  MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY,
   normalizeSubjectName,
 } from "../utils/appUtils.js";
 import {
@@ -408,7 +409,108 @@ function IntegrationsSettings({
   setSubjects,
   importMockClassroomAssignments,
 }) {
+  const sampleCourses = buildMockClassroomPreview(mockClassroomData);
+  const importedCount = tasks.filter(
+    (task) => task.source === "classroom-mock"
+  ).length;
   const [showMockPreview, setShowMockPreview] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null);
+  const [syncMessage, setSyncMessage] = useState("");
+  const [classroomConnection, setClassroomConnection] = useState(() => {
+    const fallbackState = {
+      linked: false,
+      mode: "sample",
+      linkedAt: null,
+      lastSyncedAt: null,
+      importedCount,
+      linkedCourseCount: 0,
+    };
+    const savedState = localStorage.getItem(
+      MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY
+    );
+
+    if (!savedState) return fallbackState;
+
+    try {
+      const parsedState = JSON.parse(savedState);
+
+      return {
+        ...fallbackState,
+        linked: parsedState?.linked === true,
+        linkedAt: parsedState?.linkedAt || null,
+        lastSyncedAt: parsedState?.lastSyncedAt || null,
+        importedCount,
+        linkedCourseCount: Number.isFinite(parsedState?.linkedCourseCount)
+          ? parsedState.linkedCourseCount
+          : 0,
+      };
+    } catch {
+      return fallbackState;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(
+      MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY,
+      JSON.stringify({ ...classroomConnection, importedCount })
+    );
+  }, [classroomConnection, importedCount]);
+
+  function syncSampleClassroom({ link = false } = {}) {
+    const courseLinks = loadMockClassroomCourseLinks();
+    const assignments = sampleCourses.flatMap((course) => {
+      const linkedSubject = findLinkedSubjectForMockCourse(
+        course,
+        subjects,
+        courseLinks
+      );
+
+      return course.assignments.map((assignment) => ({
+        ...assignment,
+        linkedSubjectId: linkedSubject?.id || null,
+      }));
+    });
+    const result = importMockClassroomAssignments(assignments);
+    const syncedAt = new Date().toISOString();
+    const linkedCourseCount = sampleCourses.filter((course) =>
+      findLinkedSubjectForMockCourse(course, subjects, courseLinks)
+    ).length;
+
+    setClassroomConnection((currentConnection) => ({
+      ...currentConnection,
+      linked: link ? true : currentConnection.linked,
+      linkedAt: link
+        ? currentConnection.linkedAt || syncedAt
+        : currentConnection.linkedAt,
+      lastSyncedAt: syncedAt,
+      importedCount: importedCount + result.importedCount,
+      linkedCourseCount,
+    }));
+    setSyncMessage(
+      result.importedCount > 0
+        ? `${result.importedCount} sample assignment${
+            result.importedCount === 1 ? "" : "s"
+          } synced.`
+        : "Sample Classroom is up to date."
+    );
+  }
+
+  function confirmAction() {
+    if (pendingAction === "link") {
+      syncSampleClassroom({ link: true });
+    } else if (pendingAction === "unlink") {
+      setClassroomConnection((currentConnection) => ({
+        ...currentConnection,
+        linked: false,
+        linkedAt: null,
+      }));
+      setSyncMessage(
+        "Sample Classroom unlinked. Imported tasks remain in Student Hub."
+      );
+    }
+
+    setPendingAction(null);
+  }
 
   return (
     <div className="integrations-settings">
@@ -429,6 +531,12 @@ function IntegrationsSettings({
             <IntegrationCard
               integration={integration}
               key={integration.id}
+              classroomConnection={classroomConnection}
+              importedCount={importedCount}
+              syncMessage={syncMessage}
+              onLink={() => setPendingAction("link")}
+              onSync={() => syncSampleClassroom()}
+              onUnlink={() => setPendingAction("unlink")}
               onPreview={() => setShowMockPreview(true)}
             />
           ))}
@@ -440,24 +548,38 @@ function IntegrationsSettings({
           tasks={tasks}
           subjects={subjects}
           setSubjects={setSubjects}
-          onImport={importMockClassroomAssignments}
           onClose={() => setShowMockPreview(false)}
+        />
+      )}
+
+      {pendingAction && (
+        <ClassroomConnectionConfirmation
+          action={pendingAction}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={confirmAction}
         />
       )}
     </div>
   );
 }
 
-function IntegrationCard({ integration, onPreview }) {
-  const isLinked = integration.status === "linked";
-  const canUsePrimaryAction = isLinked
-    ? integration.canUnlink
-    : integration.status === "not-linked" && integration.canLink;
-  const primaryActionLabel = isLinked
-    ? "Unlink"
-    : integration.status === "not-linked"
-      ? "Link"
-      : integrationStatusLabels[integration.status];
+function IntegrationCard({
+  integration,
+  classroomConnection,
+  importedCount,
+  syncMessage,
+  onLink,
+  onSync,
+  onUnlink,
+  onPreview,
+}) {
+  const isClassroom = integration.id === "google-classroom";
+  const isLinkedSample = isClassroom && classroomConnection.linked;
+  const status = isClassroom
+    ? isLinkedSample
+      ? "linked-sample"
+      : "not-linked"
+    : integration.status;
 
   return (
     <article className="integration-card">
@@ -470,15 +592,70 @@ function IntegrationCard({ integration, onPreview }) {
           <p>{integration.provider}</p>
         </div>
         <span
-          className={`integration-status integration-status-${integration.status}`}
+          className={`integration-status integration-status-${status}`}
         >
-          {integrationStatusLabels[integration.status]}
+          {integrationStatusLabels[status]}
         </span>
       </div>
 
       <p className="integration-description">{integration.description}</p>
+      {isClassroom && (
+        <p className="integration-helper">
+          {isLinkedSample
+            ? "Connected to Sample Classroom. Local demo connection; no Google account connected."
+            : "Sample Classroom uses local data only. Real Google Classroom comes later."}
+        </p>
+      )}
+      {isLinkedSample && (
+        <dl className="integration-sync-meta" aria-label="Sample sync status">
+          <div>
+            <dt>Last synced</dt>
+            <dd>{formatConnectionTime(classroomConnection.lastSyncedAt)}</dd>
+          </div>
+          <div>
+            <dt>Assignments</dt>
+            <dd>{importedCount}</dd>
+          </div>
+          <div>
+            <dt>Linked courses</dt>
+            <dd>{classroomConnection.linkedCourseCount || 0}</dd>
+          </div>
+        </dl>
+      )}
+      {isClassroom && syncMessage && (
+        <p className="integration-card-message" aria-live="polite">
+          {syncMessage}
+        </p>
+      )}
 
       <div className="integration-card-actions">
+        {isClassroom && !isLinkedSample && (
+          <button
+            type="button"
+            className="integration-link-button link-action"
+            onClick={onLink}
+          >
+            Link sample
+          </button>
+        )}
+        {isLinkedSample && (
+          <>
+            <button
+              type="button"
+              className="integration-sync-button"
+              onClick={onSync}
+            >
+              Sync now
+            </button>
+            <button
+              type="button"
+              className="integration-link-button unlink-action"
+              onClick={onUnlink}
+            >
+              Unlink sample
+            </button>
+          </>
+        )}
         {integration.previewAvailable && (
           <button
             type="button"
@@ -488,33 +665,79 @@ function IntegrationCard({ integration, onPreview }) {
             Preview sample data
           </button>
         )}
-        <button
-          type="button"
-          className={`integration-link-button ${
-            isLinked ? "unlink-action" : "link-action"
-          }`}
-          disabled={!canUsePrimaryAction}
-          aria-label={`${primaryActionLabel} ${integration.name}`}
-        >
-          {primaryActionLabel}
-        </button>
+        {!isClassroom && (
+          <button type="button" className="integration-link-button" disabled>
+            {integrationStatusLabels[status]}
+          </button>
+        )}
       </div>
     </article>
   );
+}
+
+function ClassroomConnectionConfirmation({ action, onCancel, onConfirm }) {
+  const isUnlink = action === "unlink";
+
+  return (
+    <div className="data-confirmation-backdrop" role="presentation">
+      <section
+        className={`data-confirmation integration-confirmation ${
+          isUnlink ? "destructive" : ""
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="classroom-confirmation-title"
+      >
+        <div>
+          <p className="settings-group-label">Sample Classroom</p>
+          <h3 id="classroom-confirmation-title">
+            {isUnlink ? "Unlink sample Classroom?" : "Link sample Classroom?"}
+          </h3>
+          <p>
+            {isUnlink
+              ? "This disconnects local sample mode. Imported sample tasks remain in Student Hub."
+              : "This uses local demo data only. No Google account will be connected."}
+          </p>
+        </div>
+        <div className="data-confirmation-actions">
+          <button type="button" className="data-cancel-button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="data-confirm-button"
+            onClick={onConfirm}
+          >
+            {isUnlink ? "Unlink" : "Link sample"}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function formatConnectionTime(value) {
+  if (!value) return "Not synced yet";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not synced yet";
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function MockClassroomPreview({
   tasks,
   subjects,
   setSubjects,
-  onImport,
   onClose,
 }) {
   const previewCourses = buildMockClassroomPreview(mockClassroomData);
-  const [selectedAssignmentIds, setSelectedAssignmentIds] = useState(
-    () => new Set()
-  );
-  const [importMessage, setImportMessage] = useState("");
+  const [previewMessage, setPreviewMessage] = useState("");
   const [courseSubjectLinks, setCourseSubjectLinks] = useState(() => {
     const savedLinks = loadMockClassroomCourseLinks().filter((link) =>
       subjects.some((subject) => subject.id === link.subjectId)
@@ -544,9 +767,6 @@ function MockClassroomPreview({
   });
   const previewAssignments = previewCourses.flatMap(
     (course) => course.assignments
-  );
-  const assignmentById = new Map(
-    previewAssignments.map((assignment) => [assignment.externalId, assignment])
   );
   const importedAssignmentIds = new Set(
     tasks
@@ -581,7 +801,7 @@ function MockClassroomPreview({
         ? [...otherLinks, createMockClassroomCourseLink(course, subject)]
         : otherLinks;
     });
-    setImportMessage("");
+    setPreviewMessage("");
   }
 
   function createAndLinkSubject(course) {
@@ -601,73 +821,7 @@ function MockClassroomPreview({
       ),
       createMockClassroomCourseLink(course, subject),
     ]);
-    setImportMessage(`${course.name} is linked to ${subject.name}.`);
-  }
-
-  function toggleAssignment(externalId) {
-    if (importedAssignmentIds.has(externalId)) return;
-
-    setImportMessage("");
-    setSelectedAssignmentIds((currentIds) => {
-      const nextIds = new Set(currentIds);
-
-      if (nextIds.has(externalId)) nextIds.delete(externalId);
-      else nextIds.add(externalId);
-
-      return nextIds;
-    });
-  }
-
-  function toggleCourseAssignments(course) {
-    const availableIds = course.assignments
-      .map((assignment) => assignment.externalId)
-      .filter((externalId) => !importedAssignmentIds.has(externalId));
-    const allSelected = availableIds.every((externalId) =>
-      selectedAssignmentIds.has(externalId)
-    );
-
-    setImportMessage("");
-    setSelectedAssignmentIds((currentIds) => {
-      const nextIds = new Set(currentIds);
-
-      availableIds.forEach((externalId) => {
-        if (allSelected) nextIds.delete(externalId);
-        else nextIds.add(externalId);
-      });
-
-      return nextIds;
-    });
-  }
-
-  function importSelectedAssignments() {
-    const assignmentsToImport = [...selectedAssignmentIds]
-      .map((externalId) => assignmentById.get(externalId))
-      .filter(Boolean)
-      .map((assignment) => {
-        const course = previewCourses.find(
-          (item) => item.externalId === assignment.classroomCourseId
-        );
-        const linkedSubject = findLinkedSubjectForMockCourse(
-          course,
-          subjects,
-          courseSubjectLinks
-        );
-
-        return {
-          ...assignment,
-          linkedSubjectId: linkedSubject?.id || null,
-        };
-      });
-    const result = onImport(assignmentsToImport);
-
-    setSelectedAssignmentIds(new Set());
-    setImportMessage(
-      result.importedCount > 0
-        ? `${result.importedCount} mock assignment${
-            result.importedCount === 1 ? "" : "s"
-          } imported to your To-do list.`
-        : "Those assignments are already imported."
-    );
+    setPreviewMessage(`${course.name} is linked to ${subject.name}.`);
   }
 
   return (
@@ -678,8 +832,8 @@ function MockClassroomPreview({
             <p className="settings-group-label">Prototype 3 foundation</p>
             <h3>Mock Classroom Preview</h3>
             <p>
-              Google Classroom is not connected yet. Select assignments to
-              import as Student Hub tasks.
+              Review the local sample classes and subject mappings. No Google
+              account is connected.
             </p>
           </div>
           <div className="classroom-preview-intro-actions">
@@ -717,24 +871,6 @@ function MockClassroomPreview({
                 </div>
                 <div className="classroom-course-actions">
                   <span className="classroom-mock-badge">Mock</span>
-                  <button
-                    type="button"
-                    onClick={() => toggleCourseAssignments(course)}
-                    disabled={course.assignments.every((assignment) =>
-                      importedAssignmentIds.has(assignment.externalId)
-                    )}
-                  >
-                    {course.assignments
-                      .filter(
-                        (assignment) =>
-                          !importedAssignmentIds.has(assignment.externalId)
-                      )
-                      .every((assignment) =>
-                        selectedAssignmentIds.has(assignment.externalId)
-                      )
-                      ? "Clear"
-                      : "Select all"}
-                  </button>
                 </div>
               </header>
 
@@ -781,33 +917,13 @@ function MockClassroomPreview({
                 <div className="classroom-assignment-list">
                   {course.assignments.map((assignment) => (
                   <article
-                    className={`classroom-assignment ${
-                      selectedAssignmentIds.has(assignment.externalId)
-                        ? "is-selected"
-                        : ""
-                    } ${
+                    className={`classroom-assignment classroom-assignment-readonly ${
                       importedAssignmentIds.has(assignment.externalId)
                         ? "is-imported"
                         : ""
                     }`}
                     key={assignment.externalId}
                   >
-                    <label className="classroom-assignment-select">
-                      <input
-                        type="checkbox"
-                        aria-label={`Select ${assignment.title}`}
-                        checked={selectedAssignmentIds.has(
-                          assignment.externalId
-                        )}
-                        disabled={importedAssignmentIds.has(
-                          assignment.externalId
-                        )}
-                        onChange={() =>
-                          toggleAssignment(assignment.externalId)
-                        }
-                      />
-                      <span className="classroom-checkbox-mark" aria-hidden="true" />
-                    </label>
                     <div className="classroom-assignment-copy">
                       <strong>{assignment.title}</strong>
                       {assignment.description && <p>{assignment.description}</p>}
@@ -821,16 +937,12 @@ function MockClassroomPreview({
                         className={`classroom-import-status ${
                           importedAssignmentIds.has(assignment.externalId)
                             ? "is-imported"
-                            : selectedAssignmentIds.has(assignment.externalId)
-                              ? "is-selected"
-                              : ""
+                            : ""
                         }`}
                       >
                         {importedAssignmentIds.has(assignment.externalId)
-                          ? "Already imported"
-                          : selectedAssignmentIds.has(assignment.externalId)
-                            ? "Selected"
-                            : "Not imported"}
+                          ? "Already synced"
+                          : "Ready to sync"}
                       </span>
                     </div>
                   </article>
@@ -852,22 +964,14 @@ function MockClassroomPreview({
 
         <div className="classroom-preview-footer">
           <div>
-            <strong>{selectedAssignmentIds.size} selected</strong>
-            <p>Imports create local tasks. No Google account is used.</p>
-            {importMessage && (
+            <strong>Preview only</strong>
+            <p>Use Sync now on the Classroom card to import sample tasks.</p>
+            {previewMessage && (
               <p className="classroom-import-message" aria-live="polite">
-                {importMessage}
+                {previewMessage}
               </p>
             )}
           </div>
-          <button
-            type="button"
-            className="primary-button classroom-import-button"
-            disabled={selectedAssignmentIds.size === 0}
-            onClick={importSelectedAssignments}
-          >
-            Import selected ({selectedAssignmentIds.size})
-          </button>
         </div>
       </section>
     </div>

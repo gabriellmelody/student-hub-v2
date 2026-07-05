@@ -1,6 +1,7 @@
 export const integrationStatusLabels = {
   "not-linked": "Not linked",
   linked: "Linked",
+  "linked-sample": "Linked · Sample",
   "coming-soon": "Coming soon",
   "planned-later": "Planned later",
 };
@@ -12,10 +13,10 @@ export const integrationCatalog = [
     provider: "Google",
     description:
       "Bring school classes, assignments, and due dates into Student Hub.",
-    status: "coming-soon",
-    enabled: false,
-    canLink: false,
-    canUnlink: false,
+    status: "not-linked",
+    enabled: true,
+    canLink: true,
+    canUnlink: true,
     source: "mock",
     previewAvailable: true,
   },
@@ -46,4 +47,3 @@ export const integrationCatalog = [
     previewAvailable: false,
   },
 ];
-

@@ -290,6 +290,14 @@
     grid-column: 1;
   }
 
+  .classroom-assignment-readonly {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .classroom-assignment-readonly .classroom-assignment-meta {
+    grid-column: 1;
+  }
+
   .classroom-course-heading {
     align-items: flex-start;
     flex-wrap: wrap;

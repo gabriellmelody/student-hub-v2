@@ -181,9 +181,9 @@ export const helpContent = [
     status: "available",
     category: "workspace",
     summary:
-      "It lets you review local sample classes and choose assignments to import as tasks.",
+      "Sample mode can sync local mock assignments into Student Hub tasks.",
     details:
-      "The assignments are local mock data, not real Google data. Google Classroom is still not connected.",
+      "The preview uses local sample data only. No Google account is connected.",
   },
   {
     id: "google-classroom",
