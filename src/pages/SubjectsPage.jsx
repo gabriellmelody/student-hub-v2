@@ -1,4 +1,5 @@
 import { useState } from "react";
+import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
 import {
   getDaysLeft,
   getEffortLabel,
@@ -237,16 +238,19 @@ function SubjectsPage({
                               <small>{task.subject || "Unassigned"}</small>
                             )}
                             <strong>{task.title}</strong>
-                            {getTaskSignalBadges(task)
-                              .slice(0, 1)
-                              .map((badge) => (
-                                <span
-                                  className={`task-signal-badge task-signal-${badge.tone}`}
-                                  key={`${badge.tone}-${badge.label}`}
-                                >
-                                  {badge.label}
-                                </span>
-                              ))}
+                            <span className="task-signal-badges">
+                              <TaskSourceBadge task={task} />
+                              {getTaskSignalBadges(task)
+                                .slice(0, 1)
+                                .map((badge) => (
+                                  <span
+                                    className={`task-signal-badge task-signal-${badge.tone}`}
+                                    key={`${badge.tone}-${badge.label}`}
+                                  >
+                                    {badge.label}
+                                  </span>
+                                ))}
+                            </span>
                           </span>
                           <span>
                             <small>{getEffortLabel(task.effort)} effort</small>
@@ -291,16 +295,19 @@ function SubjectsPage({
                             <small>{record.subject || "Unassigned"}</small>
                           )}
                           <strong>{record.title}</strong>
-                          {getTaskSignalBadges(record)
-                            .slice(0, 1)
-                            .map((badge) => (
-                              <span
-                                className={`task-signal-badge task-signal-${badge.tone}`}
-                                key={`${badge.tone}-${badge.label}`}
-                              >
-                                {badge.label}
-                              </span>
-                            ))}
+                          <span className="task-signal-badges">
+                            <TaskSourceBadge task={record} />
+                            {getTaskSignalBadges(record)
+                              .slice(0, 1)
+                              .map((badge) => (
+                                <span
+                                  className={`task-signal-badge task-signal-${badge.tone}`}
+                                  key={`${badge.tone}-${badge.label}`}
+                                >
+                                  {badge.label}
+                                </span>
+                              ))}
+                          </span>
                         </span>
                         <time dateTime={new Date(record.completedAt).toISOString()}>
                           {formatCompletedDate(record.completedAt)}

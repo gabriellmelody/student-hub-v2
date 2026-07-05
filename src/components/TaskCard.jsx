@@ -1,6 +1,7 @@
 import { useState } from "react";
 import SubjectField from "./SubjectField.jsx";
 import TaskClassificationFields from "./TaskClassificationFields.jsx";
+import TaskSourceBadge from "./TaskSourceBadge.jsx";
 import {
   findSubjectProfile,
   getDaysLeft,
@@ -170,6 +171,7 @@ function TaskCard({
             <span className={`effort-pill ${effortClass}`}>
               {effortLabel} · {task.effort}/5
             </span>
+            <TaskSourceBadge task={task} />
             {signalBadges.map((badge) => (
               <span
                 className={`task-signal-badge task-signal-${badge.tone}`}

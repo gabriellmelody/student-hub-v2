@@ -1,6 +1,7 @@
 import { useState } from "react";
 import SubjectField from "../components/SubjectField.jsx";
 import TaskClassificationFields from "../components/TaskClassificationFields.jsx";
+import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
 import {
   getDaysLeft,
   formatDateKey,
@@ -330,6 +331,10 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               {selectedEvents.map((event) => {
                 const daysLeft = getDaysLeft(event.date);
                 const signalBadges = getTaskSignalBadges(event);
+                const hasClassroomSource = [
+                  "classroom",
+                  "classroom-mock",
+                ].includes(event.taskSource);
 
                 return (
                   <button
@@ -349,8 +354,9 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                     <span>
                       <small>{event.subject}</small>
                       <strong>{event.title}</strong>
-                      {signalBadges.length > 0 && (
+                      {(signalBadges.length > 0 || hasClassroomSource) && (
                         <span className="task-signal-badges">
+                          <TaskSourceBadge task={event} />
                           {signalBadges.map((badge) => (
                             <span
                               className={`task-signal-badge task-signal-${badge.tone}`}

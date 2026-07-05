@@ -330,6 +330,13 @@
   white-space: nowrap;
 }
 
+.task-source-badge {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
 .task-signal-assessment {
   border-color: var(--accent-border);
   background: var(--accent-tint);
