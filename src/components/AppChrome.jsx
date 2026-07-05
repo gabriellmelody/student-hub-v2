@@ -17,6 +17,189 @@ function NavButton({ label, icon, active, onClick }) {
   );
 }
 
+function AccountMenu({
+  collapsed,
+  active,
+  openSettings,
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef(null);
+  const menuPanelRef = useRef(null);
+  const accountButtonRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function closeMenu(event) {
+      if (event.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+
+      if (
+        event.type === "pointerdown" &&
+        !menuRef.current?.contains(event.target)
+      ) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeMenu);
+    document.addEventListener("keydown", closeMenu);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeMenu);
+      document.removeEventListener("keydown", closeMenu);
+    };
+  }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+
+    function positionMenu() {
+      const accountButton = accountButtonRef.current;
+      const menuPanel = menuPanelRef.current;
+
+      if (!accountButton || !menuPanel) return;
+
+      const viewportPadding = 10;
+      const menuGap = 8;
+      const buttonRect = accountButton.getBoundingClientRect();
+      const menuWidth = Math.min(224, window.innerWidth - viewportPadding * 2);
+      const maxHeight = Math.max(100, window.innerHeight - viewportPadding * 2);
+
+      menuPanel.style.width = `${menuWidth}px`;
+      menuPanel.style.maxHeight = `${maxHeight}px`;
+
+      const menuHeight = Math.min(menuPanel.scrollHeight, maxHeight);
+      const spaceAbove = buttonRect.top - viewportPadding;
+      const spaceBelow = window.innerHeight - buttonRect.bottom - viewportPadding;
+      const placeAbove = spaceAbove >= menuHeight || spaceAbove > spaceBelow;
+      const proposedTop = placeAbove
+        ? buttonRect.top - menuHeight - menuGap
+        : buttonRect.bottom + menuGap;
+      const top = Math.min(
+        Math.max(viewportPadding, proposedTop),
+        window.innerHeight - menuHeight - viewportPadding
+      );
+      const left = Math.min(
+        Math.max(viewportPadding, buttonRect.left),
+        window.innerWidth - menuWidth - viewportPadding
+      );
+
+      menuPanel.style.top = `${top}px`;
+      menuPanel.style.left = `${left}px`;
+    }
+
+    positionMenu();
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+
+    return () => {
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+    };
+  }, [collapsed, open]);
+
+  function chooseItem(action) {
+    setOpen(false);
+    action();
+  }
+
+  return (
+    <div
+      className={`sidebar-account ${open ? "is-open" : ""}`}
+      ref={menuRef}
+    >
+      {open && (
+        <div
+          className="sidebar-account-menu"
+          role="menu"
+          ref={menuPanelRef}
+        >
+          <div className="sidebar-account-menu-heading">
+            <span className="sidebar-account-menu-avatar" aria-hidden="true">
+              S
+            </span>
+            <span className="sidebar-account-menu-copy">
+              <strong>Local workspace</strong>
+              <small>Browser saved</small>
+            </span>
+            <span className="sidebar-account-menu-indicator" aria-hidden="true">
+              ···
+            </span>
+          </div>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => chooseItem(openSettings)}
+          >
+            <span aria-hidden="true">◐</span>
+            <span>Personalisation</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => chooseItem(openSettings)}
+          >
+            <span aria-hidden="true">⚙</span>
+            <span>Settings</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => chooseItem(openSettings)}
+          >
+            <span aria-hidden="true">⇄</span>
+            <span>Integrations</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => chooseItem(openSettings)}
+          >
+            <span aria-hidden="true">?</span>
+            <span>Help / FAQ</span>
+          </button>
+          <div className="sidebar-account-menu-divider" />
+          <button
+            type="button"
+            role="menuitem"
+            className="sidebar-account-menu-disabled"
+            disabled
+            title="Log out unavailable until accounts are added"
+          >
+            <span aria-hidden="true">↪</span>
+            <span>Log out</span>
+            <small>Accounts coming later</small>
+          </button>
+        </div>
+      )}
+
+      <button
+        type="button"
+        ref={accountButtonRef}
+        className={`sidebar-account-button ${active ? "active" : ""}`}
+        aria-label={collapsed ? "Open local workspace menu" : undefined}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((currentOpen) => !currentOpen)}
+      >
+        <span className="sidebar-account-avatar" aria-hidden="true">
+          S
+        </span>
+        <span className="sidebar-account-copy">
+          <strong>Local workspace</strong>
+          <small>Browser saved</small>
+        </span>
+        <span className="sidebar-account-chevron" aria-hidden="true">
+          {open ? "⌄" : "⌃"}
+        </span>
+      </button>
+    </div>
+  );
+}
+
 function RightRail({
   tasks,
   planBlocks,
@@ -630,4 +813,4 @@ function RightRail({
   );
 }
 
-export { NavButton, RightRail };
+export { AccountMenu, NavButton, RightRail };

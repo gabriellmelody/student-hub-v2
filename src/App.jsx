@@ -1,6 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./App.css";
-import { NavButton, RightRail } from "./components/AppChrome.jsx";
+import {
+  AccountMenu,
+  NavButton,
+  RightRail,
+} from "./components/AppChrome.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import HomePage from "./pages/HomePage.jsx";
 import OnboardingFlow from "./pages/Onboarding.jsx";
@@ -189,6 +193,10 @@ function App() {
     setRightRailVisible(true);
     setRightRailCollapsed(false);
     setRightRailEditMode(true);
+  }
+
+  function openSettings() {
+    setActivePage("settings");
   }
 
   function updateRightRailVisibility(nextVisible) {
@@ -1128,7 +1136,11 @@ function App() {
           </button>
         </div>
 
-        <nav className={`nav nav-${activePage}`}>
+        <nav
+          className={`nav ${
+            activePage === "settings" ? "nav-account" : `nav-${activePage}`
+          }`}
+        >
           <span className="nav-indicator" />
           
           <NavButton
@@ -1161,13 +1173,13 @@ function App() {
             active={activePage === "subjects"}
             onClick={() => setActivePage("subjects")}
           />
-          <NavButton
-            label="Settings"
-            icon="⚙"
-            active={activePage === "settings"}
-            onClick={() => setActivePage("settings")}
-          />
         </nav>
+
+        <AccountMenu
+          collapsed={sidebarCollapsed}
+          active={activePage === "settings"}
+          openSettings={openSettings}
+        />
 
         <div className="sidebar-footer">
           <p>

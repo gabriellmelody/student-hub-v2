@@ -90,6 +90,25 @@
     display: none;
   }
 
+  .sidebar-account,
+  .sidebar.collapsed .sidebar-account {
+    width: min(240px, 100%);
+    margin-top: var(--density-sidebar-mobile-gap);
+  }
+
+  .sidebar.collapsed .sidebar-account-button {
+    justify-content: flex-start;
+    padding: 7px 8px;
+  }
+
+  .sidebar.collapsed .sidebar-account-copy {
+    display: grid;
+  }
+
+  .sidebar.collapsed .sidebar-account-chevron {
+    display: inline;
+  }
+
   .main-content {
     padding: var(--density-mobile-main);
   }
@@ -112,6 +131,10 @@
 
   .calendar-detail-panel {
     position: static;
+  }
+
+  .integration-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .subject-form-grid {
@@ -233,6 +256,19 @@
     min-height: 0;
   }
 
+  .integration-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .integration-card-actions {
+    align-items: stretch;
+  }
+
+  .integration-card-actions button {
+    flex: 1 1 auto;
+    white-space: normal;
+  }
+
   .classroom-assignment {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
@@ -244,6 +280,14 @@
     justify-content: space-between;
     flex-wrap: wrap;
     white-space: normal;
+  }
+
+  .classroom-assignment-readonly {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .classroom-assignment-readonly .classroom-assignment-meta {
+    grid-column: 1;
   }
 
   .classroom-course-heading {
