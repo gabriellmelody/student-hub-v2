@@ -55,6 +55,7 @@ function SettingsPage({
   hasDemoData,
   importMockClassroomAssignments,
   removeMockClassroomTasks,
+  updateMockClassroomCourseSubject,
 }) {
   const [settingsView, setSettingsView] = useState("hub");
   const viewCopy = {
@@ -397,6 +398,7 @@ function SettingsPage({
           setSubjects={setSubjects}
           importMockClassroomAssignments={importMockClassroomAssignments}
           removeMockClassroomTasks={removeMockClassroomTasks}
+          updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
         />
       ) : (
         <HelpSettings />
@@ -411,6 +413,7 @@ function IntegrationsSettings({
   setSubjects,
   importMockClassroomAssignments,
   removeMockClassroomTasks,
+  updateMockClassroomCourseSubject,
 }) {
   const sampleCourses = buildMockClassroomPreview(mockClassroomData);
   const importedCount = tasks.filter(
@@ -521,6 +524,14 @@ function IntegrationsSettings({
     setPendingAction(null);
   }
 
+  function updateCourseMapping(course, subject, courseLinks) {
+    updateMockClassroomCourseSubject(course.externalId, subject?.name || "");
+    setClassroomConnection((currentConnection) => ({
+      ...currentConnection,
+      linkedCourseCount: courseLinks.length,
+    }));
+  }
+
   return (
     <div className="integrations-settings">
       <section className="panel integration-control-panel">
@@ -558,6 +569,7 @@ function IntegrationsSettings({
           tasks={tasks}
           subjects={subjects}
           setSubjects={setSubjects}
+          onCourseMappingChange={updateCourseMapping}
           onClose={() => setShowMockPreview(false)}
         />
       )}
@@ -682,7 +694,7 @@ function IntegrationCard({
             className="integration-link-button unlink-action"
             onClick={onRemove}
           >
-            Remove sample tasks
+            Remove sample imported tasks
           </button>
         )}
         {!isClassroom && (
@@ -735,7 +747,11 @@ function ClassroomConnectionConfirmation({ action, onCancel, onConfirm }) {
             className="data-confirm-button"
             onClick={onConfirm}
           >
-            {isRemove ? "Remove sample tasks" : isUnlink ? "Unlink" : "Link sample"}
+            {isRemove
+              ? "Remove sample imported tasks"
+              : isUnlink
+                ? "Unlink"
+                : "Link sample"}
           </button>
         </div>
       </section>
@@ -761,6 +777,7 @@ function MockClassroomPreview({
   tasks,
   subjects,
   setSubjects,
+  onCourseMappingChange,
   onClose,
 }) {
   const previewCourses = buildMockClassroomPreview(mockClassroomData);
@@ -818,17 +835,20 @@ function MockClassroomPreview({
 
   function updateCourseSubjectLink(course, subjectId) {
     const subject = subjects.find((item) => item.id === subjectId);
+    const otherLinks = courseSubjectLinks.filter(
+      (link) => link.classroomCourseId !== course.externalId
+    );
+    const nextLinks = subject
+      ? [...otherLinks, createMockClassroomCourseLink(course, subject)]
+      : otherLinks;
 
-    setCourseSubjectLinks((currentLinks) => {
-      const otherLinks = currentLinks.filter(
-        (link) => link.classroomCourseId !== course.externalId
-      );
-
-      return subject
-        ? [...otherLinks, createMockClassroomCourseLink(course, subject)]
-        : otherLinks;
-    });
-    setPreviewMessage("");
+    setCourseSubjectLinks(nextLinks);
+    onCourseMappingChange?.(course, subject || null, nextLinks);
+    setPreviewMessage(
+      subject
+        ? `${course.name} is linked to ${subject.name}. Existing sample tasks from this course were updated.`
+        : `${course.name} is unassigned. Existing sample tasks from this course were updated.`
+    );
   }
 
   function createAndLinkSubject(course) {
@@ -842,12 +862,15 @@ function MockClassroomPreview({
       setSubjects((currentSubjects) => [...currentSubjects, subject]);
     }
 
-    setCourseSubjectLinks((currentLinks) => [
-      ...currentLinks.filter(
+    const nextLinks = [
+      ...courseSubjectLinks.filter(
         (link) => link.classroomCourseId !== course.externalId
       ),
       createMockClassroomCourseLink(course, subject),
-    ]);
+    ];
+
+    setCourseSubjectLinks(nextLinks);
+    onCourseMappingChange?.(course, subject, nextLinks);
     setPreviewMessage(`${course.name} is linked to ${subject.name}.`);
   }
 
@@ -907,10 +930,21 @@ function MockClassroomPreview({
                 }`}
               >
                 <div className="classroom-subject-link-status">
-                  <strong>
-                    {linkedSubject ? "Linked to subject" : "Not linked yet"}
-                  </strong>
-                  <span>{linkedSubject?.name || "Choose or create a subject."}</span>
+                  <div className="classroom-link-status-row">
+                    <strong>Course mapping</strong>
+                    <span
+                      className={`classroom-link-state ${
+                        linkedSubject ? "is-linked" : ""
+                      }`}
+                    >
+                      {linkedSubject ? "Linked" : "Not linked"}
+                    </span>
+                  </div>
+                  <span>
+                    {linkedSubject
+                      ? `Linked to ${linkedSubject.name}`
+                      : "Choose a Student Hub subject or leave unassigned."}
+                  </span>
                 </div>
                 <div className="classroom-subject-link-actions">
                   <label>
@@ -921,7 +955,7 @@ function MockClassroomPreview({
                         updateCourseSubjectLink(course, event.target.value)
                       }
                     >
-                      <option value="">Not linked yet</option>
+                      <option value="">Unassigned / No subject</option>
                       {subjects.map((subject) => (
                         <option value={subject.id} key={subject.id}>
                           {subject.name}

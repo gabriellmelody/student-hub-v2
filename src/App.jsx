@@ -688,6 +688,40 @@ function App() {
     return sampleTaskIds.size;
   }
 
+  function updateMockClassroomCourseSubject(classroomCourseId, subjectName = "") {
+    const safeCourseId = String(classroomCourseId || "").trim();
+    const nextSubject = String(subjectName || "").trim();
+
+    if (!safeCourseId) return;
+
+    const affectedTaskIds = new Set(
+      tasks
+        .filter(
+          (task) =>
+            task.source === "classroom-mock" &&
+            task.classroomCourseId === safeCourseId
+        )
+        .map((task) => task.id)
+    );
+
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        task.source === "classroom-mock" &&
+        task.classroomCourseId === safeCourseId
+          ? { ...task, subject: nextSubject }
+          : task
+      )
+    );
+
+    setPlanBlocks((currentBlocks) =>
+      currentBlocks.map((block) =>
+        affectedTaskIds.has(block.taskId)
+          ? { ...block, subject: nextSubject }
+          : block
+      )
+    );
+  }
+
   function generatePlan() {
     if (planBlocks.some((block) => block.locked === true)) {
       setActivePage("plan");
@@ -1332,6 +1366,7 @@ function App() {
             hasDemoData={hasDemoData}
             importMockClassroomAssignments={importMockClassroomAssignments}
             removeMockClassroomTasks={removeMockClassroomTasks}
+            updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
           />
         )}
       </section>
