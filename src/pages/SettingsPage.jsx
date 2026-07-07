@@ -597,6 +597,7 @@ function IntegrationCard({
   onPreview,
 }) {
   const isClassroom = integration.id === "google-classroom";
+  const isRealClassroom = integration.id === "real-google-classroom";
   const isLinkedSample = isClassroom && classroomConnection.linked;
   const status = isClassroom
     ? isLinkedSample
@@ -628,6 +629,13 @@ function IntegrationCard({
             ? "Connected to Sample Classroom. Local demo connection; no Google account connected."
             : "Sample Classroom uses local data only. Real Google Classroom comes later."}
         </p>
+      )}
+      {isRealClassroom && (
+        <div className="integration-helper integration-real-classroom-note">
+          <p>No Google account connected yet.</p>
+          <p>Real Google Classroom will use secure sign-in and read-only Classroom access.</p>
+          <p>Sample Classroom is available now for local testing.</p>
+        </div>
       )}
       {isLinkedSample && (
         <dl className="integration-sync-meta" aria-label="Sample sync status">
@@ -698,9 +706,23 @@ function IntegrationCard({
           </button>
         )}
         {!isClassroom && (
-          <button type="button" className="integration-link-button" disabled>
-            {integrationStatusLabels[status]}
-          </button>
+          isRealClassroom ? (
+            <>
+              <button type="button" className="integration-link-button" disabled>
+                Connect Google Classroom
+              </button>
+              <button type="button" className="integration-sync-button" disabled>
+                Sync now
+              </button>
+              <button type="button" className="integration-link-button" disabled>
+                Unlink
+              </button>
+            </>
+          ) : (
+            <button type="button" className="integration-link-button" disabled>
+              {integrationStatusLabels[status]}
+            </button>
+          )
         )}
       </div>
     </article>

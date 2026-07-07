@@ -463,6 +463,11 @@
   color: var(--text-muted);
 }
 
+.integration-real-classroom-note {
+  display: grid;
+  gap: 3px;
+}
+
 .integration-card-message {
   color: var(--safe);
   font-weight: 620;
@@ -533,6 +538,14 @@
   font-size: 0.68rem;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.integration-card-actions button:disabled {
+  border-color: var(--border-soft);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  opacity: 0.72;
+  cursor: not-allowed;
 }
 
 .integration-sync-button {
