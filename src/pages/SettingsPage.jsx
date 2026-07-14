@@ -422,6 +422,11 @@ function IntegrationsSettings({
   const [showMockPreview, setShowMockPreview] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [syncMessage, setSyncMessage] = useState("");
+  const [realClassroomSetup, setRealClassroomSetup] = useState({
+    checking: false,
+    result: null,
+    error: "",
+  });
   const [classroomConnection, setClassroomConnection] = useState(() => {
     const fallbackState = {
       linked: false,
@@ -532,6 +537,35 @@ function IntegrationsSettings({
     }));
   }
 
+  async function checkRealClassroomSetup() {
+    setRealClassroomSetup({
+      checking: true,
+      result: null,
+      error: "",
+    });
+
+    try {
+      const response = await fetch("/api/google-classroom/connect", {
+        headers: {
+          Accept: "application/json",
+        },
+      });
+      const result = await response.json();
+
+      setRealClassroomSetup({
+        checking: false,
+        result,
+        error: "",
+      });
+    } catch {
+      setRealClassroomSetup({
+        checking: false,
+        result: null,
+        error: "Could not check setup status. Try again later.",
+      });
+    }
+  }
+
   return (
     <div className="integrations-settings">
       <section className="panel integration-control-panel">
@@ -554,11 +588,13 @@ function IntegrationsSettings({
               classroomConnection={classroomConnection}
               importedCount={importedCount}
               syncMessage={syncMessage}
+              realClassroomSetup={realClassroomSetup}
               onLink={() => setPendingAction("link")}
               onSync={() => syncSampleClassroom()}
               onUnlink={() => setPendingAction("unlink")}
               onRemove={() => setPendingAction("remove")}
               onPreview={() => setShowMockPreview(true)}
+              onCheckRealClassroomSetup={checkRealClassroomSetup}
             />
           ))}
         </div>
@@ -590,11 +626,13 @@ function IntegrationCard({
   classroomConnection,
   importedCount,
   syncMessage,
+  realClassroomSetup,
   onLink,
   onSync,
   onUnlink,
   onRemove,
   onPreview,
+  onCheckRealClassroomSetup,
 }) {
   const isClassroom = integration.id === "google-classroom";
   const isRealClassroom = integration.id === "real-google-classroom";
@@ -636,6 +674,9 @@ function IntegrationCard({
           <p>Real Google Classroom will use secure sign-in and read-only Classroom access.</p>
           <p>Sample Classroom is available now for local testing.</p>
         </div>
+      )}
+      {isRealClassroom && (
+        <RealClassroomSetupStatus setup={realClassroomSetup} />
       )}
       {isLinkedSample && (
         <dl className="integration-sync-meta" aria-label="Sample sync status">
@@ -708,6 +749,14 @@ function IntegrationCard({
         {!isClassroom && (
           isRealClassroom ? (
             <>
+              <button
+                type="button"
+                className="integration-setup-button"
+                onClick={onCheckRealClassroomSetup}
+                disabled={realClassroomSetup.checking}
+              >
+                {realClassroomSetup.checking ? "Checking..." : "Check setup"}
+              </button>
               <button type="button" className="integration-link-button" disabled>
                 Connect Google Classroom
               </button>
@@ -726,6 +775,57 @@ function IntegrationCard({
         )}
       </div>
     </article>
+  );
+}
+
+function RealClassroomSetupStatus({ setup }) {
+  const result = setup.result;
+
+  if (setup.error) {
+    return (
+      <div className="integration-readiness-status is-error" aria-live="polite">
+        <strong>Setup check</strong>
+        <p>{setup.error}</p>
+      </div>
+    );
+  }
+
+  if (!result) {
+    return (
+      <div className="integration-readiness-status">
+        <strong>Setup check only</strong>
+        <p>Real Google Classroom is not connected yet.</p>
+      </div>
+    );
+  }
+
+  const isConfigured = result.status === "configured_not_implemented";
+  const missingEnv = Array.isArray(result.missingEnv)
+    ? result.missingEnv
+    : [];
+
+  return (
+    <div
+      className={`integration-readiness-status ${
+        isConfigured ? "is-configured" : "is-missing"
+      }`}
+      aria-live="polite"
+    >
+      <strong>
+        {isConfigured ? "Configured but not implemented" : "Not configured"}
+      </strong>
+      <p>{result.message || "No Google account connected yet."}</p>
+      {missingEnv.length > 0 && (
+        <div className="integration-missing-env">
+          <span>Missing setup variables</span>
+          <ul>
+            {missingEnv.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   );
 }
 

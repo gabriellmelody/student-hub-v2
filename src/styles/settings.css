@@ -468,6 +468,70 @@
   gap: 3px;
 }
 
+.integration-readiness-status {
+  display: grid;
+  gap: 4px;
+  margin-top: 9px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  line-height: 1.42;
+}
+
+.integration-readiness-status strong {
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+}
+
+.integration-readiness-status p,
+.integration-missing-env ul {
+  margin: 0;
+}
+
+.integration-readiness-status.is-configured {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+}
+
+.integration-readiness-status.is-error {
+  border-color: var(--effort-high-border);
+  background: var(--effort-high-bg);
+}
+
+.integration-missing-env {
+  display: grid;
+  gap: 3px;
+  margin-top: 3px;
+}
+
+.integration-missing-env span {
+  color: var(--text-secondary);
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.integration-missing-env ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.integration-missing-env li {
+  padding: 2px 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.56rem;
+}
+
 .integration-card-message {
   color: var(--safe);
   font-weight: 620;
@@ -552,6 +616,12 @@
   border-color: var(--border-strong);
   background: transparent;
   color: var(--text-secondary);
+}
+
+.integration-setup-button {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
 }
 
 .integration-sync-button:hover {
