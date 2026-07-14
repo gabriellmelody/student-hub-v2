@@ -32,11 +32,18 @@ Confirm these before writing auth code:
 
 Likely environment variables:
 
-- [ ] `GOOGLE_CLIENT_ID`
-- [ ] `GOOGLE_CLIENT_SECRET`
-- [ ] `GOOGLE_REDIRECT_URI`
+- [ ] `GOOGLE_CLASSROOM_CLIENT_ID`
+- [ ] `GOOGLE_CLASSROOM_CLIENT_SECRET`
+- [ ] `GOOGLE_CLASSROOM_REDIRECT_URI`
 - [ ] `GOOGLE_CLASSROOM_SCOPES`
 - [ ] Optional server-side session or token encryption secret if needed.
+
+Current readiness note:
+
+- Placeholder Vercel endpoints now check whether the future required Google Classroom OAuth variables are present.
+- These checks do not activate real OAuth, redirects, API calls, or token storage.
+- Real values must never be committed to the repo.
+- Add the values through Vercel environment variables later, after the auth approach is reviewed.
 
 Recommended first scopes:
 
@@ -384,4 +391,3 @@ Before calling the MVP stable, test:
 - [ ] Sample Classroom imported tasks are not removed by real Classroom cleanup.
 - [ ] Data & reset still works.
 - [ ] Help / FAQ remains honest that Google Classroom is only active after real integration work is complete.
-
