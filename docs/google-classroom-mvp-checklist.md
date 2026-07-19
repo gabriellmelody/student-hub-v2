@@ -49,10 +49,10 @@ Current readiness note:
 
 Recommended first scopes:
 
-- [ ] Read Classroom courses.
-- [ ] Read Classroom coursework.
+- [ ] `https://www.googleapis.com/auth/classroom.courses.readonly`
+- [ ] `https://www.googleapis.com/auth/classroom.coursework.me.readonly`
 
-Keep scopes narrow. Do not request write permissions for the MVP.
+Keep scopes narrow. Do not request write permissions or student submission scopes for the MVP.
 
 Stop and review before:
 
