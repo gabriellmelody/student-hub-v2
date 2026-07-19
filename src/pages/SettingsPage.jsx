@@ -545,7 +545,7 @@ function IntegrationsSettings({
     });
 
     try {
-      const response = await fetch("/api/google-classroom/connect", {
+      const response = await fetch("/api/google-classroom/connect?mode=readiness", {
         headers: {
           Accept: "application/json",
         },
@@ -757,6 +757,12 @@ function IntegrationCard({
               >
                 {realClassroomSetup.checking ? "Checking..." : "Check setup"}
               </button>
+              <a
+                className="integration-oauth-prototype-link"
+                href="/api/google-classroom/connect"
+              >
+                Open Google permission screen
+              </a>
               <button type="button" className="integration-link-button" disabled>
                 Connect Google Classroom
               </button>

@@ -1,7 +1,20 @@
 import { getGoogleClassroomOAuthConfigStatus } from "./_config.js";
 
-export default function handler(_request, response) {
-  // Safe placeholder only: check readiness, but do not exchange auth codes yet.
+function getCallbackParam(request, name) {
+  if (request.query && typeof request.query[name] === "string") {
+    return request.query[name];
+  }
+
+  const callbackUrl = new URL(
+    request.url || "",
+    "https://student-hub.local"
+  );
+
+  return callbackUrl.searchParams.get(name);
+}
+
+export default function handler(request, response) {
+  // Safe OAuth step only: confirm callback params, but do not exchange or store codes.
   const config = getGoogleClassroomOAuthConfigStatus();
 
   if (!config.configured) {
@@ -18,15 +31,41 @@ export default function handler(_request, response) {
     return;
   }
 
-  response.status(501).json({
+  const oauthError = getCallbackParam(request, "error");
+
+  if (oauthError) {
+    response.status(400).json({
+      ok: false,
+      status: "oauth_error",
+      configured: true,
+      error: oauthError,
+      message: "Google returned an OAuth error.",
+      nextStep:
+        "Review the Google OAuth response and try the authorization step again.",
+    });
+    return;
+  }
+
+  const authorizationCode = getCallbackParam(request, "code");
+
+  if (authorizationCode) {
+    response.status(501).json({
+      ok: false,
+      status: "code_received_exchange_not_implemented",
+      configured: true,
+      message:
+        "Google returned an authorization code, but token exchange is not implemented yet.",
+      nextStep:
+        "Implement secure server-side code exchange in the next task.",
+    });
+    return;
+  }
+
+  response.status(400).json({
     ok: false,
-    status: "configured_not_implemented",
+    status: "missing_code",
     configured: true,
-    missingEnv: [],
-    requiredEnv: config.requiredEnv,
-    message:
-      "Google Classroom OAuth callback configuration is present, but code exchange is not implemented yet.",
-    nextStep:
-      "Handle Google auth code exchange securely in a future serverless task.",
+    message: "Google Classroom OAuth callback did not include a code.",
+    nextStep: "Start the authorization redirect again from Student Hub.",
   });
 }

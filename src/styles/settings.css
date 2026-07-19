@@ -579,6 +579,7 @@
 }
 
 .integration-card-actions button,
+.integration-card-actions a,
 .classroom-preview-intro-actions button,
 .classroom-course-actions button,
 .classroom-subject-link-actions button {
@@ -590,12 +591,17 @@
   box-shadow: none;
   font-family: inherit;
   font-weight: 620;
+  text-decoration: none;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease,
     color 0.15s ease, opacity 0.15s ease;
 }
 
-.integration-card-actions button {
+.integration-card-actions button,
+.integration-card-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
   min-height: var(--density-small-button-height);
   padding: var(--density-small-button-padding);
@@ -622,6 +628,16 @@
   border-color: var(--accent-border);
   background: var(--accent-tint);
   color: var(--accent-soft);
+}
+
+.integration-oauth-prototype-link {
+  border-color: var(--accent-border);
+  background: var(--surface-raised);
+  color: var(--accent-soft);
+}
+
+.integration-oauth-prototype-link:hover {
+  background: var(--accent-tint);
 }
 
 .integration-sync-button:hover {
