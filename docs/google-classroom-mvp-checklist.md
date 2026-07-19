@@ -42,8 +42,8 @@ Current readiness note:
 
 - Placeholder Vercel endpoints now check whether the future required Google Classroom OAuth variables are present.
 - The connect endpoint can now start the first safe authorization redirect to Google's permission screen when configuration exists.
-- The callback can confirm that Google returned a code, but it still does not exchange or store tokens.
-- These checks do not activate Classroom API calls, assignment import, token exchange, or token storage.
+- The callback can now prove the server-side token exchange works, then discards the received tokens.
+- These checks do not activate Classroom API calls, assignment import, or token storage.
 - Real values must never be committed to the repo.
 - Add the values through Vercel environment variables later, after the auth approach is reviewed.
 

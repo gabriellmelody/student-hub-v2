@@ -13,8 +13,37 @@ function getCallbackParam(request, name) {
   return callbackUrl.searchParams.get(name);
 }
 
-export default function handler(request, response) {
-  // Safe OAuth step only: confirm callback params, but do not exchange or store codes.
+function summarizeTokenResponse(tokenResponse) {
+  return {
+    hasAccessToken: typeof tokenResponse.access_token === "string",
+    hasRefreshToken: typeof tokenResponse.refresh_token === "string",
+    expiresIn:
+      typeof tokenResponse.expires_in === "number"
+        ? tokenResponse.expires_in
+        : null,
+    scope:
+      typeof tokenResponse.scope === "string" ? tokenResponse.scope : null,
+    tokenType:
+      typeof tokenResponse.token_type === "string"
+        ? tokenResponse.token_type
+        : null,
+  };
+}
+
+function getSafeGoogleError(tokenResponse) {
+  if (!tokenResponse || typeof tokenResponse !== "object") {
+    return "Google token endpoint returned an unexpected response.";
+  }
+
+  return (
+    tokenResponse.error_description ||
+    tokenResponse.error ||
+    "Google token endpoint rejected the authorization code."
+  );
+}
+
+export default async function handler(request, response) {
+  // Safe OAuth proof only: exchange server-side, summarize success, discard tokens.
   const config = getGoogleClassroomOAuthConfigStatus();
 
   if (!config.configured) {
@@ -49,15 +78,57 @@ export default function handler(request, response) {
   const authorizationCode = getCallbackParam(request, "code");
 
   if (authorizationCode) {
-    response.status(501).json({
-      ok: false,
-      status: "code_received_exchange_not_implemented",
-      configured: true,
-      message:
-        "Google returned an authorization code, but token exchange is not implemented yet.",
-      nextStep:
-        "Implement secure server-side code exchange in the next task.",
-    });
+    try {
+      const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Accept: "application/json",
+        },
+        body: new URLSearchParams({
+          code: authorizationCode,
+          client_id: process.env.GOOGLE_CLASSROOM_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLASSROOM_CLIENT_SECRET,
+          redirect_uri: process.env.GOOGLE_CLASSROOM_REDIRECT_URI,
+          grant_type: "authorization_code",
+        }),
+      });
+      const tokenJson = await tokenResponse.json();
+
+      if (!tokenResponse.ok) {
+        response.status(400).json({
+          ok: false,
+          status: "token_exchange_failed",
+          configured: true,
+          message: "Google OAuth token exchange failed.",
+          googleError: getSafeGoogleError(tokenJson),
+          nextStep:
+            "Start the authorization flow again or review the OAuth configuration.",
+        });
+        return;
+      }
+
+      response.status(200).json({
+        ok: true,
+        status: "token_exchange_verified_not_stored",
+        configured: true,
+        message:
+          "Google OAuth token exchange worked. Tokens were received server-side and discarded.",
+        tokenSummary: summarizeTokenResponse(tokenJson),
+        nextStep:
+          "Store tokens securely server-side before reading Classroom courses.",
+      });
+    } catch {
+      response.status(502).json({
+        ok: false,
+        status: "token_exchange_failed",
+        configured: true,
+        message: "Google OAuth token exchange could not be completed.",
+        googleError: "Token endpoint request failed.",
+        nextStep:
+          "Try the authorization flow again after checking the serverless runtime.",
+      });
+    }
     return;
   }
 
