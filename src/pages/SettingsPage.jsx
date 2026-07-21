@@ -530,6 +530,15 @@ function IntegrationsSettings({
     message: "",
     error: "",
   });
+  const [realClassroomAssignmentPreview, setRealClassroomAssignmentPreview] =
+    useState({
+      loading: false,
+      assignments: [],
+      summary: null,
+      lastPreviewedAt: "",
+      message: "",
+      error: "",
+    });
   const [realClassroomCourseSelections, setRealClassroomCourseSelections] =
     useState(() => {
       const savedSelections = localStorage.getItem(
@@ -1092,6 +1101,105 @@ function IntegrationsSettings({
     }));
   }
 
+  function getIncludedRealClassroomCoursesForPreview() {
+    return realClassroomCourses.courses
+      .filter((course) => {
+        const courseId = getRealClassroomCourseId(course);
+
+        return courseId && realClassroomCourseSelections[courseId] === "included";
+      })
+      .map((course) => {
+        const courseId = getRealClassroomCourseId(course);
+        const link = realClassroomCourseSubjectLinks[courseId];
+
+        return {
+          classroomCourseId: courseId,
+          classroomCourseName: course.name,
+          linkedSubjectId: link?.subjectId || "",
+          linkedSubjectName: link?.subjectName || "",
+        };
+      });
+  }
+
+  async function previewRealClassroomAssignments() {
+    const includedCourses = getIncludedRealClassroomCoursesForPreview();
+
+    if (includedCourses.length === 0) {
+      setRealClassroomAssignmentPreview((currentPreview) => ({
+        ...currentPreview,
+        loading: false,
+        error: "Choose at least one class first.",
+        message: "",
+      }));
+      return;
+    }
+
+    setRealClassroomAssignmentPreview((currentPreview) => ({
+      ...currentPreview,
+      loading: true,
+      error: "",
+      message: "",
+    }));
+
+    try {
+      const response = await fetch("/api/google-classroom/coursework-preview", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ courses: includedCourses }),
+      });
+      const result = await response.json();
+
+      if (!response.ok || result.ok !== true) {
+        if (
+          result.status === "no_classroom_session" ||
+          result.status === "classroom_session_invalid_or_expired"
+        ) {
+          setRealClassroomSession({
+            checking: false,
+            connected: false,
+            status: result.status,
+            message:
+              result.status === "no_classroom_session"
+                ? "No Google account connected."
+                : "Google Classroom session expired. Connect again.",
+            tokenSummary: null,
+          });
+        }
+
+        setRealClassroomAssignmentPreview((currentPreview) => ({
+          ...currentPreview,
+          loading: false,
+          error:
+            result.status === "classroom_coursework_permission_error"
+              ? "Student Hub needs coursework access. Reconnect Google Classroom and approve read-only coursework permission."
+              : result.message || "Could not preview Classroom assignments.",
+        }));
+        return;
+      }
+
+      setRealClassroomAssignmentPreview({
+        loading: false,
+        assignments: Array.isArray(result.assignments) ? result.assignments : [],
+        summary: result.previewSummary || null,
+        lastPreviewedAt: result.previewSummary?.previewedAt || new Date().toISOString(),
+        message:
+          result.message ||
+          "Assignments loaded as a read-only preview. No tasks were created.",
+        error: "",
+      });
+    } catch {
+      setRealClassroomAssignmentPreview((currentPreview) => ({
+        ...currentPreview,
+        loading: false,
+        error: "Could not preview Classroom assignments. Try again later.",
+      }));
+    }
+  }
+
   const visibleIntegrations = integrationCatalog.filter(
     (integration) => integration.id !== "google-classroom"
   );
@@ -1157,6 +1265,8 @@ function IntegrationsSettings({
           onSelectCourse={updateRealClassroomCourseSelection}
           onSelectSubject={updateRealClassroomCourseSubject}
           onCreateSubject={createSubjectFromRealClassroomCourse}
+          assignmentPreview={realClassroomAssignmentPreview}
+          onPreviewAssignments={previewRealClassroomAssignments}
           onIncludeAll={() =>
             updateAllRealClassroomCourseSelections("included")
           }
@@ -1447,6 +1557,8 @@ function RealClassroomCourseReviewModal({
   onSelectCourse,
   onSelectSubject,
   onCreateSubject,
+  assignmentPreview,
+  onPreviewAssignments,
   onIncludeAll,
   onIgnoreAll,
   onResetChoices,
@@ -1455,6 +1567,11 @@ function RealClassroomCourseReviewModal({
   const courses = courseState.courses;
   const { includedCount, ignoredCount, needsReviewCount } =
     getRealClassroomCourseCounts(courses, selections);
+  const unlinkedIncludedCount = courses.filter((course) => {
+    const courseId = getRealClassroomCourseId(course);
+
+    return selections[courseId] === "included" && !subjectLinks[courseId];
+  }).length;
 
   useEffect(() => {
     function closeOnEscape(event) {
@@ -1513,7 +1630,27 @@ function RealClassroomCourseReviewModal({
           <button type="button" onClick={onResetChoices}>
             Reset choices
           </button>
+          <button
+            type="button"
+            onClick={onPreviewAssignments}
+            disabled={assignmentPreview.loading}
+          >
+            {assignmentPreview.loading
+              ? "Loading assignments..."
+              : "Preview assignments"}
+          </button>
         </div>
+
+        {(unlinkedIncludedCount > 0 ||
+          assignmentPreview.error ||
+          assignmentPreview.message ||
+          assignmentPreview.loading ||
+          assignmentPreview.assignments.length > 0) && (
+          <RealClassroomAssignmentPreview
+            preview={assignmentPreview}
+            unlinkedCount={unlinkedIncludedCount}
+          />
+        )}
 
         <div className="real-classroom-course-list">
           {courses.map((course) => {
@@ -1617,6 +1754,129 @@ function RealClassroomCourseReviewModal({
         </footer>
       </section>
     </div>
+  );
+}
+
+function formatRealClassroomAssignmentDueDate(assignment) {
+  if (!assignment.dueDate) return "No due date";
+
+  const date = new Date(`${assignment.dueDate}T00:00:00`);
+  const formattedDate = Number.isNaN(date.getTime())
+    ? assignment.dueDate
+    : new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(date);
+
+  return assignment.dueTime
+    ? `${formattedDate} · ${assignment.dueTime}`
+    : formattedDate;
+}
+
+function RealClassroomAssignmentPreview({ preview, unlinkedCount }) {
+  const groupedAssignments = preview.assignments.reduce((groups, assignment) => {
+    const groupKey = assignment.classroomCourseId || "unknown-course";
+
+    if (!groups[groupKey]) {
+      groups[groupKey] = {
+        courseName: assignment.classroomCourseName || "Untitled class",
+        linkedSubjectName: assignment.linkedSubjectName || "",
+        assignments: [],
+      };
+    }
+
+    groups[groupKey].assignments.push(assignment);
+    return groups;
+  }, {});
+  const groups = Object.values(groupedAssignments);
+
+  return (
+    <section className="real-classroom-assignment-preview" aria-live="polite">
+      <div className="real-classroom-assignment-preview-header">
+        <div>
+          <strong>Assignment preview</strong>
+          <p>Preview only. No Student Hub tasks have been created yet.</p>
+        </div>
+        {preview.summary && (
+          <span>
+            {preview.summary.assignmentCount} assignment
+            {preview.summary.assignmentCount === 1 ? "" : "s"}
+          </span>
+        )}
+      </div>
+
+      {unlinkedCount > 0 && (
+        <p className="real-classroom-preview-warning">
+          {unlinkedCount} included class{unlinkedCount === 1 ? "" : "es"} not
+          linked to subjects yet. You can preview now, but importing later will
+          require subject links.
+        </p>
+      )}
+
+      {preview.loading && <p>Reading assignments from included classes...</p>}
+      {preview.error && (
+        <p className="real-classroom-preview-error">{preview.error}</p>
+      )}
+      {preview.message && !preview.error && !preview.loading && (
+        <p>{preview.message}</p>
+      )}
+
+      {groups.length > 0 && (
+        <div className="real-classroom-assignment-group-list">
+          {groups.map((group) => (
+            <article
+              className="real-classroom-assignment-group"
+              key={`${group.courseName}-${group.linkedSubjectName}`}
+            >
+              <header>
+                <div>
+                  <h4>{group.courseName}</h4>
+                  <p>
+                    {group.linkedSubjectName
+                      ? `Subject: ${group.linkedSubjectName}`
+                      : "No linked subject yet"}
+                  </p>
+                </div>
+                <span>{group.assignments.length}</span>
+              </header>
+
+              <div className="real-classroom-assignment-list">
+                {group.assignments.map((assignment) => (
+                  <div
+                    className="real-classroom-assignment-row"
+                    key={assignment.externalId}
+                  >
+                    <div>
+                      <strong>{assignment.title}</strong>
+                      <p>
+                        {formatRealClassroomAssignmentDueDate(assignment)}
+                        {[assignment.workType, assignment.state]
+                          .filter(Boolean)
+                          .join(" · ")
+                          ? ` · ${[assignment.workType, assignment.state]
+                              .filter(Boolean)
+                              .join(" · ")}`
+                          : ""}
+                      </p>
+                    </div>
+                    {assignment.alternateLink && (
+                      <a
+                        href={assignment.alternateLink}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

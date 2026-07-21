@@ -661,7 +661,7 @@
 
 .real-classroom-course-modal {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   gap: 14px;
   width: min(1080px, calc(100vw - 32px));
   max-height: min(820px, calc(100vh - 40px));
@@ -887,10 +887,129 @@
   color: var(--text);
 }
 
+.real-classroom-course-actions button:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
 .real-classroom-course-choice button.is-selected {
   border-color: var(--accent-border);
   background: var(--accent-tint);
   color: var(--accent-soft);
+}
+
+.real-classroom-assignment-preview {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+  scrollbar-color: var(--border-hover) transparent;
+  scrollbar-width: thin;
+}
+
+.real-classroom-assignment-preview::-webkit-scrollbar {
+  width: 8px;
+}
+
+.real-classroom-assignment-preview::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.real-classroom-assignment-preview::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--border-hover);
+  background-clip: padding-box;
+}
+
+.real-classroom-assignment-preview-header,
+.real-classroom-assignment-group header,
+.real-classroom-assignment-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.real-classroom-assignment-preview-header strong,
+.real-classroom-assignment-row strong {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+
+.real-classroom-assignment-preview-header p,
+.real-classroom-assignment-preview > p,
+.real-classroom-assignment-group p,
+.real-classroom-assignment-row p {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 0.63rem;
+  line-height: 1.4;
+}
+
+.real-classroom-assignment-preview-header > span,
+.real-classroom-assignment-group header > span {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.real-classroom-preview-warning {
+  padding: 7px 8px;
+  border: 1px solid var(--effort-medium-border);
+  border-radius: 7px;
+  background: var(--effort-medium-bg);
+}
+
+.real-classroom-preview-error {
+  padding: 7px 8px;
+  border: 1px solid var(--effort-high-border);
+  border-radius: 7px;
+  background: var(--effort-high-bg);
+}
+
+.real-classroom-assignment-group-list,
+.real-classroom-assignment-list {
+  display: grid;
+  gap: 8px;
+}
+
+.real-classroom-assignment-group {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--surface-raised);
+}
+
+.real-classroom-assignment-group h4 {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.real-classroom-assignment-row {
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+
+.real-classroom-assignment-row a {
+  flex-shrink: 0;
+  color: var(--accent-soft);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-decoration: none;
 }
 
 .real-classroom-modal-footer {
@@ -2239,5 +2358,11 @@
   .real-classroom-subject-link button {
     width: fit-content;
     white-space: normal;
+  }
+
+  .real-classroom-assignment-preview-header,
+  .real-classroom-assignment-group header,
+  .real-classroom-assignment-row {
+    display: grid;
   }
 }
