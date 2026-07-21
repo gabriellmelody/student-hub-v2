@@ -1565,6 +1565,7 @@ function RealClassroomCourseReviewModal({
   onClose,
 }) {
   const courses = courseState.courses;
+  const [activeReviewTab, setActiveReviewTab] = useState("classes");
   const { includedCount, ignoredCount, needsReviewCount } =
     getRealClassroomCourseCounts(courses, selections);
   const unlinkedIncludedCount = courses.filter((course) => {
@@ -1582,6 +1583,11 @@ function RealClassroomCourseReviewModal({
 
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
+
+  function previewAssignments() {
+    setActiveReviewTab("assignments");
+    onPreviewAssignments();
+  }
 
   return (
     <div
@@ -1603,8 +1609,7 @@ function RealClassroomCourseReviewModal({
               Review Google Classroom classes
             </h3>
             <p>
-              Choose which classes Student Hub should use later. Assignments
-              are not imported yet.
+              Choose classes, link Subjects, then preview assignments.
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close class review">
@@ -1613,139 +1618,209 @@ function RealClassroomCourseReviewModal({
         </header>
 
         <div className="real-classroom-course-summary">
-          <span>{courses.length} total</span>
+          <span>{courses.length} classes found</span>
           <span>{includedCount} included</span>
           <span>{ignoredCount} ignored</span>
-          <span>{needsReviewCount} needs review</span>
+          <span>
+            {needsReviewCount}{" "}
+            {needsReviewCount === 1 ? "needs class choice" : "need class choices"}
+          </span>
+          <span>
+            {unlinkedIncludedCount}{" "}
+            {unlinkedIncludedCount === 1
+              ? "needs subject link"
+              : "need subject links"}
+          </span>
           <span>No tasks created</span>
         </div>
 
-        <div className="real-classroom-course-actions">
-          <button type="button" onClick={onIncludeAll}>
-            Include all
-          </button>
-          <button type="button" onClick={onIgnoreAll}>
-            Ignore all
-          </button>
-          <button type="button" onClick={onResetChoices}>
-            Reset choices
+        <div
+          className="real-classroom-review-tabs"
+          role="tablist"
+          aria-label="Google Classroom review sections"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeReviewTab === "classes"}
+            className={activeReviewTab === "classes" ? "active" : ""}
+            onClick={() => setActiveReviewTab("classes")}
+          >
+            Classes & subjects
           </button>
           <button
             type="button"
-            onClick={onPreviewAssignments}
-            disabled={assignmentPreview.loading}
+            role="tab"
+            aria-selected={activeReviewTab === "assignments"}
+            className={activeReviewTab === "assignments" ? "active" : ""}
+            onClick={() => setActiveReviewTab("assignments")}
           >
-            {assignmentPreview.loading
-              ? "Loading assignments..."
-              : "Preview assignments"}
+            Assignment preview
           </button>
         </div>
 
-        {(unlinkedIncludedCount > 0 ||
-          assignmentPreview.error ||
-          assignmentPreview.message ||
-          assignmentPreview.loading ||
-          assignmentPreview.assignments.length > 0) && (
-          <RealClassroomAssignmentPreview
-            preview={assignmentPreview}
-            unlinkedCount={unlinkedIncludedCount}
-          />
-        )}
+        {activeReviewTab === "classes" ? (
+          <section className="real-classroom-tab-panel real-classroom-tab-panel--classes">
+            <div className="real-classroom-tab-heading">
+              <div>
+                <strong>Classes & subjects</strong>
+                <p>
+                  Pick classes and match them to Student Hub Subjects.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={previewAssignments}
+                disabled={assignmentPreview.loading}
+              >
+                {assignmentPreview.loading
+                  ? "Loading assignments..."
+                  : "Preview assignments"}
+              </button>
+            </div>
 
-        <div className="real-classroom-course-list">
-          {courses.map((course) => {
-            const courseId = getRealClassroomCourseId(course);
-            const selection = selections[courseId] || "needs-review";
-            const linkedSubject = subjects.find(
-              (subject) => subject.id === subjectLinks[courseId]?.subjectId
-            );
-            const suggestedSubject =
-              linkedSubject || findBestSubjectForClassroomCourse(subjects, course);
-            const subjectName = getSuggestedClassroomSubjectName(course);
+            {unlinkedIncludedCount > 0 && (
+              <p className="real-classroom-preview-warning">
+                {unlinkedIncludedCount} included class
+                {unlinkedIncludedCount === 1 ? "" : "es"} not linked to
+                subjects yet. Preview is available; import will need links.
+              </p>
+            )}
 
-            return (
-              <article className="real-classroom-course-row" key={courseId}>
-                <div className="real-classroom-course-main">
-                  <h4>{course.name}</h4>
-                  <p>
-                    {[course.section, course.description || course.courseState]
-                      .filter(Boolean)
-                      .join(" · ") || "No section"}
-                  </p>
-                </div>
-                <span className={`real-classroom-course-chip ${selection}`}>
-                  {selection === "included"
-                    ? "Included"
-                    : selection === "ignored"
-                      ? "Ignored"
-                      : "Needs review"}
-                </span>
-                <div className="real-classroom-course-choice">
-                  <button
-                    type="button"
-                    className={selection === "included" ? "is-selected" : ""}
-                    onClick={() => onSelectCourse(courseId, "included")}
-                  >
-                    Include
-                  </button>
-                  <button
-                    type="button"
-                    className={selection === "ignored" ? "is-selected" : ""}
-                    onClick={() => onSelectCourse(courseId, "ignored")}
-                  >
-                    Ignore
-                  </button>
-                </div>
-                {selection === "included" && (
-                  <div className="real-classroom-subject-link">
-                    <div>
-                      <strong>
-                        {linkedSubject
-                          ? `Linked to ${linkedSubject.name}`
-                          : suggestedSubject
-                            ? `Suggested: ${suggestedSubject.name}`
-                            : "Needs subject link"}
-                      </strong>
+            <div className="real-classroom-course-actions">
+              <button type="button" onClick={onIncludeAll}>
+                Include all
+              </button>
+              <button type="button" onClick={onIgnoreAll}>
+                Ignore all
+              </button>
+              <button type="button" onClick={onResetChoices}>
+                Reset choices
+              </button>
+            </div>
+
+            <div className="real-classroom-course-list">
+              {courses.map((course) => {
+                const courseId = getRealClassroomCourseId(course);
+                const selection = selections[courseId] || "needs-review";
+                const linkedSubject = subjects.find(
+                  (subject) => subject.id === subjectLinks[courseId]?.subjectId
+                );
+                const suggestedSubject =
+                  linkedSubject ||
+                  findBestSubjectForClassroomCourse(subjects, course);
+                const subjectName = getSuggestedClassroomSubjectName(course);
+
+                return (
+                  <article className="real-classroom-course-row" key={courseId}>
+                    <div className="real-classroom-course-main">
+                      <h4>{course.name}</h4>
                       <p>
-                        Assignments from this class will use this subject later.
+                        {[course.section, course.description || course.courseState]
+                          .filter(Boolean)
+                          .join(" · ") || "No section"}
                       </p>
                     </div>
-                    <label>
-                      <span>Student Hub subject</span>
-                      <select
-                        value={linkedSubject?.id || ""}
-                        onChange={(event) =>
-                          onSelectSubject(course, event.target.value)
-                        }
-                      >
-                        <option value="">Choose a subject</option>
-                        {subjects.map((subject) => (
-                          <option key={subject.id} value={subject.id}>
-                            {subject.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {!linkedSubject && (
+                    <span className={`real-classroom-course-chip ${selection}`}>
+                      {selection === "included"
+                        ? "Included"
+                        : selection === "ignored"
+                          ? "Ignored"
+                          : "Needs review"}
+                    </span>
+                    <div className="real-classroom-course-choice">
                       <button
                         type="button"
-                        onClick={() => onCreateSubject(course)}
+                        className={selection === "included" ? "is-selected" : ""}
+                        onClick={() => onSelectCourse(courseId, "included")}
                       >
-                        {suggestedSubject
-                          ? `Link to ${suggestedSubject.name}`
-                          : `Create "${subjectName}" Subject`}
+                        Include
                       </button>
+                      <button
+                        type="button"
+                        className={selection === "ignored" ? "is-selected" : ""}
+                        onClick={() => onSelectCourse(courseId, "ignored")}
+                      >
+                        Ignore
+                      </button>
+                    </div>
+                    {selection === "included" && (
+                      <div className="real-classroom-subject-link">
+                        <div>
+                          <strong>
+                            {linkedSubject
+                              ? `Linked to ${linkedSubject.name}`
+                              : suggestedSubject
+                                ? `Suggested: ${suggestedSubject.name}`
+                                : "Needs subject link"}
+                          </strong>
+                          <p>
+                            Assignments from this class will use this Subject.
+                          </p>
+                        </div>
+                        <label>
+                          <span>Student Hub subject</span>
+                          <select
+                            value={linkedSubject?.id || ""}
+                            onChange={(event) =>
+                              onSelectSubject(course, event.target.value)
+                            }
+                          >
+                            <option value="">Choose a subject</option>
+                            {subjects.map((subject) => (
+                              <option key={subject.id} value={subject.id}>
+                                {subject.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {!linkedSubject && (
+                          <button
+                            type="button"
+                            onClick={() => onCreateSubject(course)}
+                          >
+                            {suggestedSubject
+                              ? `Link to ${suggestedSubject.name}`
+                              : `Create "${subjectName}" Subject`}
+                          </button>
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
-              </article>
-            );
-          })}
-        </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        ) : (
+          <section className="real-classroom-tab-panel real-classroom-tab-panel--assignments">
+            <div className="real-classroom-tab-heading">
+              <div>
+                <strong>Assignment preview</strong>
+                <p>
+                  Read-only preview. Import comes next.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={previewAssignments}
+                disabled={assignmentPreview.loading}
+              >
+                {assignmentPreview.loading
+                  ? "Loading assignments..."
+                  : "Preview assignments"}
+              </button>
+            </div>
+
+            <RealClassroomAssignmentPreview
+              preview={assignmentPreview}
+              unlinkedCount={unlinkedIncludedCount}
+            />
+          </section>
+        )}
 
         <footer className="real-classroom-modal-footer">
           <p>
-            Only include/ignore choices are saved locally. No Google tokens are
+            Choices and Subject links are saved locally. Google tokens are not
             stored in localStorage.
           </p>
           <button type="button" onClick={onClose}>
@@ -1796,7 +1871,7 @@ function RealClassroomAssignmentPreview({ preview, unlinkedCount }) {
       <div className="real-classroom-assignment-preview-header">
         <div>
           <strong>Assignment preview</strong>
-          <p>Preview only. No Student Hub tasks have been created yet.</p>
+          <p>No Student Hub tasks have been created yet.</p>
         </div>
         {preview.summary && (
           <span>
@@ -1809,8 +1884,7 @@ function RealClassroomAssignmentPreview({ preview, unlinkedCount }) {
       {unlinkedCount > 0 && (
         <p className="real-classroom-preview-warning">
           {unlinkedCount} included class{unlinkedCount === 1 ? "" : "es"} not
-          linked to subjects yet. You can preview now, but importing later will
-          require subject links.
+          linked to subjects yet. Import will need subject links.
         </p>
       )}
 
@@ -1821,6 +1895,12 @@ function RealClassroomAssignmentPreview({ preview, unlinkedCount }) {
       {preview.message && !preview.error && !preview.loading && (
         <p>{preview.message}</p>
       )}
+      {!preview.loading &&
+        !preview.error &&
+        !preview.message &&
+        groups.length === 0 && (
+          <p>Use Preview assignments to load included Classroom assignments.</p>
+        )}
 
       {groups.length > 0 && (
         <div className="real-classroom-assignment-group-list">

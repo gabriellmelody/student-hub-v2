@@ -661,7 +661,7 @@
 
 .real-classroom-course-modal {
   display: grid;
-  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   gap: 14px;
   width: min(1080px, calc(100vw - 32px));
   max-height: min(820px, calc(100vh - 40px));
@@ -688,7 +688,7 @@
 
 .real-classroom-modal-header p,
 .real-classroom-modal-footer p {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 0.72rem;
   line-height: 1.45;
 }
@@ -705,6 +705,95 @@
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+.real-classroom-review-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 3px;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--surface-subtle);
+}
+
+.real-classroom-review-tabs button,
+.real-classroom-tab-heading button {
+  appearance: none;
+  min-height: 28px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease,
+    color 0.15s ease;
+}
+
+.real-classroom-review-tabs button {
+  padding: 4px 10px;
+}
+
+.real-classroom-review-tabs button:hover,
+.real-classroom-tab-heading button:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.real-classroom-review-tabs button.active {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+
+.real-classroom-tab-panel {
+  display: grid;
+  min-height: 0;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+
+.real-classroom-tab-panel--classes {
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+}
+
+.real-classroom-tab-panel--assignments {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.real-classroom-tab-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.real-classroom-tab-heading strong {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.real-classroom-tab-heading p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.64rem;
+  line-height: 1.42;
+}
+
+.real-classroom-tab-heading button {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
 }
 
 .real-classroom-course-summary span {
@@ -791,7 +880,7 @@
 .real-classroom-subject-link p,
 .real-classroom-subject-link label span {
   margin: 3px 0 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 0.62rem;
   line-height: 1.35;
 }
@@ -842,7 +931,7 @@
 
 .real-classroom-course-row p {
   margin: 4px 0 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 0.64rem;
   line-height: 1.4;
 }
@@ -912,6 +1001,10 @@
   scrollbar-width: thin;
 }
 
+.real-classroom-tab-panel--assignments .real-classroom-assignment-preview {
+  max-height: none;
+}
+
 .real-classroom-assignment-preview::-webkit-scrollbar {
   width: 8px;
 }
@@ -947,7 +1040,7 @@
 .real-classroom-assignment-group p,
 .real-classroom-assignment-row p {
   margin: 3px 0 0;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 0.63rem;
   line-height: 1.4;
 }
@@ -2333,8 +2426,13 @@
 
 @media (max-width: 720px) {
   .real-classroom-modal-header,
-  .real-classroom-connection-status {
+  .real-classroom-connection-status,
+  .real-classroom-tab-heading {
     display: grid;
+  }
+
+  .real-classroom-tab-heading button {
+    width: fit-content;
   }
 
   .real-classroom-course-row {
