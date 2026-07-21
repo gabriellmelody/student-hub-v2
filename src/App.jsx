@@ -61,8 +61,38 @@ function createEmptyTaskDraft() {
   };
 }
 
+function getInitialNavigationState() {
+  const fallbackState = {
+    activePage: "home",
+    settingsView: "hub",
+    classroomCallbackStatus: null,
+  };
+
+  if (typeof window === "undefined") return fallbackState;
+
+  const params = new URLSearchParams(window.location.search);
+  const classroomResult = params.get("classroom");
+  const opensIntegrations =
+    params.get("settings") === "integrations" ||
+    classroomResult === "connected" ||
+    classroomResult === "error";
+
+  return {
+    activePage: opensIntegrations ? "settings" : "home",
+    settingsView: opensIntegrations ? "integrations" : "hub",
+    classroomCallbackStatus:
+      classroomResult === "connected" || classroomResult === "error"
+        ? {
+            result: classroomResult,
+            status: params.get("classroomStatus") || "",
+          }
+        : null,
+  };
+}
+
 function App() {
-  const [activePage, setActivePage] = useState("home");
+  const [initialNavigation] = useState(getInitialNavigationState);
+  const [activePage, setActivePage] = useState(initialNavigation.activePage);
   const [homeEditMode, setHomeEditMode] = useState(false);
   const [rightRailEditMode, setRightRailEditMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -137,6 +167,19 @@ function App() {
   const planMoveFeedbackTimerRef = useRef(null);
 
   const [newTask, setNewTask] = useState(createEmptyTaskDraft);
+
+  useEffect(() => {
+    if (
+      typeof window !== "undefined" &&
+      initialNavigation.classroomCallbackStatus
+    ) {
+      window.history.replaceState(
+        {},
+        "",
+        `${window.location.pathname}${window.location.hash}`
+      );
+    }
+  }, [initialNavigation.classroomCallbackStatus]);
 
   const rightRailWidgets = getWidgetsForArea(
     widgetConfig,
@@ -1367,6 +1410,8 @@ function App() {
             importMockClassroomAssignments={importMockClassroomAssignments}
             removeMockClassroomTasks={removeMockClassroomTasks}
             updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
+            initialView={initialNavigation.settingsView}
+            classroomCallbackStatus={initialNavigation.classroomCallbackStatus}
           />
         )}
       </section>

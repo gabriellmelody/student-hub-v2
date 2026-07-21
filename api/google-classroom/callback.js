@@ -14,6 +14,40 @@ function getCallbackParam(request, name) {
   return callbackUrl.searchParams.get(name);
 }
 
+function isDebugCallback(request) {
+  return getCallbackParam(request, "debug") === "1";
+}
+
+function getCallbackRedirectLocation(classroomStatus, detailStatus = "") {
+  const redirectParams = new URLSearchParams({
+    settings: "integrations",
+    classroom: classroomStatus,
+  });
+
+  if (detailStatus) {
+    redirectParams.set("classroomStatus", detailStatus);
+  }
+
+  return `/?${redirectParams.toString()}`;
+}
+
+function sendCallbackResult(request, response, statusCode, payload) {
+  if (isDebugCallback(request)) {
+    response.status(statusCode).json(payload);
+    return;
+  }
+
+  response.writeHead(302, {
+    Location: getCallbackRedirectLocation(
+      payload.ok === true || payload.status === "courses_fetch_failed"
+        ? "connected"
+        : "error",
+      payload.status
+    ),
+  });
+  response.end();
+}
+
 async function readSafeJson(fetchResponse) {
   try {
     return await fetchResponse.json();
@@ -55,7 +89,7 @@ export default async function handler(request, response) {
   const config = getGoogleClassroomOAuthConfigStatus();
 
   if (!config.configured) {
-    response.status(501).json({
+    sendCallbackResult(request, response, 501, {
       ok: false,
       status: "not_configured",
       configured: false,
@@ -71,7 +105,7 @@ export default async function handler(request, response) {
   const oauthError = getCallbackParam(request, "error");
 
   if (oauthError) {
-    response.status(400).json({
+    sendCallbackResult(request, response, 400, {
       ok: false,
       status: "oauth_error",
       configured: true,
@@ -106,7 +140,7 @@ export default async function handler(request, response) {
       const tokenJson = await readSafeJson(tokenResponse);
 
       if (!tokenResponse.ok) {
-        response.status(400).json({
+        sendCallbackResult(request, response, 400, {
           ok: false,
           status: "token_exchange_failed",
           configured: true,
@@ -122,7 +156,7 @@ export default async function handler(request, response) {
       }
 
       if (typeof tokenJson?.access_token !== "string") {
-        response.status(502).json({
+        sendCallbackResult(request, response, 502, {
           ok: false,
           status: "token_exchange_failed",
           configured: true,
@@ -154,7 +188,7 @@ export default async function handler(request, response) {
       const coursesJson = await readSafeJson(coursesResponse);
 
       if (!coursesResponse.ok) {
-        response.status(502).json({
+        sendCallbackResult(request, response, 502, {
           ok: false,
           status: "courses_fetch_failed",
           configured: true,
@@ -177,7 +211,7 @@ export default async function handler(request, response) {
           )
         : [];
 
-      response.status(200).json({
+      sendCallbackResult(request, response, 200, {
         ok: true,
         status: "classroom_session_created",
         configured: true,
@@ -200,7 +234,7 @@ export default async function handler(request, response) {
       });
     } catch {
       if (requestStage === "token_exchange") {
-        response.status(502).json({
+        sendCallbackResult(request, response, 502, {
           ok: false,
           status: "token_exchange_failed",
           configured: true,
@@ -210,7 +244,7 @@ export default async function handler(request, response) {
             "Try the authorization flow again after checking the serverless runtime.",
         });
       } else if (requestStage === "session_create") {
-        response.status(501).json({
+        sendCallbackResult(request, response, 501, {
           ok: false,
           status: "classroom_session_not_configured",
           configured: true,
@@ -220,7 +254,7 @@ export default async function handler(request, response) {
             "Add STUDENT_HUB_SESSION_SECRET in Vercel before creating Classroom sessions.",
         });
       } else {
-        response.status(502).json({
+        sendCallbackResult(request, response, 502, {
           ok: false,
           status: "courses_fetch_failed",
           configured: true,
@@ -235,7 +269,7 @@ export default async function handler(request, response) {
     return;
   }
 
-  response.status(400).json({
+  sendCallbackResult(request, response, 400, {
     ok: false,
     status: "missing_code",
     configured: true,

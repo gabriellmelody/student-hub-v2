@@ -361,6 +361,38 @@
   padding: var(--density-panel-padding);
 }
 
+.real-classroom-return-status {
+  display: grid;
+  gap: 3px;
+  margin: var(--density-panel-padding) var(--density-panel-padding) 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+}
+
+.real-classroom-return-status.connected {
+  border-color: var(--effort-low-border);
+  background: var(--effort-low-bg);
+}
+
+.real-classroom-return-status.error {
+  border-color: var(--effort-high-border);
+  background: var(--effort-high-bg);
+}
+
+.real-classroom-return-status strong {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+
+.real-classroom-return-status p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  line-height: 1.42;
+}
+
 .integration-card {
   display: flex;
   flex-direction: column;

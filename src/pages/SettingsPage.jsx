@@ -59,8 +59,10 @@ function SettingsPage({
   importMockClassroomAssignments,
   removeMockClassroomTasks,
   updateMockClassroomCourseSubject,
+  initialView = "hub",
+  classroomCallbackStatus = null,
 }) {
-  const [settingsView, setSettingsView] = useState("hub");
+  const [settingsView, setSettingsView] = useState(() => initialView || "hub");
   const viewCopy = {
     hub: {
       eyebrow: "Settings",
@@ -402,6 +404,7 @@ function SettingsPage({
           importMockClassroomAssignments={importMockClassroomAssignments}
           removeMockClassroomTasks={removeMockClassroomTasks}
           updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
+          classroomCallbackStatus={classroomCallbackStatus}
         />
       ) : (
         <HelpSettings />
@@ -417,6 +420,7 @@ function IntegrationsSettings({
   importMockClassroomAssignments,
   removeMockClassroomTasks,
   updateMockClassroomCourseSubject,
+  classroomCallbackStatus,
 }) {
   const sampleCourses = buildMockClassroomPreview(mockClassroomData);
   const importedCount = tasks.filter(
@@ -789,6 +793,10 @@ function IntegrationsSettings({
           <span>Local workspace</span>
         </div>
 
+        {classroomCallbackStatus && (
+          <RealClassroomReturnStatus status={classroomCallbackStatus} />
+        )}
+
         <div className="integration-card-grid">
           {visibleIntegrations.map((integration) => (
             <IntegrationCard
@@ -846,6 +854,32 @@ function IntegrationsSettings({
           onConfirm={confirmAction}
         />
       )}
+    </div>
+  );
+}
+
+function RealClassroomReturnStatus({ status }) {
+  const connected = status.result === "connected";
+  const courseCheckFailed = status.status === "courses_fetch_failed";
+  const message = connected
+    ? courseCheckFailed
+      ? "Google Classroom connected for this browser. Courses were not checked during return, so try loading them here."
+      : "Google Classroom connected for this browser. Read-only courses are available; assignments are not imported yet."
+    : "Google Classroom did not finish connecting. Try again from the Google Classroom card.";
+
+  return (
+    <div
+      className={`real-classroom-return-status ${
+        connected ? "connected" : "error"
+      }`}
+      aria-live="polite"
+    >
+      <strong>
+        {connected
+          ? "Google Classroom connected"
+          : "Google Classroom connection needs attention"}
+      </strong>
+      <p>{message}</p>
     </div>
   );
 }
