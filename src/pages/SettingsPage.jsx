@@ -6,6 +6,7 @@ import {
   getContrastText,
   createSubjectDraft,
   findSubjectProfile,
+  hasRealDueDate,
   REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY,
@@ -651,9 +652,19 @@ function IntegrationsSettings({
     candidateCount: tasks.filter(
       (task) =>
         task.source === REAL_CLASSROOM_SOURCE &&
-        !task.dueDate &&
+        !hasRealDueDate(task.dueDate) &&
         !task.completed &&
         task.archived !== true
+    ).length,
+    dueDateActiveCount: tasks.filter(
+      (task) =>
+        task.source === REAL_CLASSROOM_SOURCE &&
+        hasRealDueDate(task.dueDate) &&
+        !task.completed &&
+        task.archived !== true
+    ).length,
+    manualSafeCount: tasks.filter(
+      (task) => task.source !== REAL_CLASSROOM_SOURCE
     ).length,
     archivedCount: tasks.filter(
       (task) => task.source === REAL_CLASSROOM_SOURCE && task.archived === true
@@ -1583,11 +1594,19 @@ function IntegrationCard({
           </div>
           <dl>
             <div>
-              <dt>Review candidates</dt>
+              <dt>No-due-date Classroom tasks can be archived</dt>
               <dd>{realClassroomCleanup.candidateCount}</dd>
             </div>
             <div>
-              <dt>Archived</dt>
+              <dt>Classroom tasks with due dates stay active</dt>
+              <dd>{realClassroomCleanup.dueDateActiveCount}</dd>
+            </div>
+            <div>
+              <dt>Manual tasks will not be touched</dt>
+              <dd>{realClassroomCleanup.manualSafeCount}</dd>
+            </div>
+            <div>
+              <dt>Already archived Classroom tasks</dt>
               <dd>{realClassroomCleanup.archivedCount}</dd>
             </div>
           </dl>
@@ -1613,7 +1632,11 @@ function IntegrationCard({
               </button>
             )}
           </div>
-          <small>Archive hides items from active views. Nothing is deleted.</small>
+          <small>
+            {realClassroomCleanup.candidateCount === 0
+              ? "No no-due-date Classroom tasks to archive."
+              : "Archive hides items from active views. Nothing is deleted."}
+          </small>
         </div>
       )}
       {isLinkedSample && (

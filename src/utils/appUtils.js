@@ -721,6 +721,22 @@ export function getDaysLeft(dueDate) {
   return Math.ceil((due - today) / (1000 * 60 * 60 * 24));
 }
 
+export function hasRealDueDate(dueDate) {
+  if (typeof dueDate !== "string") return false;
+
+  const trimmedDate = dueDate.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedDate)) return false;
+
+  const [year, month, day] = trimmedDate.split("-").map(Number);
+  const parsedDate = new Date(year, month - 1, day);
+
+  return (
+    parsedDate.getFullYear() === year &&
+    parsedDate.getMonth() === month - 1 &&
+    parsedDate.getDate() === day
+  );
+}
+
 export function formatDateKey(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");

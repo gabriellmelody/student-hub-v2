@@ -29,6 +29,7 @@ import {
   loadSubjects,
   loadStudentProfile,
   getDaysLeft,
+  hasRealDueDate,
   formatTime,
   getTaskTip,
   sortTasksForDisplay,
@@ -837,7 +838,7 @@ function App() {
   function isNoDueDateClassroomArchiveCandidate(task) {
     return (
       task.source === "classroom" &&
-      !task.dueDate &&
+      !hasRealDueDate(task.dueDate) &&
       !task.completed &&
       task.archived !== true
     );
