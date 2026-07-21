@@ -137,6 +137,7 @@ function SettingsPage({
   hasDemoTasks,
   hasDemoData,
   importMockClassroomAssignments,
+  importRealClassroomAssignments,
   removeMockClassroomTasks,
   updateMockClassroomCourseSubject,
   initialView = "hub",
@@ -482,6 +483,7 @@ function SettingsPage({
           subjects={subjects}
           setSubjects={setSubjects}
           importMockClassroomAssignments={importMockClassroomAssignments}
+          importRealClassroomAssignments={importRealClassroomAssignments}
           removeMockClassroomTasks={removeMockClassroomTasks}
           updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
           classroomCallbackStatus={classroomCallbackStatus}
@@ -498,6 +500,7 @@ function IntegrationsSettings({
   subjects,
   setSubjects,
   importMockClassroomAssignments,
+  importRealClassroomAssignments,
   removeMockClassroomTasks,
   updateMockClassroomCourseSubject,
   classroomCallbackStatus,
@@ -538,6 +541,7 @@ function IntegrationsSettings({
       lastPreviewedAt: "",
       message: "",
       error: "",
+      importResult: null,
     });
   const [realClassroomCourseSelections, setRealClassroomCourseSelections] =
     useState(() => {
@@ -1139,6 +1143,7 @@ function IntegrationsSettings({
       loading: true,
       error: "",
       message: "",
+      importResult: null,
     }));
 
     try {
@@ -1190,6 +1195,7 @@ function IntegrationsSettings({
           result.message ||
           "Assignments loaded as a read-only preview. No tasks were created.",
         error: "",
+        importResult: null,
       });
     } catch {
       setRealClassroomAssignmentPreview((currentPreview) => ({
@@ -1198,6 +1204,63 @@ function IntegrationsSettings({
         error: "Could not preview Classroom assignments. Try again later.",
       }));
     }
+  }
+
+  function getImportableRealClassroomAssignments() {
+    return realClassroomAssignmentPreview.assignments
+      .filter((assignment) => {
+        const courseId = assignment.classroomCourseId;
+
+        return realClassroomCourseSelections[courseId] === "included";
+      })
+      .map((assignment) => {
+        const link = realClassroomCourseSubjectLinks[assignment.classroomCourseId];
+
+        return {
+          ...assignment,
+          linkedSubjectId: link?.subjectId || assignment.linkedSubjectId || "",
+          linkedSubjectName:
+            link?.subjectName || assignment.linkedSubjectName || "",
+        };
+      });
+  }
+
+  function importPreviewedRealClassroomAssignments() {
+    const importableAssignments = getImportableRealClassroomAssignments();
+    const hasUnlinkedAssignments = importableAssignments.some(
+      (assignment) => !assignment.linkedSubjectId || !assignment.linkedSubjectName
+    );
+
+    if (importableAssignments.length === 0) {
+      setRealClassroomAssignmentPreview((currentPreview) => ({
+        ...currentPreview,
+        error: "Preview assignments from included classes before importing.",
+        importResult: null,
+      }));
+      return;
+    }
+
+    if (hasUnlinkedAssignments) {
+      setRealClassroomAssignmentPreview((currentPreview) => ({
+        ...currentPreview,
+        error: "Link included classes to Subjects before importing assignments.",
+        importResult: null,
+      }));
+      return;
+    }
+
+    const result = importRealClassroomAssignments(importableAssignments);
+
+    setRealClassroomAssignmentPreview((currentPreview) => ({
+      ...currentPreview,
+      error: "",
+      message: `${result.importedCount} assignment${
+        result.importedCount === 1 ? "" : "s"
+      } imported · ${result.updatedCount} existing assignment${
+        result.updatedCount === 1 ? "" : "s"
+      } updated · 0 duplicates created · No tasks deleted.`,
+      importResult: result,
+    }));
   }
 
   const visibleIntegrations = integrationCatalog.filter(
@@ -1266,7 +1329,14 @@ function IntegrationsSettings({
           onSelectSubject={updateRealClassroomCourseSubject}
           onCreateSubject={createSubjectFromRealClassroomCourse}
           assignmentPreview={realClassroomAssignmentPreview}
+          importedTaskIds={new Set(
+            tasks
+              .filter((task) => task.source === REAL_CLASSROOM_SOURCE)
+              .map((task) => task.externalId)
+              .filter(Boolean)
+          )}
           onPreviewAssignments={previewRealClassroomAssignments}
+          onImportAssignments={importPreviewedRealClassroomAssignments}
           onIncludeAll={() =>
             updateAllRealClassroomCourseSelections("included")
           }
@@ -1558,7 +1628,9 @@ function RealClassroomCourseReviewModal({
   onSelectSubject,
   onCreateSubject,
   assignmentPreview,
+  importedTaskIds,
   onPreviewAssignments,
+  onImportAssignments,
   onIncludeAll,
   onIgnoreAll,
   onResetChoices,
@@ -1814,6 +1886,14 @@ function RealClassroomCourseReviewModal({
             <RealClassroomAssignmentPreview
               preview={assignmentPreview}
               unlinkedCount={unlinkedIncludedCount}
+              includedCourseIds={new Set(
+                Object.entries(selections)
+                  .filter(([, selection]) => selection === "included")
+                  .map(([courseId]) => courseId)
+              )}
+              linkedCourseIds={new Set(Object.keys(subjectLinks))}
+              importedTaskIds={importedTaskIds}
+              onImportAssignments={onImportAssignments}
             />
           </section>
         )}
@@ -1849,7 +1929,14 @@ function formatRealClassroomAssignmentDueDate(assignment) {
     : formattedDate;
 }
 
-function RealClassroomAssignmentPreview({ preview, unlinkedCount }) {
+function RealClassroomAssignmentPreview({
+  preview,
+  unlinkedCount,
+  includedCourseIds,
+  linkedCourseIds,
+  importedTaskIds,
+  onImportAssignments,
+}) {
   const groupedAssignments = preview.assignments.reduce((groups, assignment) => {
     const groupKey = assignment.classroomCourseId || "unknown-course";
 
@@ -1865,6 +1952,28 @@ function RealClassroomAssignmentPreview({ preview, unlinkedCount }) {
     return groups;
   }, {});
   const groups = Object.values(groupedAssignments);
+  const hasAssignments = preview.assignments.length > 0;
+  const includedPreviewAssignments = preview.assignments.filter((assignment) =>
+    includedCourseIds.has(assignment.classroomCourseId)
+  );
+  const importedCount = includedPreviewAssignments.filter((assignment) =>
+    importedTaskIds.has(assignment.externalId)
+  ).length;
+  const importableCount = Math.max(
+    0,
+    includedPreviewAssignments.length - importedCount
+  );
+  const unlinkedPreviewCourseCount = new Set(
+    includedPreviewAssignments
+      .filter((assignment) => !linkedCourseIds.has(assignment.classroomCourseId))
+      .map((assignment) => assignment.classroomCourseId)
+  ).size;
+  const importButtonLabel =
+    importableCount > 0
+      ? `Import ${importableCount} assignment${
+          importableCount === 1 ? "" : "s"
+        }`
+      : "Update imported assignments";
 
   return (
     <section className="real-classroom-assignment-preview" aria-live="polite">
@@ -1881,9 +1990,32 @@ function RealClassroomAssignmentPreview({ preview, unlinkedCount }) {
         )}
       </div>
 
-      {unlinkedCount > 0 && (
+      {hasAssignments && (
+        <div className="real-classroom-import-panel">
+          <div>
+            <strong>Import assignments</strong>
+            <p>
+              This will create Student Hub tasks from previewed Classroom
+              assignments.
+            </p>
+            <small>
+              {importableCount} new · {importedCount} already imported
+            </small>
+          </div>
+          <button
+            type="button"
+            onClick={onImportAssignments}
+            disabled={unlinkedPreviewCourseCount > 0 || preview.loading}
+          >
+            {importButtonLabel}
+          </button>
+        </div>
+      )}
+
+      {unlinkedPreviewCourseCount > 0 && (
         <p className="real-classroom-preview-warning">
-          {unlinkedCount} included class{unlinkedCount === 1 ? "" : "es"} not
+          {unlinkedPreviewCourseCount} included class
+          {unlinkedPreviewCourseCount === 1 ? "" : "es"} with assignments not
           linked to subjects yet. Import will need subject links.
         </p>
       )}
@@ -1924,7 +2056,11 @@ function RealClassroomAssignmentPreview({ preview, unlinkedCount }) {
               <div className="real-classroom-assignment-list">
                 {group.assignments.map((assignment) => (
                   <div
-                    className="real-classroom-assignment-row"
+                    className={`real-classroom-assignment-row ${
+                      importedTaskIds.has(assignment.externalId)
+                        ? "is-imported"
+                        : ""
+                    }`}
                     key={assignment.externalId}
                   >
                     <div>
@@ -1940,6 +2076,11 @@ function RealClassroomAssignmentPreview({ preview, unlinkedCount }) {
                           : ""}
                       </p>
                     </div>
+                    {importedTaskIds.has(assignment.externalId) && (
+                      <span className="real-classroom-imported-chip">
+                        Imported
+                      </span>
+                    )}
                     {assignment.alternateLink && (
                       <a
                         href={assignment.alternateLink}

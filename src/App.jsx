@@ -45,6 +45,7 @@ import {
   upsertCompletedTaskHistory,
   removeTaskFromCompletedHistory,
   normalizeTask,
+  getExternalSourceKey,
 } from "./utils/appUtils.js";
 import { createTaskFromMockAssignment } from "./utils/classroomMockUtils.js";
 
@@ -703,6 +704,127 @@ function App() {
     return {
       importedCount: importedTasks.length,
       skippedCount: requestedAssignments.length - importedTasks.length,
+    };
+  }
+
+  function createTaskFromClassroomPreviewAssignment(assignment, importedAt) {
+    return normalizeTask({
+      id: `classroom-${String(assignment.externalId || Date.now()).replace(
+        /[^a-z0-9-]+/gi,
+        "-"
+      )}`,
+      subject: String(assignment.linkedSubjectName || "").trim(),
+      title: String(assignment.title || "Untitled assignment").trim(),
+      description: String(assignment.description || "").trim(),
+      dueDate: String(assignment.dueDate || ""),
+      dueTime: String(assignment.dueTime || ""),
+      effort: 2,
+      completed: false,
+      completedAt: null,
+      source: "classroom",
+      externalId: assignment.externalId,
+      classroomCourseId: assignment.classroomCourseId || null,
+      classroomCourseName: assignment.classroomCourseName || null,
+      linkedSubjectId: assignment.linkedSubjectId || null,
+      linkedSubjectName: assignment.linkedSubjectName || "",
+      alternateLink: assignment.alternateLink || "",
+      workType: assignment.workType || "",
+      state: assignment.state || "",
+      importedAt,
+      sourceUpdatedAt: assignment.updateTime || assignment.sourceUpdatedAt || null,
+      lastSyncedAt: importedAt,
+      taskType: "homework",
+      importance: "normal",
+      detectedTags: [],
+      importanceSource: "auto",
+    });
+  }
+
+  function importRealClassroomAssignments(assignments) {
+    const requestedAssignments = Array.isArray(assignments)
+      ? assignments.filter(
+          (assignment) =>
+            assignment?.source === "classroom" &&
+            typeof assignment.externalId === "string" &&
+            assignment.externalId.trim() &&
+            assignment.linkedSubjectId &&
+            assignment.linkedSubjectName
+        )
+      : [];
+    const requestedKeys = new Set();
+    const uniqueAssignments = requestedAssignments.filter((assignment) => {
+      const sourceKey = getExternalSourceKey(assignment);
+
+      if (!sourceKey || requestedKeys.has(sourceKey)) return false;
+
+      requestedKeys.add(sourceKey);
+      return true;
+    });
+    const importedAt = new Date().toISOString();
+
+    if (uniqueAssignments.length === 0) {
+      return {
+        importedCount: 0,
+        updatedCount: 0,
+        skippedCount: requestedAssignments.length,
+      };
+    }
+
+    const taskBySourceKey = new Map(
+      tasks
+        .map((task) => [getExternalSourceKey(task), task])
+        .filter(([sourceKey]) => sourceKey)
+    );
+    const nextTasks = [...tasks];
+    const tasksToAdd = [];
+    let importedCount = 0;
+    let updatedCount = 0;
+
+    uniqueAssignments.forEach((assignment) => {
+      const sourceKey = getExternalSourceKey(assignment);
+      const existingTask = taskBySourceKey.get(sourceKey);
+      const classroomTask = createTaskFromClassroomPreviewAssignment(
+        assignment,
+        importedAt
+      );
+
+      if (existingTask) {
+        updatedCount += 1;
+        const existingTaskIndex = nextTasks.findIndex(
+          (task) => getExternalSourceKey(task) === sourceKey
+        );
+
+        nextTasks[existingTaskIndex] = normalizeTask({
+          ...existingTask,
+          title: classroomTask.title,
+          description: classroomTask.description,
+          dueDate: classroomTask.dueDate,
+          dueTime: classroomTask.dueTime,
+          classroomCourseId: classroomTask.classroomCourseId,
+          classroomCourseName: classroomTask.classroomCourseName,
+          linkedSubjectId: classroomTask.linkedSubjectId,
+          linkedSubjectName: classroomTask.linkedSubjectName,
+          alternateLink: classroomTask.alternateLink,
+          workType: classroomTask.workType,
+          state: classroomTask.state,
+          sourceUpdatedAt: classroomTask.sourceUpdatedAt,
+          lastSyncedAt: importedAt,
+          subject: existingTask.subject || classroomTask.subject,
+        });
+        return;
+      }
+
+      importedCount += 1;
+      taskBySourceKey.set(sourceKey, classroomTask);
+      tasksToAdd.push(classroomTask);
+    });
+
+    setTasks(tasksToAdd.length > 0 ? [...nextTasks, ...tasksToAdd] : nextTasks);
+
+    return {
+      importedCount,
+      updatedCount,
+      skippedCount: requestedAssignments.length - uniqueAssignments.length,
     };
   }
 
@@ -1408,6 +1530,7 @@ function App() {
             hasDemoTasks={hasDemoTasks}
             hasDemoData={hasDemoData}
             importMockClassroomAssignments={importMockClassroomAssignments}
+            importRealClassroomAssignments={importRealClassroomAssignments}
             removeMockClassroomTasks={removeMockClassroomTasks}
             updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
             initialView={initialNavigation.settingsView}
