@@ -532,6 +532,164 @@
   font-size: 0.56rem;
 }
 
+.real-classroom-course-review {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 0.64rem;
+  line-height: 1.42;
+}
+
+.real-classroom-course-review > strong,
+.real-classroom-review-heading strong {
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+}
+
+.real-classroom-course-review p,
+.real-classroom-course-row h4 {
+  margin: 0;
+}
+
+.real-classroom-review-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.real-classroom-review-heading > span {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 650;
+}
+
+.real-classroom-course-summary,
+.real-classroom-course-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.real-classroom-course-summary span {
+  padding: 2px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 650;
+}
+
+.real-classroom-course-actions button,
+.real-classroom-course-choice button {
+  appearance: none;
+  min-height: 26px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease,
+    color 0.15s ease;
+}
+
+.real-classroom-course-actions button {
+  padding: 4px 8px;
+}
+
+.real-classroom-course-list {
+  display: grid;
+  gap: 6px;
+}
+
+.real-classroom-course-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-raised);
+}
+
+.real-classroom-course-row h4 {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.67rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.real-classroom-course-row p {
+  overflow: hidden;
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.real-classroom-course-chip {
+  padding: 2px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.real-classroom-course-chip.included {
+  border-color: var(--effort-low-border);
+  background: var(--effort-low-bg);
+  color: var(--safe);
+}
+
+.real-classroom-course-chip.ignored {
+  border-color: var(--border-soft);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+
+.real-classroom-course-choice {
+  display: flex;
+  gap: 5px;
+}
+
+.real-classroom-course-choice button {
+  padding: 3px 7px;
+}
+
+.real-classroom-course-actions button:hover,
+.real-classroom-course-choice button:hover {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.real-classroom-course-choice button.is-selected {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+
+.real-classroom-storage-note {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+}
+
 .integration-card-message {
   color: var(--safe);
   font-weight: 620;

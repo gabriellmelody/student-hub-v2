@@ -28,6 +28,9 @@ import {
   loadMockClassroomCourseLinks,
 } from "../utils/classroomMockUtils.js";
 
+const REAL_CLASSROOM_COURSE_SELECTIONS_KEY =
+  "studentHub.realClassroomCourseSelections";
+
 function SettingsPage({
   tasks,
   subjects,
@@ -427,6 +430,38 @@ function IntegrationsSettings({
     result: null,
     error: "",
   });
+  const [realClassroomCourses, setRealClassroomCourses] = useState({
+    loading: false,
+    courses: [],
+    summary: null,
+    lastCheckedAt: "",
+    message: "",
+    error: "",
+  });
+  const [realClassroomCourseSelections, setRealClassroomCourseSelections] =
+    useState(() => {
+      const savedSelections = localStorage.getItem(
+        REAL_CLASSROOM_COURSE_SELECTIONS_KEY
+      );
+
+      if (!savedSelections) return {};
+
+      try {
+        const parsedSelections = JSON.parse(savedSelections);
+
+        if (!parsedSelections || typeof parsedSelections !== "object") {
+          return {};
+        }
+
+        return Object.fromEntries(
+          Object.entries(parsedSelections).filter(([, value]) =>
+            ["included", "ignored"].includes(value)
+          )
+        );
+      } catch {
+        return {};
+      }
+    });
   const [classroomConnection, setClassroomConnection] = useState(() => {
     const fallbackState = {
       linked: false,
@@ -466,6 +501,13 @@ function IntegrationsSettings({
       JSON.stringify({ ...classroomConnection, importedCount })
     );
   }, [classroomConnection, importedCount]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      REAL_CLASSROOM_COURSE_SELECTIONS_KEY,
+      JSON.stringify(realClassroomCourseSelections)
+    );
+  }, [realClassroomCourseSelections]);
 
   function syncSampleClassroom({ link = false } = {}) {
     const courseLinks = loadMockClassroomCourseLinks();
@@ -566,6 +608,93 @@ function IntegrationsSettings({
     }
   }
 
+  async function loadRealClassroomCourses() {
+    setRealClassroomCourses((currentState) => ({
+      ...currentState,
+      loading: true,
+      message: "",
+      error: "",
+    }));
+
+    try {
+      const response = await fetch("/api/google-classroom/courses", {
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+      const result = await response.json();
+
+      if (!response.ok || result.ok !== true) {
+        setRealClassroomCourses((currentState) => ({
+          ...currentState,
+          loading: false,
+          error:
+            result.status === "no_classroom_session"
+              ? "Connect Google Classroom first, then load courses."
+              : result.message || "Could not load Classroom courses.",
+        }));
+        return;
+      }
+
+      setRealClassroomCourses({
+        loading: false,
+        courses: Array.isArray(result.courses) ? result.courses : [],
+        summary: result.courseSummary || null,
+        lastCheckedAt: new Date().toISOString(),
+        message:
+          result.courseSummary?.count === 0
+            ? "Google Classroom connected, but no active courses were found."
+            : "Read-only courses loaded. Assignments are not imported yet.",
+        error: "",
+      });
+    } catch {
+      setRealClassroomCourses((currentState) => ({
+        ...currentState,
+        loading: false,
+        error: "Could not load Classroom courses. Try again later.",
+      }));
+    }
+  }
+
+  function updateRealClassroomCourseSelection(courseId, selection) {
+    setRealClassroomCourseSelections((currentSelections) => {
+      const nextSelections = { ...currentSelections };
+
+      if (selection === "included" || selection === "ignored") {
+        nextSelections[courseId] = selection;
+      } else {
+        delete nextSelections[courseId];
+      }
+
+      return nextSelections;
+    });
+  }
+
+  function updateAllRealClassroomCourseSelections(selection) {
+    setRealClassroomCourseSelections((currentSelections) => {
+      const nextSelections = { ...currentSelections };
+
+      realClassroomCourses.courses.forEach((course) => {
+        nextSelections[course.classroomCourseId] = selection;
+      });
+
+      return nextSelections;
+    });
+  }
+
+  function resetRealClassroomCourseSelections() {
+    setRealClassroomCourseSelections((currentSelections) => {
+      const nextSelections = { ...currentSelections };
+
+      realClassroomCourses.courses.forEach((course) => {
+        delete nextSelections[course.classroomCourseId];
+      });
+
+      return nextSelections;
+    });
+  }
+
   return (
     <div className="integrations-settings">
       <section className="panel integration-control-panel">
@@ -589,12 +718,25 @@ function IntegrationsSettings({
               importedCount={importedCount}
               syncMessage={syncMessage}
               realClassroomSetup={realClassroomSetup}
+              realClassroomCourses={realClassroomCourses}
+              realClassroomCourseSelections={realClassroomCourseSelections}
               onLink={() => setPendingAction("link")}
               onSync={() => syncSampleClassroom()}
               onUnlink={() => setPendingAction("unlink")}
               onRemove={() => setPendingAction("remove")}
               onPreview={() => setShowMockPreview(true)}
               onCheckRealClassroomSetup={checkRealClassroomSetup}
+              onLoadRealClassroomCourses={loadRealClassroomCourses}
+              onSelectRealClassroomCourse={updateRealClassroomCourseSelection}
+              onIncludeAllRealClassroomCourses={() =>
+                updateAllRealClassroomCourseSelections("included")
+              }
+              onIgnoreAllRealClassroomCourses={() =>
+                updateAllRealClassroomCourseSelections("ignored")
+              }
+              onResetRealClassroomCourseSelections={
+                resetRealClassroomCourseSelections
+              }
             />
           ))}
         </div>
@@ -627,12 +769,19 @@ function IntegrationCard({
   importedCount,
   syncMessage,
   realClassroomSetup,
+  realClassroomCourses,
+  realClassroomCourseSelections,
   onLink,
   onSync,
   onUnlink,
   onRemove,
   onPreview,
   onCheckRealClassroomSetup,
+  onLoadRealClassroomCourses,
+  onSelectRealClassroomCourse,
+  onIncludeAllRealClassroomCourses,
+  onIgnoreAllRealClassroomCourses,
+  onResetRealClassroomCourseSelections,
 }) {
   const isClassroom = integration.id === "google-classroom";
   const isRealClassroom = integration.id === "real-google-classroom";
@@ -671,12 +820,22 @@ function IntegrationCard({
       {isRealClassroom && (
         <div className="integration-helper integration-real-classroom-note">
           <p>No Google account connected yet.</p>
-          <p>Real Google Classroom will use secure sign-in and read-only Classroom access.</p>
-          <p>Sample Classroom is available now for local testing.</p>
+          <p>Prototype connection uses secure sign-in and read-only Classroom access.</p>
+          <p>Assignments are not imported yet. Sample Classroom is still available for local testing.</p>
         </div>
       )}
       {isRealClassroom && (
         <RealClassroomSetupStatus setup={realClassroomSetup} />
+      )}
+      {isRealClassroom && (
+        <RealClassroomCourseReview
+          courseState={realClassroomCourses}
+          selections={realClassroomCourseSelections}
+          onSelectCourse={onSelectRealClassroomCourse}
+          onIncludeAll={onIncludeAllRealClassroomCourses}
+          onIgnoreAll={onIgnoreAllRealClassroomCourses}
+          onResetChoices={onResetRealClassroomCourseSelections}
+        />
       )}
       {isLinkedSample && (
         <dl className="integration-sync-meta" aria-label="Sample sync status">
@@ -761,16 +920,25 @@ function IntegrationCard({
                 className="integration-oauth-prototype-link"
                 href="/api/google-classroom/connect"
               >
-                Open Google permission screen
-              </a>
-              <button type="button" className="integration-link-button" disabled>
                 Connect Google Classroom
+              </a>
+              <button
+                type="button"
+                className="integration-sync-button"
+                onClick={onLoadRealClassroomCourses}
+                disabled={realClassroomCourses.loading}
+              >
+                {realClassroomCourses.loading
+                  ? "Loading courses..."
+                  : realClassroomCourses.courses.length > 0
+                    ? "Refresh courses"
+                    : "Load Classroom courses"}
               </button>
               <button type="button" className="integration-sync-button" disabled>
-                Sync now
+                Sync assignments later
               </button>
               <button type="button" className="integration-link-button" disabled>
-                Unlink
+                Unlink later
               </button>
             </>
           ) : (
@@ -781,6 +949,117 @@ function IntegrationCard({
         )}
       </div>
     </article>
+  );
+}
+
+function RealClassroomCourseReview({
+  courseState,
+  selections,
+  onSelectCourse,
+  onIncludeAll,
+  onIgnoreAll,
+  onResetChoices,
+}) {
+  const courses = courseState.courses;
+  const hasLoaded = courseState.lastCheckedAt || courseState.error;
+
+  if (!hasLoaded && !courseState.loading) {
+    return (
+      <div className="real-classroom-course-review">
+        <strong>Class review</strong>
+        <p>
+          Load read-only courses, then choose which classes Student Hub should
+          use later. Assignments are not imported yet.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="real-classroom-course-review" aria-live="polite">
+      <div className="real-classroom-review-heading">
+        <div>
+          <strong>Class review</strong>
+          <p>
+            {courseState.loading
+              ? "Loading active Classroom courses..."
+              : courseState.error ||
+                courseState.message ||
+                "Choose which classes Student Hub should use later."}
+          </p>
+        </div>
+        {courseState.lastCheckedAt && (
+          <span>{formatConnectionTime(courseState.lastCheckedAt)}</span>
+        )}
+      </div>
+
+      {courseState.summary && (
+        <div className="real-classroom-course-summary">
+          <span>{courseState.summary.count || 0} active courses found</span>
+          <span>No tasks created</span>
+        </div>
+      )}
+
+      {courses.length > 0 && (
+        <>
+          <div className="real-classroom-course-actions">
+            <button type="button" onClick={onIncludeAll}>
+              Include all
+            </button>
+            <button type="button" onClick={onIgnoreAll}>
+              Ignore all
+            </button>
+            <button type="button" onClick={onResetChoices}>
+              Reset choices
+            </button>
+          </div>
+
+          <div className="real-classroom-course-list">
+            {courses.map((course) => {
+              const courseId = course.classroomCourseId || course.externalId;
+              const selection = selections[courseId] || "needs-review";
+
+              return (
+                <article className="real-classroom-course-row" key={courseId}>
+                  <div>
+                    <h4>{course.name}</h4>
+                    <p>{course.section || "No section"}</p>
+                  </div>
+                  <span className={`real-classroom-course-chip ${selection}`}>
+                    {selection === "included"
+                      ? "Included"
+                      : selection === "ignored"
+                        ? "Ignored"
+                        : "Needs review"}
+                  </span>
+                  <div className="real-classroom-course-choice">
+                    <button
+                      type="button"
+                      className={selection === "included" ? "is-selected" : ""}
+                      onClick={() => onSelectCourse(courseId, "included")}
+                    >
+                      Include
+                    </button>
+                    <button
+                      type="button"
+                      className={selection === "ignored" ? "is-selected" : ""}
+                      onClick={() => onSelectCourse(courseId, "ignored")}
+                    >
+                      Ignore
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <p className="real-classroom-storage-note">
+        Only include/ignore choices are saved locally. No Google tokens are
+        stored in localStorage.
+      </p>
+    </div>
   );
 }
 
