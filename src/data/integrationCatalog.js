@@ -4,6 +4,7 @@ export const integrationStatusLabels = {
   "linked-sample": "Linked · Sample",
   "coming-soon": "Coming soon",
   "planned-later": "Planned later",
+  beta: "Beta",
 };
 
 export const integrationCatalog = [
@@ -25,8 +26,8 @@ export const integrationCatalog = [
     name: "Google Classroom",
     provider: "Google",
     description:
-      "Connect your real Google Classroom account later to import courses and assignments.",
-    status: "coming-soon",
+      "Connect Google Classroom to bring school assignments into Student Hub.",
+    status: "beta",
     enabled: false,
     canLink: false,
     canUnlink: false,

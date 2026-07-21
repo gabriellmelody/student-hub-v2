@@ -605,11 +605,15 @@ function IntegrationsSettings({
   const importedCount = tasks.filter(
     (task) => task.source === "classroom-mock"
   ).length;
+  const realClassroomImportedCount = tasks.filter(
+    (task) => task.source === REAL_CLASSROOM_SOURCE
+  ).length;
   const [showMockPreview, setShowMockPreview] = useState(false);
   const [showRealClassroomReview, setShowRealClassroomReview] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [syncMessage, setSyncMessage] = useState("");
   const [classroomCleanupMessage, setClassroomCleanupMessage] = useState("");
+  const [successToast, setSuccessToast] = useState(null);
   const [realClassroomSetup, setRealClassroomSetup] = useState({
     checking: false,
     result: null,
@@ -785,6 +789,25 @@ function IntegrationsSettings({
   useEffect(() => {
     checkRealClassroomSession();
   }, []);
+
+  useEffect(() => {
+    if (classroomCallbackStatus?.result !== "connected") return;
+
+    setSuccessToast({
+      title: "Google Classroom connected",
+      summary: "Ready to manage classes",
+    });
+  }, [classroomCallbackStatus]);
+
+  useEffect(() => {
+    if (!successToast) return undefined;
+
+    const toastTimer = window.setTimeout(() => {
+      setSuccessToast(null);
+    }, 3400);
+
+    return () => window.clearTimeout(toastTimer);
+  }, [successToast]);
 
   function syncSampleClassroom({ link = false } = {}) {
     const courseLinks = loadMockClassroomCourseLinks();
@@ -1011,6 +1034,12 @@ function IntegrationsSettings({
       if (loadedCourses.length > 0) {
         setShowRealClassroomReview(true);
       }
+      setSuccessToast({
+        title: "Google Classroom ready",
+        summary: `${loadedCourses.length} class${
+          loadedCourses.length === 1 ? "" : "es"
+        } found`,
+      });
     } catch {
       setRealClassroomCourses((currentState) => ({
         ...currentState,
@@ -1322,7 +1351,7 @@ function IntegrationsSettings({
             result.status === "classroom_submission_status_permission_error"
               ? "Student Hub can read assignments but not submission status yet. Reconnect Google Classroom or check school permissions."
               : result.status === "classroom_coursework_permission_error"
-              ? "Student Hub needs coursework access. Reconnect Google Classroom and approve read-only coursework permission."
+              ? "Student Hub needs assignment access. Reconnect Google Classroom and approve read-only access."
               : result.message || "Could not preview Classroom assignments.",
         }));
         return;
@@ -1438,6 +1467,10 @@ function IntegrationsSettings({
       } updated · ${result.skippedCount} already up to date or skipped · 0 duplicates created · 0 manual tasks changed · 0 tasks deleted.`,
       importResult: result,
     }));
+    setSuccessToast({
+      title: "Assignments imported",
+      summary: `${result.importedCount} imported · ${result.updatedCount} updated · 0 duplicates`,
+    });
   }
 
   function updateRealClassroomAssignmentSelection(assignmentId, selected) {
@@ -1501,7 +1534,7 @@ function IntegrationsSettings({
             <p className="settings-group-label">Connections</p>
             <h3>School tools in one place</h3>
             <p>
-              Preview what is planned. No external services are connected yet.
+              Manage Classroom, sample data, and future school tools.
             </p>
           </div>
           <span>Local workspace</span>
@@ -1524,14 +1557,14 @@ function IntegrationsSettings({
               realClassroomCourses={realClassroomCourses}
               realClassroomCourseSelections={realClassroomCourseSelections}
               realClassroomCleanup={realClassroomCleanup}
+              realClassroomImportedCount={realClassroomImportedCount}
+              realClassroomLinkedSubjectCount={
+                Object.keys(realClassroomCourseSubjectLinks).length
+              }
               onLink={() => setPendingAction("link")}
               onSync={() => syncSampleClassroom()}
               onUnlink={() => setPendingAction("unlink")}
               onRemove={() => setPendingAction("remove")}
-              onArchiveNoDueDateClassroomTasks={() =>
-                setPendingAction("archive-real-no-due")
-              }
-              onRestoreArchivedClassroomTasks={restoreArchivedRealClassroomTasks}
               onPreview={() => setShowMockPreview(true)}
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
@@ -1559,6 +1592,7 @@ function IntegrationsSettings({
           onSelectCourse={updateRealClassroomCourseSelection}
           onSelectSubject={updateRealClassroomCourseSubject}
           onCreateSubject={createSubjectFromRealClassroomCourse}
+          cleanup={realClassroomCleanup}
           assignmentPreview={realClassroomAssignmentPreview}
           importedClassroomTasks={getImportedClassroomTaskMap(tasks)}
           onPreviewAssignments={previewRealClassroomAssignments}
@@ -1580,6 +1614,10 @@ function IntegrationsSettings({
             updateAllRealClassroomCourseSelections("ignored")
           }
           onResetChoices={resetRealClassroomCourseSelections}
+          onArchiveNoDueDateClassroomTasks={() =>
+            setPendingAction("archive-real-no-due")
+          }
+          onRestoreArchivedClassroomTasks={restoreArchivedRealClassroomTasks}
           onClose={() => setShowRealClassroomReview(false)}
         />
       )}
@@ -1592,6 +1630,14 @@ function IntegrationsSettings({
           onConfirm={confirmAction}
         />
       )}
+
+      {successToast && (
+        <ClassroomSuccessToast
+          title={successToast.title}
+          summary={successToast.summary}
+          onClose={() => setSuccessToast(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1601,9 +1647,9 @@ function RealClassroomReturnStatus({ status }) {
   const courseCheckFailed = status.status === "courses_fetch_failed";
   const message = connected
     ? courseCheckFailed
-      ? "Google Classroom connected for this browser. Courses were not checked during return, so try loading them here."
-      : "Google Classroom connected for this browser. Read-only courses are available; assignments are not imported yet."
-    : "Google Classroom did not finish connecting. Try again from the Google Classroom card.";
+      ? "Connected. Open Manage Classroom to load classes."
+      : "Connected. Open Manage Classroom to choose classes."
+    : "Google Classroom did not finish connecting. Try again.";
 
   return (
     <div
@@ -1622,6 +1668,21 @@ function RealClassroomReturnStatus({ status }) {
   );
 }
 
+function ClassroomSuccessToast({ title, summary, onClose }) {
+  return (
+    <div className="classroom-success-toast" role="status" aria-live="polite">
+      <button type="button" aria-label="Dismiss success message" onClick={onClose}>
+        x
+      </button>
+      <div className="classroom-success-check" aria-hidden="true">
+        <span>✓</span>
+      </div>
+      <strong>{title}</strong>
+      <p>{summary}</p>
+    </div>
+  );
+}
+
 function IntegrationCard({
   integration,
   classroomConnection,
@@ -1632,12 +1693,12 @@ function IntegrationCard({
   realClassroomCourses,
   realClassroomCourseSelections,
   realClassroomCleanup,
+  realClassroomImportedCount,
+  realClassroomLinkedSubjectCount,
   onLink,
   onSync,
   onUnlink,
   onRemove,
-  onArchiveNoDueDateClassroomTasks,
-  onRestoreArchivedClassroomTasks,
   onPreview,
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
@@ -1650,6 +1711,10 @@ function IntegrationCard({
       ? "linked-sample"
       : "not-linked"
     : integration.status;
+  const { includedCount } = getRealClassroomCourseCounts(
+    realClassroomCourses.courses,
+    realClassroomCourseSelections
+  );
 
   return (
     <article className="integration-card">
@@ -1678,80 +1743,18 @@ function IntegrationCard({
       )}
       {isRealClassroom && (
         <div className="integration-helper integration-real-classroom-note">
-          <p>Connect with read-only Classroom access for this browser.</p>
-          <p>Assignments are not imported yet. Choose classes before importing later.</p>
+          <p>Connect, manage classes, preview assignments, import selected.</p>
         </div>
       )}
       {isRealClassroom && (
-        <RealClassroomSetupStatus setup={realClassroomSetup} />
-      )}
-      {isRealClassroom && (
-        <RealClassroomConnectionStatus
+        <RealClassroomCompactStatus
           session={realClassroomSession}
-          setup={realClassroomSetup}
-        />
-      )}
-      {isRealClassroom && (
-        <RealClassroomCourseSummary
           courseState={realClassroomCourses}
-          selections={realClassroomCourseSelections}
+          includedCount={includedCount}
+          linkedCount={realClassroomLinkedSubjectCount}
+          importedCount={realClassroomImportedCount}
+          archivedCount={realClassroomCleanup.archivedCount}
         />
-      )}
-      {isRealClassroom && (
-        <div className="real-classroom-cleanup-card">
-          <div>
-            <strong>Classroom cleanup</strong>
-            <p>
-              No-due-date Classroom items can be noisy. Due-date tasks stay
-              active.
-            </p>
-          </div>
-          <dl>
-            <div>
-              <dt>No-due-date Classroom tasks can be archived</dt>
-              <dd>{realClassroomCleanup.candidateCount}</dd>
-            </div>
-            <div>
-              <dt>Classroom tasks with due dates stay active</dt>
-              <dd>{realClassroomCleanup.dueDateActiveCount}</dd>
-            </div>
-            <div>
-              <dt>Manual tasks will not be touched</dt>
-              <dd>{realClassroomCleanup.manualSafeCount}</dd>
-            </div>
-            <div>
-              <dt>Already archived Classroom tasks</dt>
-              <dd>{realClassroomCleanup.archivedCount}</dd>
-            </div>
-          </dl>
-          {realClassroomCleanup.message && (
-            <p className="integration-card-message" aria-live="polite">
-              {realClassroomCleanup.message}
-            </p>
-          )}
-          <div className="real-classroom-cleanup-actions">
-            <button
-              type="button"
-              onClick={onArchiveNoDueDateClassroomTasks}
-              disabled={realClassroomCleanup.candidateCount === 0}
-            >
-              Archive no-due-date Classroom items
-            </button>
-            {realClassroomCleanup.archivedCount > 0 && (
-              <button
-                type="button"
-                onClick={onRestoreArchivedClassroomTasks}
-              >
-                Restore archived Classroom items
-              </button>
-            )}
-          </div>
-          <small>
-            {realClassroomCleanup.candidateCount === 0
-              ? "No no-due-date Classroom tasks to archive."
-              : "Archive hides items from active views. Nothing is deleted."}
-          </small>
-        </div>
       )}
       {isLinkedSample && (
         <dl className="integration-sync-meta" aria-label="Sample sync status">
@@ -1826,29 +1829,31 @@ function IntegrationCard({
             <>
               <button
                 type="button"
-                className="integration-setup-button"
-                onClick={onCheckRealClassroomSetup}
-                disabled={realClassroomSetup.checking}
-              >
-                {realClassroomSetup.checking ? "Checking..." : "Check setup"}
-              </button>
-              <a
-                className="integration-oauth-prototype-link"
-                href="/api/google-classroom/connect"
-              >
-                Connect Google Classroom
-              </a>
-              <button
-                type="button"
-                className="integration-sync-button"
+                className="integration-preview-button"
                 onClick={onLoadRealClassroomCourses}
                 disabled={realClassroomCourses.loading}
               >
                 {realClassroomCourses.loading
                   ? "Loading classes..."
                   : realClassroomCourses.courses.length > 0
-                    ? "Manage / refresh classes"
-                    : "Load Classroom courses"}
+                    ? "Manage Classroom"
+                    : "Manage Classroom"}
+              </button>
+              <a
+                className="integration-oauth-prototype-link secondary"
+                href="/api/google-classroom/connect"
+              >
+                {realClassroomSession.connected
+                  ? "Reconnect"
+                  : "Connect Google Classroom"}
+              </a>
+              <button
+                type="button"
+                className="integration-setup-button secondary"
+                onClick={onCheckRealClassroomSetup}
+                disabled={realClassroomSetup.checking}
+              >
+                {realClassroomSetup.checking ? "Checking..." : "Check setup"}
               </button>
             </>
           ) : (
@@ -1915,6 +1920,52 @@ function RealClassroomCourseSummary({ courseState, selections }) {
   );
 }
 
+function RealClassroomCompactStatus({
+  session,
+  courseState,
+  includedCount,
+  linkedCount,
+  importedCount,
+  archivedCount,
+}) {
+  const connected = session.connected === true;
+  const classesLoaded = courseState.courses.length;
+
+  return (
+    <div className="real-classroom-compact-status" aria-live="polite">
+      <div>
+        <strong>{connected ? "Connected" : "Not connected"}</strong>
+        <span>{connected ? "Ready to manage" : "Connect to start"}</span>
+      </div>
+      <dl>
+        <div>
+          <dt>Classes</dt>
+          <dd>{classesLoaded}</dd>
+        </div>
+        <div>
+          <dt>Included</dt>
+          <dd>{includedCount}</dd>
+        </div>
+        <div>
+          <dt>Linked</dt>
+          <dd>{linkedCount}</dd>
+        </div>
+        <div>
+          <dt>Tasks</dt>
+          <dd>{importedCount}</dd>
+        </div>
+        <div>
+          <dt>Archived</dt>
+          <dd>{archivedCount}</dd>
+        </div>
+      </dl>
+      {courseState.lastCheckedAt && (
+        <small>Last sync {formatConnectionTime(courseState.lastCheckedAt)}</small>
+      )}
+    </div>
+  );
+}
+
 function RealClassroomCourseReviewModal({
   courseState,
   selections,
@@ -1923,6 +1974,7 @@ function RealClassroomCourseReviewModal({
   onSelectCourse,
   onSelectSubject,
   onCreateSubject,
+  cleanup,
   assignmentPreview,
   importedClassroomTasks,
   onPreviewAssignments,
@@ -1934,6 +1986,8 @@ function RealClassroomCourseReviewModal({
   onIncludeAll,
   onIgnoreAll,
   onResetChoices,
+  onArchiveNoDueDateClassroomTasks,
+  onRestoreArchivedClassroomTasks,
   onClose,
 }) {
   const courses = courseState.courses;
@@ -1978,10 +2032,10 @@ function RealClassroomCourseReviewModal({
           <div>
             <p className="settings-group-label">Real Google Classroom</p>
             <h3 id="real-classroom-review-title">
-              Review Google Classroom classes
+              Manage Classroom
             </h3>
             <p>
-              Choose classes, link Subjects, then preview assignments.
+              Choose classes, link Subjects, then import selected assignments.
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close class review">
@@ -2000,10 +2054,9 @@ function RealClassroomCourseReviewModal({
           <span>
             {unlinkedIncludedCount}{" "}
             {unlinkedIncludedCount === 1
-              ? "needs subject link"
-              : "need subject links"}
+              ? "needs Subject"
+              : "need Subjects"}
           </span>
-          <span>No tasks created</span>
         </div>
 
         <div
@@ -2029,6 +2082,15 @@ function RealClassroomCourseReviewModal({
           >
             Assignment preview
           </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeReviewTab === "cleanup"}
+            className={activeReviewTab === "cleanup" ? "active" : ""}
+            onClick={() => setActiveReviewTab("cleanup")}
+          >
+            Cleanup
+          </button>
         </div>
 
         {activeReviewTab === "classes" ? (
@@ -2037,7 +2099,7 @@ function RealClassroomCourseReviewModal({
               <div>
                 <strong>Classes & subjects</strong>
                 <p>
-                  Pick classes and match them to Student Hub Subjects.
+                  Pick classes and match them to Subjects.
                 </p>
               </div>
               <button
@@ -2054,8 +2116,8 @@ function RealClassroomCourseReviewModal({
             {unlinkedIncludedCount > 0 && (
               <p className="real-classroom-preview-warning">
                 {unlinkedIncludedCount} included class
-                {unlinkedIncludedCount === 1 ? "" : "es"} not linked to
-                subjects yet. Preview is available; import will need links.
+                {unlinkedIncludedCount === 1 ? "" : "es"} need a Subject before
+                import.
               </p>
             )}
 
@@ -2101,20 +2163,36 @@ function RealClassroomCourseReviewModal({
                           : "Needs review"}
                     </span>
                     <div className="real-classroom-course-choice">
-                      <button
-                        type="button"
-                        className={selection === "included" ? "is-selected" : ""}
-                        onClick={() => onSelectCourse(courseId, "included")}
-                      >
-                        Include
-                      </button>
-                      <button
-                        type="button"
-                        className={selection === "ignored" ? "is-selected" : ""}
-                        onClick={() => onSelectCourse(courseId, "ignored")}
-                      >
-                        Ignore
-                      </button>
+                      {selection === "included" ? (
+                        <button
+                          type="button"
+                          onClick={() => onSelectCourse(courseId, "ignored")}
+                        >
+                          Ignore
+                        </button>
+                      ) : selection === "ignored" ? (
+                        <button
+                          type="button"
+                          onClick={() => onSelectCourse(courseId, "included")}
+                        >
+                          Include
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => onSelectCourse(courseId, "included")}
+                          >
+                            Include
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onSelectCourse(courseId, "ignored")}
+                          >
+                            Ignore
+                          </button>
+                        </>
+                      )}
                     </div>
                     {selection === "included" && (
                       <div className="real-classroom-subject-link">
@@ -2163,13 +2241,13 @@ function RealClassroomCourseReviewModal({
               })}
             </div>
           </section>
-        ) : (
+        ) : activeReviewTab === "assignments" ? (
           <section className="real-classroom-tab-panel real-classroom-tab-panel--assignments">
             <div className="real-classroom-tab-heading">
               <div>
                 <strong>Assignment preview</strong>
                 <p>
-                  Sync the latest preview, then apply only selected changes.
+                  Review what to add or update.
                 </p>
               </div>
               <button
@@ -2200,13 +2278,66 @@ function RealClassroomCourseReviewModal({
               onSelectDueAssignments={onSelectDueAssignments}
             />
           </section>
+        ) : (
+          <section className="real-classroom-tab-panel real-classroom-tab-panel--cleanup">
+            <div className="real-classroom-tab-heading">
+              <div>
+                <strong>Cleanup</strong>
+                <p>No-due-date Classroom items can be noisy.</p>
+              </div>
+            </div>
+            <div className="real-classroom-cleanup-card">
+              <dl>
+                <div>
+                  <dt>Can archive</dt>
+                  <dd>{cleanup.candidateCount}</dd>
+                </div>
+                <div>
+                  <dt>Due dates stay</dt>
+                  <dd>{cleanup.dueDateActiveCount}</dd>
+                </div>
+                <div>
+                  <dt>Manual kept</dt>
+                  <dd>{cleanup.manualSafeCount}</dd>
+                </div>
+                <div>
+                  <dt>Archived</dt>
+                  <dd>{cleanup.archivedCount}</dd>
+                </div>
+              </dl>
+              {cleanup.message && (
+                <p className="integration-card-message" aria-live="polite">
+                  {cleanup.message}
+                </p>
+              )}
+              <div className="real-classroom-cleanup-actions">
+                <button
+                  type="button"
+                  onClick={onArchiveNoDueDateClassroomTasks}
+                  disabled={cleanup.candidateCount === 0}
+                >
+                  Archive no-due-date items
+                </button>
+                {cleanup.archivedCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={onRestoreArchivedClassroomTasks}
+                  >
+                    Restore archived items
+                  </button>
+                )}
+              </div>
+              <small>
+                {cleanup.candidateCount === 0
+                  ? "No no-due-date Classroom tasks to archive."
+                  : "Due-date tasks are never auto-archived."}
+              </small>
+            </div>
+          </section>
         )}
 
         <footer className="real-classroom-modal-footer">
-          <p>
-            Choices and Subject links are saved locally. Google tokens are not
-            stored in localStorage.
-          </p>
+          <p>Choices and Subject links are saved on this device.</p>
           <button type="button" onClick={onClose}>
             Done
           </button>
@@ -2314,7 +2445,7 @@ function RealClassroomAssignmentPreview({
       <div className="real-classroom-assignment-preview-header">
         <div>
           <strong>Assignment preview</strong>
-          <p>Refresh from Classroom, then apply only selected assignments.</p>
+          <p>Only selected assignments become Student Hub tasks.</p>
         </div>
         {preview.summary && (
           <span>
@@ -2329,8 +2460,7 @@ function RealClassroomAssignmentPreview({
           <div>
             <strong>Import / sync selected</strong>
             <p>
-              Checked items can create new tasks or update imported Classroom
-              tasks.
+              Turned-in and no-due-date items are shown but not selected.
             </p>
             <small>
               {selectedCount} selected · {importableCount} new · {updatedCount} updated · {importedCount} already imported
@@ -2347,6 +2477,21 @@ function RealClassroomAssignmentPreview({
           >
             {importButtonLabel}
           </button>
+        </div>
+      )}
+
+      {preview.importResult && (
+        <div className="real-classroom-inline-success" aria-live="polite">
+          <div className="classroom-success-check small" aria-hidden="true">
+            <span>✓</span>
+          </div>
+          <div>
+            <strong>Assignments imported</strong>
+            <p>
+              {preview.importResult.importedCount} imported ·{" "}
+              {preview.importResult.updatedCount} updated · 0 duplicates
+            </p>
+          </div>
         </div>
       )}
 
@@ -2396,9 +2541,8 @@ function RealClassroomAssignmentPreview({
             </button>
           </div>
           <p>
-            Student Hub checks Classroom submission status.
-            New or updated due-date assignments are selected by default.
-            Turned-in, no-due-date, and unchanged items stay unchecked.
+            Due-date active work and missing work are selected by default.
+            Turned-in and no-due-date items are not.
           </p>
         </div>
       )}
