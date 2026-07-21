@@ -95,8 +95,39 @@ function formatGoogleTime(timeValue) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-function normalizeCourseworkItem(course, coursework) {
+function getClassroomStatusCategory({ dueDate, submission }) {
+  const submissionState = safeString(submission?.state).toUpperCase();
+  const late = submission?.late === true;
+
+  if (submissionState === "TURNED_IN") return "done";
+  if (submissionState === "RETURNED") return "returned";
+  if (late) return "missing";
+  if (!dueDate) return "no_due_date";
+  if (
+    ["NEW", "CREATED", "RECLAIMED_BY_STUDENT", ""].includes(submissionState)
+  ) {
+    return "active";
+  }
+
+  return "unknown";
+}
+
+function safeReturnedGrade(value, submissionState) {
+  const numericValue = Number(value);
+
+  return submissionState === "RETURNED" && Number.isFinite(numericValue)
+    ? numericValue
+    : null;
+}
+
+function normalizeCourseworkItem(course, coursework, submission = null) {
   const courseworkId = safeString(coursework?.id);
+  const dueDate = formatGoogleDate(coursework?.dueDate);
+  const submissionState = safeString(submission?.state).toUpperCase();
+  const classroomStatusCategory = getClassroomStatusCategory({
+    dueDate,
+    submission,
+  });
 
   return {
     source: "classroom",
@@ -107,13 +138,20 @@ function normalizeCourseworkItem(course, coursework) {
     linkedSubjectName: course.linkedSubjectName,
     title: safeString(coursework?.title, "Untitled assignment"),
     description: safeString(coursework?.description),
-    dueDate: formatGoogleDate(coursework?.dueDate),
+    dueDate,
     dueTime: formatGoogleTime(coursework?.dueTime),
     alternateLink: safeString(coursework?.alternateLink),
     state: safeString(coursework?.state),
     workType: safeString(coursework?.workType),
     creationTime: safeString(coursework?.creationTime),
     updateTime: safeString(coursework?.updateTime),
+    submissionId: safeString(submission?.id),
+    submissionState,
+    late: submission?.late === true,
+    assignedGrade: safeReturnedGrade(submission?.assignedGrade, submissionState),
+    draftGrade: safeReturnedGrade(submission?.draftGrade, submissionState),
+    submissionUpdatedAt: safeString(submission?.updateTime),
+    classroomStatusCategory,
   };
 }
 
@@ -158,11 +196,7 @@ async function fetchCourseworkForCourse(course, accessToken) {
     }
 
     if (Array.isArray(courseworkJson?.courseWork)) {
-      coursework.push(
-        ...courseworkJson.courseWork.map((item) =>
-          normalizeCourseworkItem(course, item)
-        )
-      );
+      coursework.push(...courseworkJson.courseWork);
     }
 
     pageToken = safeString(courseworkJson?.nextPageToken);
@@ -171,6 +205,60 @@ async function fetchCourseworkForCourse(course, accessToken) {
   return {
     ok: true,
     coursework,
+  };
+}
+
+async function fetchStudentSubmissionsForCourse(course, accessToken) {
+  const submissions = [];
+  let pageToken = "";
+
+  do {
+    const submissionsUrl = new URL(
+      `https://classroom.googleapis.com/v1/courses/${encodeURIComponent(
+        course.classroomCourseId
+      )}/courseWork/-/studentSubmissions`
+    );
+
+    submissionsUrl.searchParams.set("userId", "me");
+    submissionsUrl.searchParams.set("pageSize", "100");
+    if (pageToken) submissionsUrl.searchParams.set("pageToken", pageToken);
+
+    const submissionsResponse = await fetch(submissionsUrl.toString(), {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    const submissionsJson = await readSafeJson(submissionsResponse);
+
+    if (!submissionsResponse.ok) {
+      return {
+        ok: false,
+        status:
+          submissionsResponse.status === 403
+            ? "classroom_submission_status_permission_error"
+            : "student_submissions_fetch_failed",
+        message:
+          submissionsResponse.status === 403
+            ? "Student Hub can read assignments but not submission status yet. Reconnect Google Classroom or check school permissions."
+            : `Student Hub could not read submission status for ${course.classroomCourseName || "one class"}.`,
+        googleError: getSafeGoogleError(
+          submissionsJson,
+          "Google Classroom student submissions endpoint returned an unexpected response."
+        ),
+      };
+    }
+
+    if (Array.isArray(submissionsJson?.studentSubmissions)) {
+      submissions.push(...submissionsJson.studentSubmissions);
+    }
+
+    pageToken = safeString(submissionsJson?.nextPageToken);
+  } while (pageToken);
+
+  return {
+    ok: true,
+    submissions,
   };
 }
 
@@ -251,7 +339,43 @@ export default async function handler(request, response) {
         return;
       }
 
-      previewItems.push(...courseResult.coursework);
+      const submissionsResult = await fetchStudentSubmissionsForCourse(
+        course,
+        sessionResult.session.access_token
+      );
+
+      if (!submissionsResult.ok) {
+        response
+          .status(
+            submissionsResult.status === "classroom_submission_status_permission_error"
+              ? 403
+              : 502
+          )
+          .json({
+            ok: false,
+            status: submissionsResult.status,
+            connected: true,
+            message: submissionsResult.message,
+            googleError: submissionsResult.googleError,
+          });
+        return;
+      }
+
+      const submissionByCourseworkId = new Map(
+        submissionsResult.submissions
+          .filter((submission) => safeString(submission?.courseWorkId))
+          .map((submission) => [safeString(submission.courseWorkId), submission])
+      );
+
+      previewItems.push(
+        ...courseResult.coursework.map((coursework) =>
+          normalizeCourseworkItem(
+            course,
+            coursework,
+            submissionByCourseworkId.get(safeString(coursework?.id)) || null
+          )
+        )
+      );
     }
 
     previewItems.sort((left, right) => {

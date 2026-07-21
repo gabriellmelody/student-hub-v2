@@ -34,6 +34,15 @@ import {
 const REAL_CLASSROOM_COURSE_SELECTIONS_KEY =
   "studentHub.realClassroomCourseSelections";
 const REAL_CLASSROOM_SOURCE = "classroom";
+const CLASSROOM_STATUS_LABELS = {
+  active: "Assigned",
+  missing: "Missing",
+  done: "Turned in",
+  returned: "Returned",
+  no_due_date: "No due date",
+  unknown: "Unknown status",
+};
+const CLASSROOM_DONE_CATEGORIES = new Set(["done", "returned"]);
 const COMMON_CLASSROOM_SUBJECTS = [
   ["world studies", "World Studies"],
   ["computer science", "Computer Science"],
@@ -137,6 +146,13 @@ function hasClassroomAssignmentChanges(assignment, existingTask) {
     ["dueTime", assignment.dueTime],
     ["alternateLink", assignment.alternateLink],
     ["classroomCourseName", assignment.classroomCourseName],
+    ["submissionId", assignment.submissionId],
+    ["submissionState", assignment.submissionState],
+    ["classroomStatusCategory", assignment.classroomStatusCategory],
+    ["late", assignment.late === true ? "true" : "false"],
+    ["assignedGrade", assignment.assignedGrade],
+    ["draftGrade", assignment.draftGrade],
+    ["submissionUpdatedAt", assignment.submissionUpdatedAt],
     ["sourceUpdatedAt", sourceUpdatedAt],
   ].some(
     ([field, value]) => String(existingTask[field] || "") !== String(value || "")
@@ -149,13 +165,24 @@ function getClassroomAssignmentSyncStatus({
   linkedCourseIds,
 }) {
   const hasDueDate = hasRealDueDate(assignment.dueDate);
+  const category = assignment.classroomStatusCategory || "unknown";
   const isImported = Boolean(existingTask);
   const isUpdated = isImported && hasClassroomAssignmentChanges(assignment, existingTask);
   const isUnlinked = !linkedCourseIds.has(assignment.classroomCourseId);
   const badges = [];
 
   if (isUnlinked) badges.push({ label: "Unlinked subject", tone: "warning" });
-  if (!hasDueDate) badges.push({ label: "No due date", tone: "muted" });
+  badges.push({
+    label: CLASSROOM_STATUS_LABELS[category] || "Unknown status",
+    tone:
+      category === "missing"
+        ? "warning"
+        : CLASSROOM_DONE_CATEGORIES.has(category)
+          ? "done"
+          : category === "no_due_date" || category === "unknown"
+            ? "muted"
+            : "active",
+  });
   if (!isImported) {
     badges.push({ label: "New", tone: "new" });
   } else if (isUpdated) {
@@ -166,6 +193,7 @@ function getClassroomAssignmentSyncStatus({
 
   return {
     hasDueDate,
+    category,
     isImported,
     isUpdated,
     isUnlinked,
@@ -1291,7 +1319,9 @@ function IntegrationsSettings({
           ...currentPreview,
           loading: false,
           error:
-            result.status === "classroom_coursework_permission_error"
+            result.status === "classroom_submission_status_permission_error"
+              ? "Student Hub can read assignments but not submission status yet. Reconnect Google Classroom or check school permissions."
+              : result.status === "classroom_coursework_permission_error"
               ? "Student Hub needs coursework access. Reconnect Google Classroom and approve read-only coursework permission."
               : result.message || "Could not preview Classroom assignments.",
         }));
@@ -1317,6 +1347,9 @@ function IntegrationsSettings({
               realClassroomCourseSelections[courseId] === "included" &&
               linkedCourseIds.has(courseId) &&
               hasRealDueDate(assignment.dueDate) &&
+              ["active", "missing"].includes(
+                assignment.classroomStatusCategory || "unknown"
+              ) &&
               (!existingTask ||
                 hasClassroomAssignmentChanges(assignment, existingTask))
             );
@@ -1427,12 +1460,20 @@ function IntegrationsSettings({
     });
   }
 
-  function updateVisibleRealClassroomAssignmentSelection(mode) {
+  function updateVisibleRealClassroomAssignmentSelection(mode, assignmentIds = null) {
     setRealClassroomAssignmentPreview((currentPreview) => {
       const nextSelectedAssignmentIds =
         mode === "clear" ? {} : { ...currentPreview.selectedAssignmentIds };
+      const visibleAssignmentIds = Array.isArray(assignmentIds)
+        ? new Set(assignmentIds)
+        : null;
+      const assignmentsToUpdate = visibleAssignmentIds
+        ? currentPreview.assignments.filter((assignment) =>
+            visibleAssignmentIds.has(assignment.externalId)
+          )
+        : currentPreview.assignments;
 
-      currentPreview.assignments.forEach((assignment) => {
+      assignmentsToUpdate.forEach((assignment) => {
         if (mode === "all" || (mode === "due" && hasRealDueDate(assignment.dueDate))) {
           nextSelectedAssignmentIds[assignment.externalId] = true;
         } else if (mode === "clear" || mode === "due") {
@@ -1523,14 +1564,14 @@ function IntegrationsSettings({
           onPreviewAssignments={previewRealClassroomAssignments}
           onImportAssignments={importPreviewedRealClassroomAssignments}
           onSelectAssignment={updateRealClassroomAssignmentSelection}
-          onSelectAllAssignments={() =>
-            updateVisibleRealClassroomAssignmentSelection("all")
+          onSelectAllAssignments={(assignmentIds) =>
+            updateVisibleRealClassroomAssignmentSelection("all", assignmentIds)
           }
-          onClearAssignmentSelection={() =>
-            updateVisibleRealClassroomAssignmentSelection("clear")
+          onClearAssignmentSelection={(assignmentIds) =>
+            updateVisibleRealClassroomAssignmentSelection("clear", assignmentIds)
           }
-          onSelectDueAssignments={() =>
-            updateVisibleRealClassroomAssignmentSelection("due")
+          onSelectDueAssignments={(assignmentIds) =>
+            updateVisibleRealClassroomAssignmentSelection("due", assignmentIds)
           }
           onIncludeAll={() =>
             updateAllRealClassroomCourseSelections("included")
@@ -2005,8 +2046,8 @@ function RealClassroomCourseReviewModal({
                 disabled={assignmentPreview.loading}
               >
                 {assignmentPreview.loading
-                  ? "Loading assignments..."
-                  : "Preview assignments"}
+                  ? "Syncing..."
+                  : "Refresh from Classroom"}
               </button>
             </div>
 
@@ -2204,7 +2245,26 @@ function RealClassroomAssignmentPreview({
   onClearAssignmentSelection,
   onSelectDueAssignments,
 }) {
-  const groupedAssignments = preview.assignments.reduce((groups, assignment) => {
+  const [assignmentFilter, setAssignmentFilter] = useState("active");
+  const filteredAssignments = preview.assignments.filter((assignment) => {
+    const category = assignment.classroomStatusCategory || "unknown";
+
+    if (assignmentFilter === "all") return true;
+    if (assignmentFilter === "active") {
+      return category === "active" || category === "missing";
+    }
+    if (assignmentFilter === "missing") return category === "missing";
+    if (assignmentFilter === "no_due_date") return category === "no_due_date";
+    if (assignmentFilter === "done") {
+      return CLASSROOM_DONE_CATEGORIES.has(category);
+    }
+
+    return true;
+  });
+  const visibleAssignmentIds = filteredAssignments
+    .map((assignment) => assignment.externalId)
+    .filter(Boolean);
+  const groupedAssignments = filteredAssignments.reduce((groups, assignment) => {
     const groupKey = assignment.classroomCourseId || "unknown-course";
 
     if (!groups[groupKey]) {
@@ -2292,20 +2352,53 @@ function RealClassroomAssignmentPreview({
 
       {hasAssignments && (
         <div className="real-classroom-selection-panel">
+          <div
+            className="real-classroom-assignment-filters"
+            role="group"
+            aria-label="Assignment status filters"
+          >
+            {[
+              ["active", "Active"],
+              ["missing", "Missing"],
+              ["no_due_date", "No due date"],
+              ["done", "Done / turned in"],
+              ["all", "All"],
+            ].map(([value, label]) => (
+              <button
+                type="button"
+                className={assignmentFilter === value ? "active" : ""}
+                aria-pressed={assignmentFilter === value}
+                key={value}
+                onClick={() => setAssignmentFilter(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="real-classroom-selection-actions">
-            <button type="button" onClick={onSelectAllAssignments}>
+            <button
+              type="button"
+              onClick={() => onSelectAllAssignments(visibleAssignmentIds)}
+            >
               Select all visible
             </button>
-            <button type="button" onClick={onClearAssignmentSelection}>
+            <button
+              type="button"
+              onClick={() => onClearAssignmentSelection(visibleAssignmentIds)}
+            >
               Clear selection
             </button>
-            <button type="button" onClick={onSelectDueAssignments}>
+            <button
+              type="button"
+              onClick={() => onSelectDueAssignments(visibleAssignmentIds)}
+            >
               Select due-date assignments
             </button>
           </div>
           <p>
+            Student Hub checks Classroom submission status.
             New or updated due-date assignments are selected by default.
-            No-due-date and unchanged items stay unchecked.
+            Turned-in, no-due-date, and unchanged items stay unchecked.
           </p>
         </div>
       )}
@@ -2334,8 +2427,14 @@ function RealClassroomAssignmentPreview({
       {!preview.loading &&
         !preview.error &&
         !preview.message &&
-        groups.length === 0 && (
+        preview.assignments.length === 0 && (
           <p>Use Refresh from Classroom to load included assignments.</p>
+        )}
+      {!preview.loading &&
+        !preview.error &&
+        preview.assignments.length > 0 &&
+        groups.length === 0 && (
+          <p>No assignments match this filter.</p>
         )}
 
       {groups.length > 0 && (

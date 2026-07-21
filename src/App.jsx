@@ -411,7 +411,16 @@ function App() {
     return () => clearTimeout(planMoveFeedbackTimerRef.current);
   }, []);
 
-  const visibleTasks = tasks.filter((task) => !task.archived);
+  function isCompletedInClassroom(task) {
+    return (
+      task.source === "classroom" &&
+      ["done", "returned"].includes(task.classroomStatusCategory)
+    );
+  }
+
+  const visibleTasks = tasks.filter(
+    (task) => !task.archived && !isCompletedInClassroom(task)
+  );
 
   const activeTasks = sortTasksForDisplay(
     visibleTasks.filter((task) => {
@@ -737,6 +746,13 @@ function App() {
       alternateLink: assignment.alternateLink || "",
       workType: assignment.workType || "",
       state: assignment.state || "",
+      submissionId: assignment.submissionId || null,
+      submissionState: assignment.submissionState || "",
+      classroomStatusCategory: assignment.classroomStatusCategory || "unknown",
+      late: assignment.late === true,
+      assignedGrade: assignment.assignedGrade ?? null,
+      draftGrade: assignment.draftGrade ?? null,
+      submissionUpdatedAt: assignment.submissionUpdatedAt || null,
       importedAt,
       sourceUpdatedAt: assignment.updateTime || assignment.sourceUpdatedAt || null,
       lastSyncedAt: importedAt,
@@ -760,6 +776,13 @@ function App() {
       "alternateLink",
       "workType",
       "state",
+      "submissionId",
+      "submissionState",
+      "classroomStatusCategory",
+      "late",
+      "assignedGrade",
+      "draftGrade",
+      "submissionUpdatedAt",
       "sourceUpdatedAt",
     ].some(
       (field) => String(existingTask[field] || "") !== String(classroomTask[field] || "")
@@ -839,6 +862,13 @@ function App() {
           alternateLink: classroomTask.alternateLink,
           workType: classroomTask.workType,
           state: classroomTask.state,
+          submissionId: classroomTask.submissionId,
+          submissionState: classroomTask.submissionState,
+          classroomStatusCategory: classroomTask.classroomStatusCategory,
+          late: classroomTask.late,
+          assignedGrade: classroomTask.assignedGrade,
+          draftGrade: classroomTask.draftGrade,
+          submissionUpdatedAt: classroomTask.submissionUpdatedAt,
           sourceUpdatedAt: classroomTask.sourceUpdatedAt,
           lastSyncedAt: importedAt,
           subject: existingTask.subject || classroomTask.subject,

@@ -1162,6 +1162,32 @@
   line-height: 1.4;
 }
 
+.real-classroom-assignment-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.real-classroom-assignment-filters button {
+  appearance: none;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 740;
+  cursor: pointer;
+}
+
+.real-classroom-assignment-filters button.active {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+
 .real-classroom-assignment-group-list,
 .real-classroom-assignment-list {
   display: grid;
@@ -1259,6 +1285,12 @@
   color: var(--text-secondary);
 }
 
+.real-classroom-sync-chip.active {
+  border-color: var(--accent-border);
+  background: var(--surface-raised);
+  color: var(--accent-soft);
+}
+
 .real-classroom-sync-chip.imported {
   border-color: var(--effort-low-border);
   background: var(--effort-low-bg);
@@ -1269,6 +1301,12 @@
   border-color: var(--effort-high-border);
   background: var(--effort-high-bg);
   color: var(--urgent);
+}
+
+.real-classroom-sync-chip.done {
+  border-color: var(--effort-low-border);
+  background: var(--effort-low-bg);
+  color: var(--safe);
 }
 
 .real-classroom-imported-chip {
