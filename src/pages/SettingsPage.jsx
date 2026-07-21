@@ -701,9 +701,11 @@ function IntegrationsSettings({
         return;
       }
 
+      const loadedCourses = Array.isArray(result.courses) ? result.courses : [];
+
       setRealClassroomCourses({
         loading: false,
-        courses: Array.isArray(result.courses) ? result.courses : [],
+        courses: loadedCourses,
         summary: result.courseSummary || null,
         lastCheckedAt: new Date().toISOString(),
         message:
@@ -719,6 +721,9 @@ function IntegrationsSettings({
         status: "classroom_session_available",
         message: "Google Classroom session active.",
       }));
+      if (loadedCourses.length > 0) {
+        setShowRealClassroomReview(true);
+      }
     } catch {
       setRealClassroomCourses((currentState) => ({
         ...currentState,
@@ -766,6 +771,10 @@ function IntegrationsSettings({
     });
   }
 
+  const visibleIntegrations = integrationCatalog.filter(
+    (integration) => integration.id !== "google-classroom"
+  );
+
   return (
     <div className="integrations-settings">
       <section className="panel integration-control-panel">
@@ -781,7 +790,7 @@ function IntegrationsSettings({
         </div>
 
         <div className="integration-card-grid">
-          {integrationCatalog.map((integration) => (
+          {visibleIntegrations.map((integration) => (
             <IntegrationCard
               integration={integration}
               key={integration.id}
@@ -799,7 +808,6 @@ function IntegrationsSettings({
               onPreview={() => setShowMockPreview(true)}
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
-              onOpenRealClassroomReview={() => setShowRealClassroomReview(true)}
             />
           ))}
         </div>
@@ -858,7 +866,6 @@ function IntegrationCard({
   onPreview,
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
-  onOpenRealClassroomReview,
 }) {
   const isClassroom = integration.id === "google-classroom";
   const isRealClassroom = integration.id === "real-google-classroom";
@@ -896,9 +903,8 @@ function IntegrationCard({
       )}
       {isRealClassroom && (
         <div className="integration-helper integration-real-classroom-note">
-          <p>No Google account connected yet.</p>
-          <p>Prototype connection uses secure sign-in and read-only Classroom access.</p>
-          <p>Assignments are not imported yet. Sample Classroom is still available for local testing.</p>
+          <p>Connect with read-only Classroom access for this browser.</p>
+          <p>Assignments are not imported yet. Choose classes before importing later.</p>
         </div>
       )}
       {isRealClassroom && (
@@ -914,7 +920,6 @@ function IntegrationCard({
         <RealClassroomCourseSummary
           courseState={realClassroomCourses}
           selections={realClassroomCourseSelections}
-          onOpenReview={onOpenRealClassroomReview}
         />
       )}
       {isLinkedSample && (
@@ -1009,16 +1014,10 @@ function IntegrationCard({
                 disabled={realClassroomCourses.loading}
               >
                 {realClassroomCourses.loading
-                  ? "Loading courses..."
+                  ? "Loading classes..."
                   : realClassroomCourses.courses.length > 0
-                    ? "Refresh courses"
+                    ? "Manage / refresh classes"
                     : "Load Classroom courses"}
-              </button>
-              <button type="button" className="integration-sync-button" disabled>
-                Sync assignments later
-              </button>
-              <button type="button" className="integration-link-button" disabled>
-                Unlink later
               </button>
             </>
           ) : (
@@ -1053,9 +1052,8 @@ function getRealClassroomCourseCounts(courses, selections) {
   };
 }
 
-function RealClassroomCourseSummary({ courseState, selections, onOpenReview }) {
+function RealClassroomCourseSummary({ courseState, selections }) {
   const courses = courseState.courses;
-  const hasCourses = courses.length > 0;
   const { includedCount, ignoredCount, needsReviewCount } =
     getRealClassroomCourseCounts(courses, selections);
 
@@ -1080,11 +1078,6 @@ function RealClassroomCourseSummary({ courseState, selections, onOpenReview }) {
       </p>
       {courseState.lastCheckedAt && (
         <small>Last loaded {formatConnectionTime(courseState.lastCheckedAt)}</small>
-      )}
-      {hasCourses && (
-        <button type="button" onClick={onOpenReview}>
-          Review classes
-        </button>
       )}
       <span>Assignments are not imported yet.</span>
     </div>

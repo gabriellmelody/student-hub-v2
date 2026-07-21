@@ -356,8 +356,8 @@
 
 .integration-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  gap: 12px;
   padding: var(--density-panel-padding);
 }
 
@@ -630,10 +630,10 @@
 .real-classroom-course-modal {
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
-  gap: 12px;
-  width: min(860px, calc(100vw - 32px));
-  max-height: min(760px, calc(100vh - 44px));
-  padding: 18px;
+  gap: 14px;
+  width: min(1080px, calc(100vw - 32px));
+  max-height: min(820px, calc(100vh - 40px));
+  padding: 20px;
   border: 1px solid var(--border);
   border-radius: 18px;
   background: var(--surface-raised);
@@ -732,10 +732,10 @@
 
 .real-classroom-course-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) 112px auto;
   align-items: center;
   gap: 12px;
-  padding: 11px 12px;
+  padding: 12px 14px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
   background: var(--surface-subtle);
@@ -785,6 +785,7 @@
 
 .real-classroom-course-choice button {
   padding: 3px 7px;
+  min-width: 62px;
 }
 
 .real-classroom-course-actions button:hover,
