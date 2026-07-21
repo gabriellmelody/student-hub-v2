@@ -773,6 +773,66 @@
   background: var(--surface-subtle);
 }
 
+.real-classroom-subject-link {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 240px) auto;
+  align-items: end;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.real-classroom-subject-link strong {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.real-classroom-subject-link p,
+.real-classroom-subject-link label span {
+  margin: 3px 0 0;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  line-height: 1.35;
+}
+
+.real-classroom-subject-link label {
+  display: grid;
+  gap: 4px;
+}
+
+.real-classroom-subject-link select,
+.real-classroom-subject-link button {
+  appearance: none;
+  min-height: 28px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.66rem;
+  font-weight: 650;
+}
+
+.real-classroom-subject-link select {
+  width: 100%;
+  padding: 4px 24px 4px 8px;
+}
+
+.real-classroom-subject-link button {
+  padding: 4px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s ease, background 0.15s ease,
+    color 0.15s ease;
+}
+
+.real-classroom-subject-link button:hover {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+
 .real-classroom-course-row h4 {
   color: var(--text-secondary);
   font-size: 0.78rem;
@@ -2169,5 +2229,15 @@
 
   .real-classroom-course-choice {
     flex-wrap: wrap;
+  }
+
+  .real-classroom-subject-link {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .real-classroom-subject-link button {
+    width: fit-content;
+    white-space: normal;
   }
 }

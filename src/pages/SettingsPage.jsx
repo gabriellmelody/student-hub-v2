@@ -5,6 +5,8 @@ import {
   accentColorPresets,
   getContrastText,
   createSubjectDraft,
+  findSubjectProfile,
+  REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY,
   normalizeSubjectName,
@@ -30,6 +32,84 @@ import {
 
 const REAL_CLASSROOM_COURSE_SELECTIONS_KEY =
   "studentHub.realClassroomCourseSelections";
+const REAL_CLASSROOM_SOURCE = "classroom";
+const COMMON_CLASSROOM_SUBJECTS = [
+  ["world studies", "World Studies"],
+  ["computer science", "Computer Science"],
+  ["biology", "Biology"],
+  ["chemistry", "Chemistry"],
+  ["physics", "Physics"],
+  ["english", "English"],
+  ["spanish", "Spanish"],
+  ["history", "History"],
+  ["geography", "Geography"],
+  ["economics", "Economics"],
+  ["maths", "Maths"],
+  ["math", "Maths"],
+  ["science", "Science"],
+  ["art", "Art"],
+  ["music", "Music"],
+  ["drama", "Drama"],
+  ["design", "Design"],
+];
+
+function getRealClassroomCourseId(course) {
+  return course?.classroomCourseId || course?.externalId || "";
+}
+
+function normalizeClassroomMatchText(value) {
+  return normalizeSubjectName(value).replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function hasClassroomSubjectPhrase(courseName, subjectName) {
+  const courseText = ` ${normalizeClassroomMatchText(courseName)} `;
+  const subjectText = normalizeClassroomMatchText(subjectName);
+
+  if (!courseText.trim() || !subjectText) return false;
+
+  const aliases =
+    subjectText === "maths"
+      ? ["maths", "math"]
+      : subjectText === "math"
+        ? ["math", "maths"]
+        : [subjectText];
+
+  return aliases.some((alias) => courseText.includes(` ${alias} `));
+}
+
+function findBestSubjectForClassroomCourse(subjects, course) {
+  const exactSubject = findSubjectProfile(subjects, course?.name);
+
+  if (exactSubject) return exactSubject;
+
+  return (
+    subjects.find((subject) =>
+      hasClassroomSubjectPhrase(course?.name, subject.name)
+    ) || null
+  );
+}
+
+function getSuggestedClassroomSubjectName(course) {
+  const courseName = course?.name || "";
+  const matchedCommonSubject = COMMON_CLASSROOM_SUBJECTS.find(([keyword]) =>
+    hasClassroomSubjectPhrase(courseName, keyword)
+  );
+
+  if (matchedCommonSubject) return matchedCommonSubject[1];
+
+  return courseName.trim() || "Untitled Subject";
+}
+
+function createRealClassroomCourseLink(course, subject) {
+  return {
+    classroomCourseId: getRealClassroomCourseId(course),
+    classroomCourseName: course?.name || "Untitled class",
+    subjectId: subject.id,
+    subjectName: subject.name,
+    source: REAL_CLASSROOM_SOURCE,
+    linkedAt: new Date().toISOString(),
+  };
+}
 
 function SettingsPage({
   tasks,
@@ -474,6 +554,46 @@ function IntegrationsSettings({
         return {};
       }
     });
+  const [
+    realClassroomCourseSubjectLinks,
+    setRealClassroomCourseSubjectLinks,
+  ] = useState(() => {
+    const savedLinks = localStorage.getItem(
+      REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY
+    );
+
+    if (!savedLinks) return {};
+
+    try {
+      const parsedLinks = JSON.parse(savedLinks);
+
+      if (!parsedLinks || typeof parsedLinks !== "object") return {};
+
+      return Object.fromEntries(
+        Object.entries(parsedLinks)
+          .filter(
+            ([courseId, link]) =>
+              typeof courseId === "string" &&
+              link?.source === REAL_CLASSROOM_SOURCE &&
+              typeof link.subjectId === "string" &&
+              typeof link.subjectName === "string"
+          )
+          .map(([courseId, link]) => [
+            courseId,
+            {
+              classroomCourseId: courseId,
+              classroomCourseName: link.classroomCourseName || "",
+              subjectId: link.subjectId,
+              subjectName: link.subjectName,
+              source: REAL_CLASSROOM_SOURCE,
+              linkedAt: link.linkedAt || new Date().toISOString(),
+            },
+          ])
+      );
+    } catch {
+      return {};
+    }
+  });
   const [classroomConnection, setClassroomConnection] = useState(() => {
     const fallbackState = {
       linked: false,
@@ -520,6 +640,13 @@ function IntegrationsSettings({
       JSON.stringify(realClassroomCourseSelections)
     );
   }, [realClassroomCourseSelections]);
+
+  useEffect(() => {
+    localStorage.setItem(
+      REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
+      JSON.stringify(realClassroomCourseSubjectLinks)
+    );
+  }, [realClassroomCourseSubjectLinks]);
 
   useEffect(() => {
     checkRealClassroomSession();
@@ -725,6 +852,10 @@ function IntegrationsSettings({
         status: "classroom_session_available",
         message: "Google Classroom session active.",
       }));
+      addSuggestedRealClassroomSubjectLinks(
+        loadedCourses,
+        realClassroomCourseSelections
+      );
       if (loadedCourses.length > 0) {
         setShowRealClassroomReview(true);
       }
@@ -735,6 +866,42 @@ function IntegrationsSettings({
         error: "Could not load Classroom courses. Try again later.",
       }));
     }
+  }
+
+  function getSuggestedRealClassroomCourseLink(course) {
+    const matchedSubject = findBestSubjectForClassroomCourse(subjects, course);
+
+    return matchedSubject
+      ? createRealClassroomCourseLink(course, matchedSubject)
+      : null;
+  }
+
+  function addSuggestedRealClassroomSubjectLinks(courses, selections) {
+    setRealClassroomCourseSubjectLinks((currentLinks) => {
+      const nextLinks = { ...currentLinks };
+      let changed = false;
+
+      courses.forEach((course) => {
+        const courseId = getRealClassroomCourseId(course);
+
+        if (
+          !courseId ||
+          selections[courseId] !== "included" ||
+          nextLinks[courseId]
+        ) {
+          return;
+        }
+
+        const suggestedLink = getSuggestedRealClassroomCourseLink(course);
+
+        if (!suggestedLink) return;
+
+        nextLinks[courseId] = suggestedLink;
+        changed = true;
+      });
+
+      return changed ? nextLinks : currentLinks;
+    });
   }
 
   function updateRealClassroomCourseSelection(courseId, selection) {
@@ -749,6 +916,30 @@ function IntegrationsSettings({
 
       return nextSelections;
     });
+
+    const course = realClassroomCourses.courses.find(
+      (courseItem) => getRealClassroomCourseId(courseItem) === courseId
+    );
+
+    if (selection === "included" && course) {
+      setRealClassroomCourseSubjectLinks((currentLinks) => {
+        if (currentLinks[courseId]) return currentLinks;
+
+        const suggestedLink = getSuggestedRealClassroomCourseLink(course);
+
+        return suggestedLink
+          ? { ...currentLinks, [courseId]: suggestedLink }
+          : currentLinks;
+      });
+    } else if (selection === "ignored") {
+      setRealClassroomCourseSubjectLinks((currentLinks) => {
+        if (!currentLinks[courseId]) return currentLinks;
+
+        const nextLinks = { ...currentLinks };
+        delete nextLinks[courseId];
+        return nextLinks;
+      });
+    }
   }
 
   function updateAllRealClassroomCourseSelections(selection) {
@@ -756,11 +947,50 @@ function IntegrationsSettings({
       const nextSelections = { ...currentSelections };
 
       realClassroomCourses.courses.forEach((course) => {
-        nextSelections[course.classroomCourseId] = selection;
+        const courseId = getRealClassroomCourseId(course);
+        if (courseId) nextSelections[courseId] = selection;
       });
 
       return nextSelections;
     });
+
+    if (selection === "included") {
+      setRealClassroomCourseSubjectLinks((currentLinks) => {
+        const nextLinks = { ...currentLinks };
+        let changed = false;
+
+        realClassroomCourses.courses.forEach((course) => {
+          const courseId = getRealClassroomCourseId(course);
+
+          if (!courseId || nextLinks[courseId]) return;
+
+          const suggestedLink = getSuggestedRealClassroomCourseLink(course);
+
+          if (!suggestedLink) return;
+
+          nextLinks[courseId] = suggestedLink;
+          changed = true;
+        });
+
+        return changed ? nextLinks : currentLinks;
+      });
+    } else if (selection === "ignored") {
+      setRealClassroomCourseSubjectLinks((currentLinks) => {
+        const nextLinks = { ...currentLinks };
+        let changed = false;
+
+        realClassroomCourses.courses.forEach((course) => {
+          const courseId = getRealClassroomCourseId(course);
+
+          if (!courseId || !nextLinks[courseId]) return;
+
+          delete nextLinks[courseId];
+          changed = true;
+        });
+
+        return changed ? nextLinks : currentLinks;
+      });
+    }
   }
 
   function resetRealClassroomCourseSelections() {
@@ -768,11 +998,98 @@ function IntegrationsSettings({
       const nextSelections = { ...currentSelections };
 
       realClassroomCourses.courses.forEach((course) => {
-        delete nextSelections[course.classroomCourseId];
+        delete nextSelections[getRealClassroomCourseId(course)];
       });
 
       return nextSelections;
     });
+
+    setRealClassroomCourseSubjectLinks((currentLinks) => {
+      const nextLinks = { ...currentLinks };
+      let changed = false;
+
+      realClassroomCourses.courses.forEach((course) => {
+        const courseId = getRealClassroomCourseId(course);
+
+        if (!courseId || !nextLinks[courseId]) return;
+
+        delete nextLinks[courseId];
+        changed = true;
+      });
+
+      return changed ? nextLinks : currentLinks;
+    });
+  }
+
+  function updateRealClassroomCourseSubject(course, subjectId) {
+    const courseId = getRealClassroomCourseId(course);
+
+    if (!courseId) return;
+
+    const selectedSubject = subjects.find((subject) => subject.id === subjectId);
+
+    setRealClassroomCourseSubjectLinks((currentLinks) => {
+      if (!selectedSubject) {
+        if (!currentLinks[courseId]) return currentLinks;
+
+        const nextLinks = { ...currentLinks };
+        delete nextLinks[courseId];
+        return nextLinks;
+      }
+
+      return {
+        ...currentLinks,
+        [courseId]: createRealClassroomCourseLink(course, selectedSubject),
+      };
+    });
+  }
+
+  function createSubjectFromRealClassroomCourse(course) {
+    const courseId = getRealClassroomCourseId(course);
+
+    if (!courseId) return;
+
+    const existingSubject = findBestSubjectForClassroomCourse(subjects, course);
+
+    if (existingSubject) {
+      updateRealClassroomCourseSubject(course, existingSubject.id);
+      return;
+    }
+
+    const subjectName = getSuggestedClassroomSubjectName(course);
+    const duplicateSubject = findSubjectProfile(subjects, subjectName);
+
+    if (duplicateSubject) {
+      updateRealClassroomCourseSubject(course, duplicateSubject.id);
+      return;
+    }
+
+    const newSubject = {
+      id: `subject-${REAL_CLASSROOM_SOURCE}-${courseId}`,
+      ...createSubjectDraft("Other"),
+      name: subjectName,
+      courseSystem: "Other",
+      level: "Other",
+      source: REAL_CLASSROOM_SOURCE,
+      classroomCourseId: courseId,
+      externalId: courseId,
+      importedAt: new Date().toISOString(),
+      lastSyncedAt: null,
+    };
+
+    setSubjects((currentSubjects) => {
+      const existingCurrentSubject =
+        findBestSubjectForClassroomCourse(currentSubjects, course) ||
+        findSubjectProfile(currentSubjects, subjectName);
+
+      if (existingCurrentSubject) return currentSubjects;
+
+      return [...currentSubjects, newSubject];
+    });
+    setRealClassroomCourseSubjectLinks((currentLinks) => ({
+      ...currentLinks,
+      [courseId]: createRealClassroomCourseLink(course, newSubject),
+    }));
   }
 
   const visibleIntegrations = integrationCatalog.filter(
@@ -835,7 +1152,11 @@ function IntegrationsSettings({
         <RealClassroomCourseReviewModal
           courseState={realClassroomCourses}
           selections={realClassroomCourseSelections}
+          subjects={subjects}
+          subjectLinks={realClassroomCourseSubjectLinks}
           onSelectCourse={updateRealClassroomCourseSelection}
+          onSelectSubject={updateRealClassroomCourseSubject}
+          onCreateSubject={createSubjectFromRealClassroomCourse}
           onIncludeAll={() =>
             updateAllRealClassroomCourseSelections("included")
           }
@@ -1121,7 +1442,11 @@ function RealClassroomCourseSummary({ courseState, selections }) {
 function RealClassroomCourseReviewModal({
   courseState,
   selections,
+  subjects,
+  subjectLinks,
   onSelectCourse,
+  onSelectSubject,
+  onCreateSubject,
   onIncludeAll,
   onIgnoreAll,
   onResetChoices,
@@ -1192,8 +1517,14 @@ function RealClassroomCourseReviewModal({
 
         <div className="real-classroom-course-list">
           {courses.map((course) => {
-            const courseId = course.classroomCourseId || course.externalId;
+            const courseId = getRealClassroomCourseId(course);
             const selection = selections[courseId] || "needs-review";
+            const linkedSubject = subjects.find(
+              (subject) => subject.id === subjectLinks[courseId]?.subjectId
+            );
+            const suggestedSubject =
+              linkedSubject || findBestSubjectForClassroomCourse(subjects, course);
+            const subjectName = getSuggestedClassroomSubjectName(course);
 
             return (
               <article className="real-classroom-course-row" key={courseId}>
@@ -1228,6 +1559,48 @@ function RealClassroomCourseReviewModal({
                     Ignore
                   </button>
                 </div>
+                {selection === "included" && (
+                  <div className="real-classroom-subject-link">
+                    <div>
+                      <strong>
+                        {linkedSubject
+                          ? `Linked to ${linkedSubject.name}`
+                          : suggestedSubject
+                            ? `Suggested: ${suggestedSubject.name}`
+                            : "Needs subject link"}
+                      </strong>
+                      <p>
+                        Assignments from this class will use this subject later.
+                      </p>
+                    </div>
+                    <label>
+                      <span>Student Hub subject</span>
+                      <select
+                        value={linkedSubject?.id || ""}
+                        onChange={(event) =>
+                          onSelectSubject(course, event.target.value)
+                        }
+                      >
+                        <option value="">Choose a subject</option>
+                        {subjects.map((subject) => (
+                          <option key={subject.id} value={subject.id}>
+                            {subject.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {!linkedSubject && (
+                      <button
+                        type="button"
+                        onClick={() => onCreateSubject(course)}
+                      >
+                        {suggestedSubject
+                          ? `Link to ${suggestedSubject.name}`
+                          : `Create "${subjectName}" Subject`}
+                      </button>
+                    )}
+                  </div>
+                )}
               </article>
             );
           })}
