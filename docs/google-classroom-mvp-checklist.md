@@ -44,6 +44,7 @@ Current readiness note:
 - The connect endpoint can now start the first safe authorization redirect to Google's permission screen when configuration exists.
 - The callback can now prove the server-side token exchange works and create a temporary encrypted HttpOnly cookie for MVP testing.
 - The callback can now read active Classroom courses once and return a safe normalized course list.
+- `/api/google-classroom/courses` can now read active courses from the temporary secure session.
 - The temporary session is not localStorage, not full accounts, and not cloud sync.
 - These checks do not fetch assignments or import tasks.
 - Real values must never be committed to the repo.
