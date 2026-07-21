@@ -311,7 +311,7 @@
 .integrations-settings {
   display: grid;
   gap: var(--density-panel-gap);
-  width: min(880px, 100%);
+  width: min(1120px, 100%);
 }
 
 .integration-control-panel {
@@ -356,7 +356,7 @@
 
 .integration-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding: var(--density-panel-padding);
 }
