@@ -791,6 +791,7 @@ function IntegrationsSettings({
               realClassroomSetup={realClassroomSetup}
               realClassroomSession={realClassroomSession}
               realClassroomCourses={realClassroomCourses}
+              realClassroomCourseSelections={realClassroomCourseSelections}
               onLink={() => setPendingAction("link")}
               onSync={() => syncSampleClassroom()}
               onUnlink={() => setPendingAction("unlink")}
@@ -849,6 +850,7 @@ function IntegrationCard({
   realClassroomSetup,
   realClassroomSession,
   realClassroomCourses,
+  realClassroomCourseSelections,
   onLink,
   onSync,
   onUnlink,
