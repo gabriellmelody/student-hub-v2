@@ -430,6 +430,13 @@ function IntegrationsSettings({
     result: null,
     error: "",
   });
+  const [realClassroomSession, setRealClassroomSession] = useState({
+    checking: true,
+    connected: false,
+    status: "checking",
+    message: "Checking Classroom session...",
+    tokenSummary: null,
+  });
   const [realClassroomCourses, setRealClassroomCourses] = useState({
     loading: false,
     courses: [],
@@ -508,6 +515,10 @@ function IntegrationsSettings({
       JSON.stringify(realClassroomCourseSelections)
     );
   }, [realClassroomCourseSelections]);
+
+  useEffect(() => {
+    checkRealClassroomSession();
+  }, []);
 
   function syncSampleClassroom({ link = false } = {}) {
     const courseLinks = loadMockClassroomCourseLinks();
@@ -608,6 +619,42 @@ function IntegrationsSettings({
     }
   }
 
+  async function checkRealClassroomSession() {
+    setRealClassroomSession((currentState) => ({
+      ...currentState,
+      checking: true,
+    }));
+
+    try {
+      const response = await fetch("/api/google-classroom/session", {
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+      const result = await response.json();
+
+      setRealClassroomSession({
+        checking: false,
+        connected: result.connected === true,
+        status: result.status || "unknown",
+        message:
+          result.connected === true
+            ? "Google Classroom session active."
+            : result.message || "No Google account connected.",
+        tokenSummary: result.tokenSummary || null,
+      });
+    } catch {
+      setRealClassroomSession({
+        checking: false,
+        connected: false,
+        status: "session_check_failed",
+        message: "Could not check Classroom connection status.",
+        tokenSummary: null,
+      });
+    }
+  }
+
   async function loadRealClassroomCourses() {
     setRealClassroomCourses((currentState) => ({
       ...currentState,
@@ -626,6 +673,22 @@ function IntegrationsSettings({
       const result = await response.json();
 
       if (!response.ok || result.ok !== true) {
+        if (
+          result.status === "no_classroom_session" ||
+          result.status === "classroom_session_invalid_or_expired"
+        ) {
+          setRealClassroomSession({
+            checking: false,
+            connected: false,
+            status: result.status,
+            message:
+              result.status === "no_classroom_session"
+                ? "No Google account connected."
+                : "Google Classroom session expired. Connect again.",
+            tokenSummary: null,
+          });
+        }
+
         setRealClassroomCourses((currentState) => ({
           ...currentState,
           loading: false,
@@ -648,6 +711,13 @@ function IntegrationsSettings({
             : "Read-only courses loaded. Assignments are not imported yet.",
         error: "",
       });
+      setRealClassroomSession((currentState) => ({
+        ...currentState,
+        checking: false,
+        connected: true,
+        status: "classroom_session_available",
+        message: "Google Classroom session active.",
+      }));
     } catch {
       setRealClassroomCourses((currentState) => ({
         ...currentState,
@@ -718,8 +788,8 @@ function IntegrationsSettings({
               importedCount={importedCount}
               syncMessage={syncMessage}
               realClassroomSetup={realClassroomSetup}
+              realClassroomSession={realClassroomSession}
               realClassroomCourses={realClassroomCourses}
-              realClassroomCourseSelections={realClassroomCourseSelections}
               onLink={() => setPendingAction("link")}
               onSync={() => syncSampleClassroom()}
               onUnlink={() => setPendingAction("unlink")}
@@ -727,19 +797,22 @@ function IntegrationsSettings({
               onPreview={() => setShowMockPreview(true)}
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
-              onSelectRealClassroomCourse={updateRealClassroomCourseSelection}
-              onIncludeAllRealClassroomCourses={() =>
-                updateAllRealClassroomCourseSelections("included")
-              }
-              onIgnoreAllRealClassroomCourses={() =>
-                updateAllRealClassroomCourseSelections("ignored")
-              }
-              onResetRealClassroomCourseSelections={
-                resetRealClassroomCourseSelections
-              }
             />
           ))}
         </div>
+
+        <RealClassroomCourseReview
+          courseState={realClassroomCourses}
+          selections={realClassroomCourseSelections}
+          onSelectCourse={updateRealClassroomCourseSelection}
+          onIncludeAll={() =>
+            updateAllRealClassroomCourseSelections("included")
+          }
+          onIgnoreAll={() =>
+            updateAllRealClassroomCourseSelections("ignored")
+          }
+          onResetChoices={resetRealClassroomCourseSelections}
+        />
       </section>
 
       {showMockPreview && (
@@ -769,8 +842,8 @@ function IntegrationCard({
   importedCount,
   syncMessage,
   realClassroomSetup,
+  realClassroomSession,
   realClassroomCourses,
-  realClassroomCourseSelections,
   onLink,
   onSync,
   onUnlink,
@@ -778,10 +851,6 @@ function IntegrationCard({
   onPreview,
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
-  onSelectRealClassroomCourse,
-  onIncludeAllRealClassroomCourses,
-  onIgnoreAllRealClassroomCourses,
-  onResetRealClassroomCourseSelections,
 }) {
   const isClassroom = integration.id === "google-classroom";
   const isRealClassroom = integration.id === "real-google-classroom";
@@ -828,13 +897,9 @@ function IntegrationCard({
         <RealClassroomSetupStatus setup={realClassroomSetup} />
       )}
       {isRealClassroom && (
-        <RealClassroomCourseReview
-          courseState={realClassroomCourses}
-          selections={realClassroomCourseSelections}
-          onSelectCourse={onSelectRealClassroomCourse}
-          onIncludeAll={onIncludeAllRealClassroomCourses}
-          onIgnoreAll={onIgnoreAllRealClassroomCourses}
-          onResetChoices={onResetRealClassroomCourseSelections}
+        <RealClassroomConnectionStatus
+          session={realClassroomSession}
+          setup={realClassroomSetup}
         />
       )}
       {isLinkedSample && (
@@ -962,15 +1027,31 @@ function RealClassroomCourseReview({
 }) {
   const courses = courseState.courses;
   const hasLoaded = courseState.lastCheckedAt || courseState.error;
+  const includedCount = courses.filter(
+    (course) =>
+      selections[course.classroomCourseId || course.externalId] === "included"
+  ).length;
+  const ignoredCount = courses.filter(
+    (course) =>
+      selections[course.classroomCourseId || course.externalId] === "ignored"
+  ).length;
+  const needsReviewCount = Math.max(
+    0,
+    courses.length - includedCount - ignoredCount
+  );
 
   if (!hasLoaded && !courseState.loading) {
     return (
       <div className="real-classroom-course-review">
-        <strong>Class review</strong>
-        <p>
-          Load read-only courses, then choose which classes Student Hub should
-          use later. Assignments are not imported yet.
-        </p>
+        <div className="real-classroom-review-heading">
+          <div>
+            <strong>Class review</strong>
+            <p>
+              Load read-only courses, then choose which classes Student Hub
+              should use later. Assignments are not imported yet.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -995,7 +1076,10 @@ function RealClassroomCourseReview({
 
       {courseState.summary && (
         <div className="real-classroom-course-summary">
-          <span>{courseState.summary.count || 0} active courses found</span>
+          <span>{courseState.summary.count || 0} total</span>
+          <span>{includedCount} included</span>
+          <span>{ignoredCount} ignored</span>
+          <span>{needsReviewCount} needs review</span>
           <span>No tasks created</span>
         </div>
       )}
@@ -1021,9 +1105,16 @@ function RealClassroomCourseReview({
 
               return (
                 <article className="real-classroom-course-row" key={courseId}>
-                  <div>
+                  <div className="real-classroom-course-main">
                     <h4>{course.name}</h4>
-                    <p>{course.section || "No section"}</p>
+                    <p>
+                      {[
+                        course.section,
+                        course.description || course.courseState,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "No section"}
+                    </p>
                   </div>
                   <span className={`real-classroom-course-chip ${selection}`}>
                     {selection === "included"
@@ -1059,6 +1150,47 @@ function RealClassroomCourseReview({
         Only include/ignore choices are saved locally. No Google tokens are
         stored in localStorage.
       </p>
+    </div>
+  );
+}
+
+function RealClassroomConnectionStatus({ session, setup }) {
+  const setupConfigured =
+    setup.result?.configured === true ||
+    setup.result?.status === "configured_not_implemented";
+  const setupChecked = setup.result || setup.error;
+  const statusLabel = session.checking
+    ? "Checking session"
+    : session.connected
+      ? "Connected for this browser"
+      : session.status === "classroom_session_invalid_or_expired"
+        ? "Session expired"
+        : "Not connected";
+  const detail = session.checking
+    ? "Checking whether a secure Classroom session exists."
+    : session.connected
+      ? "Read-only courses are available. Assignments are not imported yet."
+      : session.status === "classroom_session_invalid_or_expired"
+        ? "Session expired. Connect Google Classroom again."
+        : "No Google account connected.";
+
+  return (
+    <div
+      className={`real-classroom-connection-status ${
+        session.connected ? "is-connected" : ""
+      }`}
+    >
+      <div>
+        <strong>{statusLabel}</strong>
+        <p>{detail}</p>
+      </div>
+      <span>
+        {setupConfigured
+          ? "Setup configured"
+          : setupChecked
+            ? "Setup not configured"
+            : "Setup check optional"}
+      </span>
     </div>
   );
 }

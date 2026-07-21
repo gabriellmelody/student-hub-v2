@@ -468,6 +468,47 @@
   gap: 3px;
 }
 
+.real-classroom-connection-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 9px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+}
+
+.real-classroom-connection-status.is-connected {
+  border-color: var(--effort-low-border);
+  background: var(--effort-low-bg);
+}
+
+.real-classroom-connection-status strong {
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+}
+
+.real-classroom-connection-status p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  line-height: 1.4;
+}
+
+.real-classroom-connection-status > span {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 0.56rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .integration-readiness-status {
   display: grid;
   gap: 4px;
@@ -534,21 +575,22 @@
 
 .real-classroom-course-review {
   display: grid;
-  gap: 8px;
-  margin-top: 9px;
-  padding: 8px;
-  border: 1px solid var(--border-soft);
-  border-radius: 7px;
-  background: var(--surface-subtle);
+  gap: 12px;
+  margin: 0 var(--density-panel-padding) var(--density-panel-padding);
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-raised);
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: 0.7rem;
   line-height: 1.42;
+  box-shadow: var(--shadow-subtle);
 }
 
 .real-classroom-course-review > strong,
 .real-classroom-review-heading strong {
   color: var(--text-secondary);
-  font-size: 0.66rem;
+  font-size: 0.82rem;
 }
 
 .real-classroom-course-review p,
@@ -560,13 +602,13 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 16px;
 }
 
 .real-classroom-review-heading > span {
   flex-shrink: 0;
   color: var(--text-muted);
-  font-size: 0.58rem;
+  font-size: 0.64rem;
   font-weight: 650;
 }
 
@@ -578,12 +620,12 @@
 }
 
 .real-classroom-course-summary span {
-  padding: 2px 6px;
+  padding: 3px 7px;
   border: 1px solid var(--border-soft);
   border-radius: 999px;
   background: var(--surface-raised);
   color: var(--text-muted);
-  font-size: 0.58rem;
+  font-size: 0.62rem;
   font-weight: 650;
 }
 
@@ -596,7 +638,7 @@
   background: var(--surface-raised);
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 0.62rem;
+  font-size: 0.66rem;
   font-weight: 650;
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease,
@@ -609,44 +651,61 @@
 
 .real-classroom-course-list {
   display: grid;
-  gap: 6px;
+  gap: 8px;
+  max-height: min(52vh, 520px);
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-color: var(--border-hover) transparent;
+  scrollbar-width: thin;
+}
+
+.real-classroom-course-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.real-classroom-course-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.real-classroom-course-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--border-hover);
+  background-clip: padding-box;
 }
 
 .real-classroom-course-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 12px;
+  padding: 11px 12px;
   border: 1px solid var(--border-soft);
-  border-radius: 7px;
-  background: var(--surface-raised);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
 }
 
 .real-classroom-course-row h4 {
-  overflow: hidden;
   color: var(--text-secondary);
-  font-size: 0.67rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .real-classroom-course-row p {
-  overflow: hidden;
-  margin: 2px 0 0;
+  margin: 4px 0 0;
   color: var(--text-muted);
-  font-size: 0.58rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.64rem;
+  line-height: 1.4;
 }
 
 .real-classroom-course-chip {
-  padding: 2px 6px;
+  padding: 3px 7px;
   border: 1px solid var(--border-soft);
   border-radius: 999px;
   background: var(--surface-subtle);
   color: var(--text-muted);
-  font-size: 0.58rem;
+  font-size: 0.62rem;
   font-weight: 700;
   white-space: nowrap;
 }
@@ -687,7 +746,7 @@
 
 .real-classroom-storage-note {
   color: var(--text-muted);
-  font-size: 0.58rem;
+  font-size: 0.62rem;
 }
 
 .integration-card-message {
@@ -1999,4 +2058,24 @@
   margin-top: 18px;
   padding: 16px 2px 0;
   border-top: 1px solid var(--border);
+}
+
+@media (max-width: 720px) {
+  .real-classroom-review-heading,
+  .real-classroom-connection-status {
+    display: grid;
+  }
+
+  .real-classroom-course-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .real-classroom-course-chip {
+    width: fit-content;
+  }
+
+  .real-classroom-course-choice {
+    flex-wrap: wrap;
+  }
 }
