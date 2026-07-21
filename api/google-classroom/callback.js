@@ -1,4 +1,5 @@
 import { getGoogleClassroomOAuthConfigStatus } from "./_config.js";
+import { createClassroomSessionCookie } from "./_session.js";
 
 function getCallbackParam(request, name) {
   if (request.query && typeof request.query[name] === "string") {
@@ -133,6 +134,12 @@ export default async function handler(request, response) {
         return;
       }
 
+      requestStage = "session_create";
+
+      const sessionCookie = createClassroomSessionCookie(tokenJson);
+
+      response.setHeader("Set-Cookie", sessionCookie.cookie);
+
       requestStage = "courses_fetch";
 
       const coursesResponse = await fetch(
@@ -172,12 +179,17 @@ export default async function handler(request, response) {
 
       response.status(200).json({
         ok: true,
-        status: "courses_read_verified_not_stored",
+        status: "classroom_session_created",
         configured: true,
         message:
           courses.length > 0
-            ? "Google Classroom courses were read successfully. Tokens were discarded and no tasks were imported."
-            : "Google Classroom connected, but no active courses were found for this account.",
+            ? "Google Classroom connection session was created securely for MVP testing."
+            : "Google Classroom session was created, but no active courses were found for this account.",
+        session: {
+          storedIn: "encrypted_http_only_cookie",
+          expiresAt: sessionCookie.expiresAt,
+          hasRefreshToken: sessionCookie.hasRefreshToken,
+        },
         courseSummary: {
           count: courses.length,
           returnedCourseStates: ["ACTIVE"],
@@ -196,6 +208,16 @@ export default async function handler(request, response) {
           googleError: "Token endpoint request failed.",
           nextStep:
             "Try the authorization flow again after checking the serverless runtime.",
+        });
+      } else if (requestStage === "session_create") {
+        response.status(501).json({
+          ok: false,
+          status: "classroom_session_not_configured",
+          configured: true,
+          message:
+            "Google OAuth worked, but Student Hub session encryption is not configured.",
+          nextStep:
+            "Add STUDENT_HUB_SESSION_SECRET in Vercel before creating Classroom sessions.",
         });
       } else {
         response.status(502).json({
