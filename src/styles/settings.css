@@ -1070,6 +1070,98 @@
   background: var(--effort-high-bg);
 }
 
+.real-classroom-import-panel {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px;
+  border: 1px solid var(--accent-border);
+  border-radius: 9px;
+  background: var(--accent-tint);
+}
+
+.real-classroom-import-panel strong {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+
+.real-classroom-import-panel p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.63rem;
+  line-height: 1.4;
+}
+
+.real-classroom-import-panel small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 0.61rem;
+  font-weight: 700;
+}
+
+.real-classroom-import-panel button {
+  appearance: none;
+  flex-shrink: 0;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--accent-border);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--accent-soft);
+  font-family: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.real-classroom-import-panel button:disabled {
+  cursor: default;
+  opacity: 0.56;
+}
+
+.real-classroom-selection-panel {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--surface-subtle);
+}
+
+.real-classroom-selection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.real-classroom-selection-actions button {
+  appearance: none;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.real-classroom-selection-actions button:hover {
+  border-color: var(--accent-border);
+  color: var(--accent-soft);
+}
+
+.real-classroom-selection-panel p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.63rem;
+  line-height: 1.4;
+}
+
 .real-classroom-assignment-group-list,
 .real-classroom-assignment-list {
   display: grid;
@@ -1095,6 +1187,53 @@
   padding: 8px;
   border-radius: 7px;
   background: var(--surface-subtle);
+}
+
+.real-classroom-assignment-row.is-imported {
+  border: 1px solid var(--effort-low-border);
+  background: var(--effort-low-bg);
+}
+
+.real-classroom-assignment-row.has-no-due-date {
+  border: 1px solid var(--border-soft);
+}
+
+.real-classroom-assignment-select {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.real-classroom-assignment-select input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.real-classroom-assignment-row em {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 0.61rem;
+  font-style: normal;
+  font-weight: 650;
+}
+
+.real-classroom-imported-chip {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--effort-low-border);
+  border-radius: 999px;
+  color: var(--safe);
+  font-size: 0.62rem;
+  font-weight: 700;
 }
 
 .real-classroom-assignment-row a {
@@ -2460,7 +2599,8 @@
 
   .real-classroom-assignment-preview-header,
   .real-classroom-assignment-group header,
-  .real-classroom-assignment-row {
+  .real-classroom-assignment-row,
+  .real-classroom-import-panel {
     display: grid;
   }
 }

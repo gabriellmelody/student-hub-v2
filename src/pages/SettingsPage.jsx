@@ -542,6 +542,7 @@ function IntegrationsSettings({
       message: "",
       error: "",
       importResult: null,
+      selectedAssignmentIds: {},
     });
   const [realClassroomCourseSelections, setRealClassroomCourseSelections] =
     useState(() => {
@@ -1144,6 +1145,7 @@ function IntegrationsSettings({
       error: "",
       message: "",
       importResult: null,
+      selectedAssignmentIds: {},
     }));
 
     try {
@@ -1186,9 +1188,18 @@ function IntegrationsSettings({
         return;
       }
 
+      const previewAssignments = Array.isArray(result.assignments)
+        ? result.assignments
+        : [];
+      const selectedAssignmentIds = Object.fromEntries(
+        previewAssignments
+          .filter((assignment) => assignment.dueDate)
+          .map((assignment) => [assignment.externalId, true])
+      );
+
       setRealClassroomAssignmentPreview({
         loading: false,
-        assignments: Array.isArray(result.assignments) ? result.assignments : [],
+        assignments: previewAssignments,
         summary: result.previewSummary || null,
         lastPreviewedAt: result.previewSummary?.previewedAt || new Date().toISOString(),
         message:
@@ -1196,6 +1207,7 @@ function IntegrationsSettings({
           "Assignments loaded as a read-only preview. No tasks were created.",
         error: "",
         importResult: null,
+        selectedAssignmentIds,
       });
     } catch {
       setRealClassroomAssignmentPreview((currentPreview) => ({
@@ -1211,7 +1223,12 @@ function IntegrationsSettings({
       .filter((assignment) => {
         const courseId = assignment.classroomCourseId;
 
-        return realClassroomCourseSelections[courseId] === "included";
+        return (
+          realClassroomCourseSelections[courseId] === "included" &&
+          realClassroomAssignmentPreview.selectedAssignmentIds[
+            assignment.externalId
+          ] === true
+        );
       })
       .map((assignment) => {
         const link = realClassroomCourseSubjectLinks[assignment.classroomCourseId];
@@ -1234,7 +1251,7 @@ function IntegrationsSettings({
     if (importableAssignments.length === 0) {
       setRealClassroomAssignmentPreview((currentPreview) => ({
         ...currentPreview,
-        error: "Preview assignments from included classes before importing.",
+        error: "Select at least one assignment to import.",
         importResult: null,
       }));
       return;
@@ -1254,13 +1271,54 @@ function IntegrationsSettings({
     setRealClassroomAssignmentPreview((currentPreview) => ({
       ...currentPreview,
       error: "",
-      message: `${result.importedCount} assignment${
+      message: `${result.importedCount} selected assignment${
         result.importedCount === 1 ? "" : "s"
       } imported · ${result.updatedCount} existing assignment${
         result.updatedCount === 1 ? "" : "s"
       } updated · 0 duplicates created · No tasks deleted.`,
       importResult: result,
     }));
+  }
+
+  function updateRealClassroomAssignmentSelection(assignmentId, selected) {
+    setRealClassroomAssignmentPreview((currentPreview) => {
+      const nextSelectedAssignmentIds = {
+        ...currentPreview.selectedAssignmentIds,
+      };
+
+      if (selected) {
+        nextSelectedAssignmentIds[assignmentId] = true;
+      } else {
+        delete nextSelectedAssignmentIds[assignmentId];
+      }
+
+      return {
+        ...currentPreview,
+        error: "",
+        selectedAssignmentIds: nextSelectedAssignmentIds,
+      };
+    });
+  }
+
+  function updateVisibleRealClassroomAssignmentSelection(mode) {
+    setRealClassroomAssignmentPreview((currentPreview) => {
+      const nextSelectedAssignmentIds =
+        mode === "clear" ? {} : { ...currentPreview.selectedAssignmentIds };
+
+      currentPreview.assignments.forEach((assignment) => {
+        if (mode === "all" || (mode === "due" && assignment.dueDate)) {
+          nextSelectedAssignmentIds[assignment.externalId] = true;
+        } else if (mode === "clear" || mode === "due") {
+          delete nextSelectedAssignmentIds[assignment.externalId];
+        }
+      });
+
+      return {
+        ...currentPreview,
+        error: "",
+        selectedAssignmentIds: nextSelectedAssignmentIds,
+      };
+    });
   }
 
   const visibleIntegrations = integrationCatalog.filter(
@@ -1337,6 +1395,16 @@ function IntegrationsSettings({
           )}
           onPreviewAssignments={previewRealClassroomAssignments}
           onImportAssignments={importPreviewedRealClassroomAssignments}
+          onSelectAssignment={updateRealClassroomAssignmentSelection}
+          onSelectAllAssignments={() =>
+            updateVisibleRealClassroomAssignmentSelection("all")
+          }
+          onClearAssignmentSelection={() =>
+            updateVisibleRealClassroomAssignmentSelection("clear")
+          }
+          onSelectDueAssignments={() =>
+            updateVisibleRealClassroomAssignmentSelection("due")
+          }
           onIncludeAll={() =>
             updateAllRealClassroomCourseSelections("included")
           }
@@ -1631,6 +1699,10 @@ function RealClassroomCourseReviewModal({
   importedTaskIds,
   onPreviewAssignments,
   onImportAssignments,
+  onSelectAssignment,
+  onSelectAllAssignments,
+  onClearAssignmentSelection,
+  onSelectDueAssignments,
   onIncludeAll,
   onIgnoreAll,
   onResetChoices,
@@ -1869,7 +1941,7 @@ function RealClassroomCourseReviewModal({
               <div>
                 <strong>Assignment preview</strong>
                 <p>
-                  Read-only preview. Import comes next.
+                  Preview first, then import only selected assignments.
                 </p>
               </div>
               <button
@@ -1894,6 +1966,10 @@ function RealClassroomCourseReviewModal({
               linkedCourseIds={new Set(Object.keys(subjectLinks))}
               importedTaskIds={importedTaskIds}
               onImportAssignments={onImportAssignments}
+              onSelectAssignment={onSelectAssignment}
+              onSelectAllAssignments={onSelectAllAssignments}
+              onClearAssignmentSelection={onClearAssignmentSelection}
+              onSelectDueAssignments={onSelectDueAssignments}
             />
           </section>
         )}
@@ -1936,6 +2012,10 @@ function RealClassroomAssignmentPreview({
   linkedCourseIds,
   importedTaskIds,
   onImportAssignments,
+  onSelectAssignment,
+  onSelectAllAssignments,
+  onClearAssignmentSelection,
+  onSelectDueAssignments,
 }) {
   const groupedAssignments = preview.assignments.reduce((groups, assignment) => {
     const groupKey = assignment.classroomCourseId || "unknown-course";
@@ -1956,31 +2036,32 @@ function RealClassroomAssignmentPreview({
   const includedPreviewAssignments = preview.assignments.filter((assignment) =>
     includedCourseIds.has(assignment.classroomCourseId)
   );
-  const importedCount = includedPreviewAssignments.filter((assignment) =>
+  const selectedAssignments = includedPreviewAssignments.filter(
+    (assignment) => preview.selectedAssignmentIds?.[assignment.externalId]
+  );
+  const selectedCount = selectedAssignments.length;
+  const importedCount = selectedAssignments.filter((assignment) =>
     importedTaskIds.has(assignment.externalId)
   ).length;
-  const importableCount = Math.max(
-    0,
-    includedPreviewAssignments.length - importedCount
-  );
+  const importableCount = Math.max(0, selectedCount - importedCount);
   const unlinkedPreviewCourseCount = new Set(
-    includedPreviewAssignments
+    selectedAssignments
       .filter((assignment) => !linkedCourseIds.has(assignment.classroomCourseId))
       .map((assignment) => assignment.classroomCourseId)
   ).size;
   const importButtonLabel =
-    importableCount > 0
-      ? `Import ${importableCount} assignment${
-          importableCount === 1 ? "" : "s"
+    selectedCount > 0
+      ? `Import ${selectedCount} selected assignment${
+          selectedCount === 1 ? "" : "s"
         }`
-      : "Update imported assignments";
+      : "Import selected assignments";
 
   return (
     <section className="real-classroom-assignment-preview" aria-live="polite">
       <div className="real-classroom-assignment-preview-header">
         <div>
           <strong>Assignment preview</strong>
-          <p>No Student Hub tasks have been created yet.</p>
+          <p>No Student Hub tasks are created until you import selected assignments.</p>
         </div>
         {preview.summary && (
           <span>
@@ -1993,23 +2074,52 @@ function RealClassroomAssignmentPreview({
       {hasAssignments && (
         <div className="real-classroom-import-panel">
           <div>
-            <strong>Import assignments</strong>
+            <strong>Import selected assignments</strong>
             <p>
-              This will create Student Hub tasks from previewed Classroom
-              assignments.
+              Only checked Classroom assignments will become Student Hub tasks.
             </p>
             <small>
-              {importableCount} new · {importedCount} already imported
+              {selectedCount} selected · {importableCount} new · {importedCount} already imported
             </small>
           </div>
           <button
             type="button"
             onClick={onImportAssignments}
-            disabled={unlinkedPreviewCourseCount > 0 || preview.loading}
+            disabled={
+              selectedCount === 0 ||
+              unlinkedPreviewCourseCount > 0 ||
+              preview.loading
+            }
           >
             {importButtonLabel}
           </button>
         </div>
+      )}
+
+      {hasAssignments && (
+        <div className="real-classroom-selection-panel">
+          <div className="real-classroom-selection-actions">
+            <button type="button" onClick={onSelectAllAssignments}>
+              Select all visible
+            </button>
+            <button type="button" onClick={onClearAssignmentSelection}>
+              Clear selection
+            </button>
+            <button type="button" onClick={onSelectDueAssignments}>
+              Select due-date assignments
+            </button>
+          </div>
+          <p>
+            Due-date assignments are selected by default. Review old or
+            no-due-date items before importing.
+          </p>
+        </div>
+      )}
+
+      {hasAssignments && selectedCount === 0 && !preview.error && (
+        <p className="real-classroom-preview-warning">
+          Select at least one assignment to import.
+        </p>
       )}
 
       {unlinkedPreviewCourseCount > 0 && (
@@ -2054,44 +2164,65 @@ function RealClassroomAssignmentPreview({
               </header>
 
               <div className="real-classroom-assignment-list">
-                {group.assignments.map((assignment) => (
-                  <div
-                    className={`real-classroom-assignment-row ${
-                      importedTaskIds.has(assignment.externalId)
-                        ? "is-imported"
-                        : ""
-                    }`}
-                    key={assignment.externalId}
-                  >
-                    <div>
-                      <strong>{assignment.title}</strong>
-                      <p>
-                        {formatRealClassroomAssignmentDueDate(assignment)}
-                        {[assignment.workType, assignment.state]
-                          .filter(Boolean)
-                          .join(" · ")
-                          ? ` · ${[assignment.workType, assignment.state]
-                              .filter(Boolean)
-                              .join(" · ")}`
-                          : ""}
-                      </p>
+                {group.assignments.map((assignment) => {
+                  const isSelected =
+                    preview.selectedAssignmentIds?.[assignment.externalId] ===
+                    true;
+                  const isImported = importedTaskIds.has(assignment.externalId);
+
+                  return (
+                    <div
+                      className={`real-classroom-assignment-row ${
+                        isImported ? "is-imported" : ""
+                      } ${!assignment.dueDate ? "has-no-due-date" : ""}`}
+                      key={assignment.externalId}
+                    >
+                      <label className="real-classroom-assignment-select">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(event) =>
+                            onSelectAssignment(
+                              assignment.externalId,
+                              event.target.checked
+                            )
+                          }
+                        />
+                        <span>{isSelected ? "Selected" : "Not selected"}</span>
+                      </label>
+                      <div>
+                        <strong>{assignment.title}</strong>
+                        <p>
+                          {formatRealClassroomAssignmentDueDate(assignment)}
+                          {[assignment.workType, assignment.state]
+                            .filter(Boolean)
+                            .join(" · ")
+                            ? ` · ${[assignment.workType, assignment.state]
+                                .filter(Boolean)
+                                .join(" · ")}`
+                            : ""}
+                        </p>
+                        {!assignment.dueDate && (
+                          <em>Not selected by default · Review before importing</em>
+                        )}
+                      </div>
+                      {isImported && (
+                        <span className="real-classroom-imported-chip">
+                          Imported
+                        </span>
+                      )}
+                      {assignment.alternateLink && (
+                        <a
+                          href={assignment.alternateLink}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open
+                        </a>
+                      )}
                     </div>
-                    {importedTaskIds.has(assignment.externalId) && (
-                      <span className="real-classroom-imported-chip">
-                        Imported
-                      </span>
-                    )}
-                    {assignment.alternateLink && (
-                      <a
-                        href={assignment.alternateLink}
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        Open
-                      </a>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </article>
           ))}
