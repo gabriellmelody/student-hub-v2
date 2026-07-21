@@ -1226,6 +1226,51 @@
   font-weight: 650;
 }
 
+.real-classroom-assignment-status-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.real-classroom-sync-chip {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 2px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.real-classroom-sync-chip.new {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+
+.real-classroom-sync-chip.updated {
+  border-color: var(--effort-medium-border);
+  background: var(--effort-medium-bg);
+  color: var(--text-secondary);
+}
+
+.real-classroom-sync-chip.imported {
+  border-color: var(--effort-low-border);
+  background: var(--effort-low-bg);
+  color: var(--safe);
+}
+
+.real-classroom-sync-chip.warning {
+  border-color: var(--effort-high-border);
+  background: var(--effort-high-bg);
+  color: var(--urgent);
+}
+
 .real-classroom-imported-chip {
   flex-shrink: 0;
   padding: 3px 7px;

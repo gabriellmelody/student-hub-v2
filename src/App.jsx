@@ -747,6 +747,25 @@ function App() {
     });
   }
 
+  function hasClassroomTaskSyncChanges(existingTask, classroomTask) {
+    return [
+      "title",
+      "description",
+      "dueDate",
+      "dueTime",
+      "classroomCourseId",
+      "classroomCourseName",
+      "linkedSubjectId",
+      "linkedSubjectName",
+      "alternateLink",
+      "workType",
+      "state",
+      "sourceUpdatedAt",
+    ].some(
+      (field) => String(existingTask[field] || "") !== String(classroomTask[field] || "")
+    );
+  }
+
   function importRealClassroomAssignments(assignments) {
     const requestedAssignments = Array.isArray(assignments)
       ? assignments.filter(
@@ -786,6 +805,7 @@ function App() {
     const tasksToAdd = [];
     let importedCount = 0;
     let updatedCount = 0;
+    let upToDateCount = 0;
 
     uniqueAssignments.forEach((assignment) => {
       const sourceKey = getExternalSourceKey(assignment);
@@ -796,6 +816,11 @@ function App() {
       );
 
       if (existingTask) {
+        if (!hasClassroomTaskSyncChanges(existingTask, classroomTask)) {
+          upToDateCount += 1;
+          return;
+        }
+
         updatedCount += 1;
         const existingTaskIndex = nextTasks.findIndex(
           (task) => getExternalSourceKey(task) === sourceKey
@@ -831,7 +856,8 @@ function App() {
     return {
       importedCount,
       updatedCount,
-      skippedCount: requestedAssignments.length - uniqueAssignments.length,
+      skippedCount:
+        requestedAssignments.length - uniqueAssignments.length + upToDateCount,
     };
   }
 
