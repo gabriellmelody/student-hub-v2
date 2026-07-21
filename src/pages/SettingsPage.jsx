@@ -948,7 +948,7 @@ function IntegrationsSettings({
         status: result.status || "unknown",
         message:
           result.connected === true
-            ? "Google Classroom session active."
+            ? "Google Classroom connected."
             : result.message || "No Google account connected.",
         tokenSummary: result.tokenSummary || null,
       });
@@ -992,7 +992,7 @@ function IntegrationsSettings({
             message:
               result.status === "no_classroom_session"
                 ? "No Google account connected."
-                : "Google Classroom session expired. Connect again.",
+                : "Classroom connection expired. Connect again.",
             tokenSummary: null,
           });
         }
@@ -1017,8 +1017,8 @@ function IntegrationsSettings({
         lastCheckedAt: new Date().toISOString(),
         message:
           result.courseSummary?.count === 0
-            ? "Google Classroom connected, but no active courses were found."
-            : "Read-only courses loaded. Assignments are not imported yet.",
+            ? "Google Classroom connected, but no active classes were found."
+            : "Classes loaded. Choose what Student Hub should use.",
         error: "",
       });
       setRealClassroomSession((currentState) => ({
@@ -1026,7 +1026,7 @@ function IntegrationsSettings({
         checking: false,
         connected: true,
         status: "classroom_session_available",
-        message: "Google Classroom session active.",
+        message: "Google Classroom connected.",
       }));
       addSuggestedRealClassroomSubjectLinks(
         loadedCourses,
@@ -1341,7 +1341,7 @@ function IntegrationsSettings({
             message:
               result.status === "no_classroom_session"
                 ? "No Google account connected."
-                : "Google Classroom session expired. Connect again.",
+                : "Classroom connection expired. Connect again.",
             tokenSummary: null,
           });
         }
@@ -1393,9 +1393,7 @@ function IntegrationsSettings({
         assignments: previewAssignments,
         summary: result.previewSummary || null,
         lastPreviewedAt: result.previewSummary?.previewedAt || new Date().toISOString(),
-        message:
-          result.message ||
-          "Assignments loaded as a read-only preview. No tasks were created.",
+        message: result.message || "Assignments ready to review.",
         error: "",
         importResult: null,
         importResultCopy: null,
@@ -1539,9 +1537,7 @@ function IntegrationsSettings({
           <div>
             <p className="settings-group-label">Connections</p>
             <h3>School tools in one place</h3>
-            <p>
-              Manage Classroom, sample data, and future school tools.
-            </p>
+            <p>Manage Classroom and future school tools.</p>
           </div>
           <span>Local workspace</span>
         </div>
@@ -2149,8 +2145,8 @@ function RealClassroomCourseReviewModal({
                 disabled={assignmentPreview.loading}
               >
                 {assignmentPreview.loading
-                  ? "Syncing..."
-                  : "Refresh from Classroom"}
+                  ? "Loading..."
+                  : "Preview assignments"}
               </button>
             </div>
 
@@ -2295,8 +2291,8 @@ function RealClassroomCourseReviewModal({
                 disabled={assignmentPreview.loading}
               >
                 {assignmentPreview.loading
-                  ? "Syncing..."
-                  : "Refresh from Classroom"}
+                  ? "Loading..."
+                  : "Refresh assignments"}
               </button>
             </div>
 
@@ -2474,10 +2470,10 @@ function RealClassroomAssignmentPreview({
   ).size;
   const importButtonLabel =
     selectedCount > 0
-      ? `Import / sync ${selectedCount} selected assignment${
+      ? `Import ${selectedCount} selected assignment${
           selectedCount === 1 ? "" : "s"
         }`
-      : "Import / sync selected";
+      : "Import selected";
 
   return (
     <section className="real-classroom-assignment-preview" aria-live="polite">
@@ -2497,7 +2493,7 @@ function RealClassroomAssignmentPreview({
       {hasAssignments && (
         <div className="real-classroom-import-panel">
           <div>
-            <strong>Import / sync selected</strong>
+            <strong>Import selected</strong>
             <p>Manual tasks are never changed.</p>
             <small>
               {selectedCount} selected · {importableCount} new · {updatedCount} updated · {importedCount} already imported
@@ -2610,7 +2606,7 @@ function RealClassroomAssignmentPreview({
         !preview.error &&
         !preview.message &&
         preview.assignments.length === 0 && (
-          <p>Use Refresh from Classroom to load included assignments.</p>
+          <p>Load assignments to start reviewing.</p>
         )}
       {!preview.loading &&
         !preview.error &&
@@ -3004,12 +3000,9 @@ function MockClassroomPreview({
       <section className="panel classroom-preview-panel">
         <div className="classroom-preview-intro">
           <div>
-            <p className="settings-group-label">Prototype 3 foundation</p>
-            <h3>Mock Classroom Preview</h3>
-            <p>
-              Review the local sample classes and subject mappings. No Google
-              account is connected.
-            </p>
+            <p className="settings-group-label">Sample data</p>
+            <h3>Sample Classroom</h3>
+            <p>Review sample classes and subject links.</p>
           </div>
           <div className="classroom-preview-intro-actions">
             <span>Local sample data only</span>
@@ -3150,7 +3143,7 @@ function MockClassroomPreview({
 
         <div className="classroom-preview-footer">
           <div>
-            <strong>Preview only</strong>
+            <strong>Sample only</strong>
             <p>Use Sync now on the Classroom card to import sample tasks.</p>
             {previewMessage && (
               <p className="classroom-import-message" aria-live="polite">

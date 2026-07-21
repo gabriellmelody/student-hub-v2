@@ -103,7 +103,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
       <header className="page-header">
         <p className="eyebrow">Calendar</p>
         <h2>School calendar</h2>
-        <p>Your local assignment deadlines, organised by due date.</p>
+        <p>Due dates from your tasks and Classroom imports.</p>
       </header>
 
       <div className="calendar-layout">
@@ -392,8 +392,8 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               </h3>
               <p>
                 {calendarEvents.length === 0
-                  ? "Add a task with a due date to see it here."
-                  : "Select another day or add a task here."}
+                  ? "Add a due date to see it here."
+                  : "Pick another day or add a task."}
               </p>
             </div>
           )}

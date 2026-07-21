@@ -11,6 +11,7 @@ import {
   getTaskSignalBadges,
   getWidgetsForArea,
 } from "../utils/appUtils.js";
+import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
 
 function HomePage({
   tasks,
@@ -369,8 +370,12 @@ function HomePage({
             <div className="focus-card">
               <p>{nextTask.subject}</p>
               <h3>{nextTask.title}</h3>
-              {getTaskSignalBadges(nextTask).length > 0 && (
+              {(getTaskSignalBadges(nextTask).length > 0 ||
+                ["classroom", "classroom-mock"].includes(
+                  nextTask.taskSource || nextTask.source
+                )) && (
                 <div className="task-signal-badges focus-task-signals">
+                  <TaskSourceBadge task={nextTask} />
                   {getTaskSignalBadges(nextTask)
                     .slice(0, 2)
                     .map((badge) => (
@@ -395,7 +400,7 @@ function HomePage({
           ) : (
             <div className="empty-plan">
               <h3>No tasks yet.</h3>
-              <p>Add your first task or load the Demo workspace in Settings.</p>
+              <p>Add a task to start shaping your day.</p>
             </div>
           )}
 
@@ -552,11 +557,8 @@ function HomePage({
     >
       <header className="page-header">
         <p className="eyebrow">Home</p>
-        <h2>Your school day, organised.</h2>
-        <p>
-          See what matters, decide how much time you have, and generate a plan
-          when you’re ready.
-        </p>
+        <h2>Your school day</h2>
+        <p>See what matters and plan when you’re ready.</p>
       </header>
 
       {homeEditMode && (
@@ -638,8 +640,8 @@ function HomePage({
                 <h3>No Home widgets selected.</h3>
                 <p>
                   {homeEditMode
-                    ? "Use Add widget to restore a block."
-                    : "Open Appearance settings to edit Home."}
+                    ? "Add a widget to bring blocks back."
+                    : "Edit Home to bring widgets back."}
                 </p>
               </div>
             </section>
@@ -711,7 +713,7 @@ function HomeCalendarWidget({
 
       {upcomingEvents.length === 0 ? (
         <button className="home-calendar-empty" onClick={openCalendar}>
-          No upcoming school deadlines.
+          No upcoming due dates.
         </button>
       ) : size === "compact" ? (
         <button

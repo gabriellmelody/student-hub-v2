@@ -95,7 +95,7 @@ function SubjectsPage({
         <div>
           <p className="eyebrow">Subjects</p>
           <h2>Your subjects</h2>
-          <p>See workload, upcoming tasks, and completed work by class.</p>
+          <p>Workload, grades, and history by class.</p>
         </div>
         <button
           type="button"
@@ -109,7 +109,7 @@ function SubjectsPage({
       {subjects.length === 0 ? (
         <section className="panel subjects-hub-empty">
           <h3>No subjects yet.</h3>
-          <p>Add subjects in Settings to start tracking work by class.</p>
+          <p>Add subjects to organise work by class.</p>
           <button
             type="button"
             className="primary-button"
@@ -274,8 +274,8 @@ function SubjectsPage({
                   <div className="subject-detail-empty">
                     <p>
                       {selectedScope === "all"
-                        ? "No active tasks yet."
-                        : "No active tasks for this subject yet."}
+                        ? "Nothing active right now."
+                        : "Nothing active for this subject."}
                     </p>
                   </div>
                 )}
@@ -320,7 +320,7 @@ function SubjectsPage({
                     <p>
                       {selectedScope === "all"
                         ? "No completed work yet."
-                        : "No completed work for this subject yet."}
+                        : "No completed work here yet."}
                     </p>
                   </div>
                 )}

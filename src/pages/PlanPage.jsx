@@ -6,6 +6,7 @@ import {
   getTaskSignalBadges,
   parseDateKey,
 } from "../utils/appUtils.js";
+import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
 
 function createManualBlockDraft() {
   return {
@@ -380,8 +381,8 @@ function PlanPage({
     <div className="page">
       <header className="page-header">
         <p className="eyebrow">Today’s Plan</p>
-        <h2>Build a study plan</h2>
-        <p>Use your available time and task list to generate a simple schedule.</p>
+        <h2>Build today’s plan</h2>
+        <p>Generate a schedule, then adjust it to fit your day.</p>
       </header>
 
       <div className="panel">
@@ -477,7 +478,7 @@ function PlanPage({
             <div className="manual-plan-block-heading">
               <div>
                 <h3>Add a custom block</h3>
-                <p>Append a study or break block to the current plan.</p>
+                <p>Add study time or a break.</p>
               </div>
               <button
                 type="button"
@@ -571,7 +572,7 @@ function PlanPage({
         {planBlocks.length === 0 && (
           <div className="empty-plan">
             <h3>Ready when you are.</h3>
-            <p>Add tasks or create a custom block to build your plan.</p>
+            <p>Add tasks or a custom block to start.</p>
           </div>
         )}
 
@@ -740,6 +741,7 @@ function PlanPage({
                       {getEffortLabel(block.effort)} · {block.effort}/5
                     </span>
                   )}
+                  <TaskSourceBadge task={block} />
                   {signalBadges.slice(0, 1).map((badge) => (
                     <span
                       className={`task-signal-badge task-signal-${badge.tone}`}

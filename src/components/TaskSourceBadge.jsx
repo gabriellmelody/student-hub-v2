@@ -8,12 +8,19 @@ function getTaskSourceLabel(task) {
 }
 
 function TaskSourceBadge({ task }) {
+  const source = task?.taskSource || task?.source;
   const label = getTaskSourceLabel(task);
 
   if (!label) return null;
 
   return (
-    <span className="task-signal-badge task-source-badge">{label}</span>
+    <span
+      className={`task-signal-badge task-source-badge task-source-${
+        source === "classroom-mock" ? "sample" : "classroom"
+      }`}
+    >
+      {label}
+    </span>
   );
 }
 

@@ -40,7 +40,7 @@ function TasksPage({
       <header className="page-header">
         <p className="eyebrow">To-do list</p>
         <h2>Your tasks</h2>
-        <p>Active work stays visible. Future work appears when your list clears.</p>
+        <p>Add, sort, and finish school work in one place.</p>
       </header>
 
       <div className="panel">
@@ -140,8 +140,8 @@ function TasksPage({
             </h3>
             <p>
               {sortedCompletedTasks.length > 0
-                ? "Your current tasks are complete. Add another when you’re ready."
-                : "Add your first task or load the Demo workspace in Settings."}
+                ? "Add another task when you’re ready."
+                : "Add your first task to get started."}
             </p>
           </div>
         )}

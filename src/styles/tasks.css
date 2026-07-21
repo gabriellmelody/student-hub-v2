@@ -331,10 +331,16 @@
 }
 
 .task-source-badge {
-  border-color: var(--border);
+  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.task-source-sample {
+  border-color: var(--border-soft);
   background: var(--surface-raised);
   color: var(--text-muted);
-  font-weight: 600;
 }
 
 .task-signal-assessment {
