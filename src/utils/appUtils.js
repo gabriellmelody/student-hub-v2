@@ -372,6 +372,7 @@ export function normalizeTask(task, fallbackSource = "manual") {
     importedAt: task.importedAt || null,
     sourceUpdatedAt: task.sourceUpdatedAt || null,
     lastSyncedAt: task.lastSyncedAt || null,
+    archived: task.archived === true,
   };
 }
 
@@ -734,7 +735,7 @@ export function parseDateKey(dateKey) {
 
 export function getTaskCalendarEvents(tasks, subjects = []) {
   return tasks
-    .filter((task) => task.dueDate)
+    .filter((task) => task.dueDate && !task.archived)
     .map((task) => {
       const subjectProfile = findSubjectProfile(subjects, task.subject);
 

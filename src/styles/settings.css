@@ -1289,6 +1289,66 @@
   font-weight: 650;
 }
 
+.real-classroom-cleanup-card {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.real-classroom-cleanup-card strong {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+
+.real-classroom-cleanup-card p {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.64rem;
+  line-height: 1.4;
+}
+
+.real-classroom-cleanup-card dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin: 0;
+}
+
+.real-classroom-cleanup-card dl div {
+  padding: 7px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-raised);
+}
+
+.real-classroom-cleanup-card dt {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 700;
+}
+
+.real-classroom-cleanup-card dd {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.real-classroom-cleanup-card small {
+  color: var(--text-muted);
+  font-size: 0.61rem;
+  line-height: 1.4;
+}
+
+.real-classroom-cleanup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
 .integration-card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1300,6 +1360,7 @@
 
 .integration-card-actions button,
 .integration-card-actions a,
+.real-classroom-cleanup-actions button,
 .classroom-preview-intro-actions button,
 .classroom-course-actions button,
 .classroom-subject-link-actions button {
@@ -1318,7 +1379,8 @@
 }
 
 .integration-card-actions button,
-.integration-card-actions a {
+.integration-card-actions a,
+.real-classroom-cleanup-actions button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1336,6 +1398,20 @@
   color: var(--text-muted);
   opacity: 0.72;
   cursor: not-allowed;
+}
+
+.real-classroom-cleanup-actions button:disabled {
+  border-color: var(--border-soft);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.real-classroom-cleanup-actions button:not(:disabled):first-child {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
 }
 
 .integration-sync-button {

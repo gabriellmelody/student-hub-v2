@@ -156,7 +156,11 @@ function App() {
   const [showAddTask, setShowAddTask] = useState(false);
   const [planBlocks, setPlanBlocks] = useState(() =>
     savedPlanIsForToday
-      ? restoreSavedPlanBlocks(initialSavedPlan, tasks, startTime)
+      ? restoreSavedPlanBlocks(
+          initialSavedPlan,
+          tasks.filter((task) => !task.archived),
+          startTime
+        )
       : []
   );
   const [stalePlanDate, setStalePlanDate] = useState(() =>
@@ -406,25 +410,27 @@ function App() {
     return () => clearTimeout(planMoveFeedbackTimerRef.current);
   }, []);
 
+  const visibleTasks = tasks.filter((task) => !task.archived);
+
   const activeTasks = sortTasksForDisplay(
-    tasks.filter((task) => {
+    visibleTasks.filter((task) => {
       const daysLeft = getDaysLeft(task.dueDate);
       return !task.completed && daysLeft !== null && daysLeft <= 14;
     })
   );
 
   const backlogTasks = sortTasksForDisplay(
-    tasks.filter((task) => {
+    visibleTasks.filter((task) => {
       const daysLeft = getDaysLeft(task.dueDate);
       return !task.completed && daysLeft !== null && daysLeft > 14;
     })
   );
 
-  const noDeadlineTasks = tasks.filter(
+  const noDeadlineTasks = visibleTasks.filter(
     (task) => !task.completed && !task.dueDate
   );
 
-  const completedTasks = tasks.filter((task) => task.completed);
+  const completedTasks = visibleTasks.filter((task) => task.completed);
 
   let visibleBacklog = [];
 
@@ -437,9 +443,9 @@ function App() {
   const hiddenBacklogCount = backlogTasks.length - visibleBacklog.length;
 
   const progressPercentage =
-    tasks.length === 0
+    visibleTasks.length === 0
       ? 0
-      : Math.round((completedTasks.length / tasks.length) * 100);
+      : Math.round((completedTasks.length / visibleTasks.length) * 100);
 
   const nextTask = [...activeTasks, ...visibleBacklog][0];
   const hasDemoTasks = tasks.some((task) => task.source === "demo");
@@ -826,6 +832,66 @@ function App() {
       updatedCount,
       skippedCount: requestedAssignments.length - uniqueAssignments.length,
     };
+  }
+
+  function isNoDueDateClassroomArchiveCandidate(task) {
+    return (
+      task.source === "classroom" &&
+      !task.dueDate &&
+      !task.completed &&
+      task.archived !== true
+    );
+  }
+
+  function archiveNoDueDateClassroomTasks() {
+    const affectedTaskIds = new Set(
+      tasks.filter(isNoDueDateClassroomArchiveCandidate).map((task) => task.id)
+    );
+
+    if (affectedTaskIds.size === 0) return 0;
+
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        isNoDueDateClassroomArchiveCandidate(task)
+          ? { ...task, archived: true, archivedAt: new Date().toISOString() }
+          : task
+      )
+    );
+    setPlanBlocks((currentBlocks) =>
+      recalculatePlanTimes(
+        cleanPlanSequence(
+          currentBlocks.filter((block) => !affectedTaskIds.has(block.taskId))
+        ),
+        startTime
+      )
+    );
+
+    return affectedTaskIds.size;
+  }
+
+  function restoreArchivedClassroomTasks() {
+    const affectedTaskIds = new Set(
+      tasks
+        .filter(
+          (task) =>
+            task.source === "classroom" &&
+            task.archived === true &&
+            !task.completed
+        )
+        .map((task) => task.id)
+    );
+
+    if (affectedTaskIds.size === 0) return 0;
+
+    setTasks((currentTasks) =>
+      currentTasks.map((task) =>
+        affectedTaskIds.has(task.id)
+          ? { ...task, archived: false, archivedAt: null }
+          : task
+      )
+    );
+
+    return affectedTaskIds.size;
   }
 
   function removeMockClassroomTasks() {
@@ -1407,7 +1473,7 @@ function App() {
 
         <div className="sidebar-footer">
           <p>
-            {completedTasks.length}/{tasks.length} tasks done
+            {completedTasks.length}/{visibleTasks.length} tasks done
           </p>
           <div className="mini-progress-track">
             <div
@@ -1421,7 +1487,7 @@ function App() {
       <section className="main-content">
         {activePage === "home" && (
           <HomePage
-            tasks={tasks}
+            tasks={visibleTasks}
             subjects={subjects}
             activeTasks={activeTasks}
             completedTasks={completedTasks}
@@ -1487,7 +1553,7 @@ function App() {
 
         {activePage === "calendar" && (
           <CalendarPage
-            tasks={tasks}
+            tasks={visibleTasks}
             subjects={subjects}
             setActivePage={setActivePage}
             addTaskToList={addTaskToList}
@@ -1497,7 +1563,7 @@ function App() {
         {activePage === "subjects" && (
           <SubjectsPage
             subjects={subjects}
-            tasks={tasks}
+            tasks={visibleTasks}
             completedTaskHistory={completedTaskHistory}
             setActivePage={setActivePage}
           />
@@ -1532,6 +1598,8 @@ function App() {
             importMockClassroomAssignments={importMockClassroomAssignments}
             importRealClassroomAssignments={importRealClassroomAssignments}
             removeMockClassroomTasks={removeMockClassroomTasks}
+            archiveNoDueDateClassroomTasks={archiveNoDueDateClassroomTasks}
+            restoreArchivedClassroomTasks={restoreArchivedClassroomTasks}
             updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
             initialView={initialNavigation.settingsView}
             classroomCallbackStatus={initialNavigation.classroomCallbackStatus}
@@ -1541,7 +1609,7 @@ function App() {
 
       {rightRailVisible && (
         <RightRail
-          tasks={tasks}
+          tasks={visibleTasks}
           planBlocks={planBlocks}
           setActivePage={setActivePage}
           collapsed={rightRailCollapsed}

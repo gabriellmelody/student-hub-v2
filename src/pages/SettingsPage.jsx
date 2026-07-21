@@ -139,6 +139,8 @@ function SettingsPage({
   importMockClassroomAssignments,
   importRealClassroomAssignments,
   removeMockClassroomTasks,
+  archiveNoDueDateClassroomTasks,
+  restoreArchivedClassroomTasks,
   updateMockClassroomCourseSubject,
   initialView = "hub",
   classroomCallbackStatus = null,
@@ -485,6 +487,8 @@ function SettingsPage({
           importMockClassroomAssignments={importMockClassroomAssignments}
           importRealClassroomAssignments={importRealClassroomAssignments}
           removeMockClassroomTasks={removeMockClassroomTasks}
+          archiveNoDueDateClassroomTasks={archiveNoDueDateClassroomTasks}
+          restoreArchivedClassroomTasks={restoreArchivedClassroomTasks}
           updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
           classroomCallbackStatus={classroomCallbackStatus}
         />
@@ -502,6 +506,8 @@ function IntegrationsSettings({
   importMockClassroomAssignments,
   importRealClassroomAssignments,
   removeMockClassroomTasks,
+  archiveNoDueDateClassroomTasks,
+  restoreArchivedClassroomTasks,
   updateMockClassroomCourseSubject,
   classroomCallbackStatus,
 }) {
@@ -513,6 +519,7 @@ function IntegrationsSettings({
   const [showRealClassroomReview, setShowRealClassroomReview] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [syncMessage, setSyncMessage] = useState("");
+  const [classroomCleanupMessage, setClassroomCleanupMessage] = useState("");
   const [realClassroomSetup, setRealClassroomSetup] = useState({
     checking: false,
     result: null,
@@ -640,6 +647,19 @@ function IntegrationsSettings({
       return fallbackState;
     }
   });
+  const realClassroomCleanup = {
+    candidateCount: tasks.filter(
+      (task) =>
+        task.source === REAL_CLASSROOM_SOURCE &&
+        !task.dueDate &&
+        !task.completed &&
+        task.archived !== true
+    ).length,
+    archivedCount: tasks.filter(
+      (task) => task.source === REAL_CLASSROOM_SOURCE && task.archived === true
+    ).length,
+    message: classroomCleanupMessage,
+  };
 
   useEffect(() => {
     localStorage.setItem(
@@ -723,9 +743,27 @@ function IntegrationsSettings({
       setSyncMessage(
         `${removedCount} sample task${removedCount === 1 ? "" : "s"} removed. Manual tasks were kept.`
       );
+    } else if (pendingAction === "archive-real-no-due") {
+      const archivedCount = archiveNoDueDateClassroomTasks();
+
+      setClassroomCleanupMessage(
+        `${archivedCount} no-due-date Classroom task${
+          archivedCount === 1 ? "" : "s"
+        } archived · 0 due-date tasks archived · 0 manual tasks archived · Nothing was deleted.`
+      );
     }
 
     setPendingAction(null);
+  }
+
+  function restoreArchivedRealClassroomTasks() {
+    const restoredCount = restoreArchivedClassroomTasks();
+
+    setClassroomCleanupMessage(
+      `${restoredCount} archived Classroom task${
+        restoredCount === 1 ? "" : "s"
+      } restored to active views.`
+    );
   }
 
   function updateCourseMapping(course, subject, courseLinks) {
@@ -1355,10 +1393,15 @@ function IntegrationsSettings({
               realClassroomSession={realClassroomSession}
               realClassroomCourses={realClassroomCourses}
               realClassroomCourseSelections={realClassroomCourseSelections}
+              realClassroomCleanup={realClassroomCleanup}
               onLink={() => setPendingAction("link")}
               onSync={() => syncSampleClassroom()}
               onUnlink={() => setPendingAction("unlink")}
               onRemove={() => setPendingAction("remove")}
+              onArchiveNoDueDateClassroomTasks={() =>
+                setPendingAction("archive-real-no-due")
+              }
+              onRestoreArchivedClassroomTasks={restoreArchivedRealClassroomTasks}
               onPreview={() => setShowMockPreview(true)}
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
@@ -1419,6 +1462,7 @@ function IntegrationsSettings({
       {pendingAction && (
         <ClassroomConnectionConfirmation
           action={pendingAction}
+          cleanupCount={realClassroomCleanup.candidateCount}
           onCancel={() => setPendingAction(null)}
           onConfirm={confirmAction}
         />
@@ -1462,10 +1506,13 @@ function IntegrationCard({
   realClassroomSession,
   realClassroomCourses,
   realClassroomCourseSelections,
+  realClassroomCleanup,
   onLink,
   onSync,
   onUnlink,
   onRemove,
+  onArchiveNoDueDateClassroomTasks,
+  onRestoreArchivedClassroomTasks,
   onPreview,
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
@@ -1524,6 +1571,50 @@ function IntegrationCard({
           courseState={realClassroomCourses}
           selections={realClassroomCourseSelections}
         />
+      )}
+      {isRealClassroom && (
+        <div className="real-classroom-cleanup-card">
+          <div>
+            <strong>Classroom cleanup</strong>
+            <p>
+              No-due-date Classroom items can be noisy. Due-date tasks stay
+              active.
+            </p>
+          </div>
+          <dl>
+            <div>
+              <dt>Review candidates</dt>
+              <dd>{realClassroomCleanup.candidateCount}</dd>
+            </div>
+            <div>
+              <dt>Archived</dt>
+              <dd>{realClassroomCleanup.archivedCount}</dd>
+            </div>
+          </dl>
+          {realClassroomCleanup.message && (
+            <p className="integration-card-message" aria-live="polite">
+              {realClassroomCleanup.message}
+            </p>
+          )}
+          <div className="real-classroom-cleanup-actions">
+            <button
+              type="button"
+              onClick={onArchiveNoDueDateClassroomTasks}
+              disabled={realClassroomCleanup.candidateCount === 0}
+            >
+              Archive no-due-date Classroom items
+            </button>
+            {realClassroomCleanup.archivedCount > 0 && (
+              <button
+                type="button"
+                onClick={onRestoreArchivedClassroomTasks}
+              >
+                Restore archived Classroom items
+              </button>
+            )}
+          </div>
+          <small>Archive hides items from active views. Nothing is deleted.</small>
+        </div>
       )}
       {isLinkedSample && (
         <dl className="integration-sync-meta" aria-label="Sample sync status">
@@ -2324,9 +2415,15 @@ function RealClassroomSetupStatus({ setup }) {
   );
 }
 
-function ClassroomConnectionConfirmation({ action, onCancel, onConfirm }) {
+function ClassroomConnectionConfirmation({
+  action,
+  cleanupCount = 0,
+  onCancel,
+  onConfirm,
+}) {
   const isUnlink = action === "unlink";
   const isRemove = action === "remove";
+  const isArchiveRealNoDue = action === "archive-real-no-due";
 
   return (
     <div className="data-confirmation-backdrop" role="presentation">
@@ -2339,20 +2436,28 @@ function ClassroomConnectionConfirmation({ action, onCancel, onConfirm }) {
         aria-labelledby="classroom-confirmation-title"
       >
         <div>
-          <p className="settings-group-label">Sample Classroom</p>
+          <p className="settings-group-label">
+            {isArchiveRealNoDue ? "Google Classroom" : "Sample Classroom"}
+          </p>
           <h3 id="classroom-confirmation-title">
-            {isRemove
-              ? "Remove imported sample tasks?"
-              : isUnlink
-                ? "Unlink sample Classroom?"
-                : "Link sample Classroom?"}
+            {isArchiveRealNoDue
+              ? "Archive no-due-date Classroom items?"
+              : isRemove
+                ? "Remove imported sample tasks?"
+                : isUnlink
+                  ? "Unlink sample Classroom?"
+                  : "Link sample Classroom?"}
           </h3>
           <p>
-            {isRemove
-              ? "Only tasks imported from Sample Classroom will be removed. Manual tasks will be kept."
-              : isUnlink
-                ? "This disconnects local sample mode. Imported sample tasks remain in Student Hub."
-                : "This uses local demo data only. No Google account will be connected."}
+            {isArchiveRealNoDue
+              ? `This will archive ${cleanupCount} imported Classroom task${
+                  cleanupCount === 1 ? "" : "s"
+                } with no due date. Tasks with due dates and manual tasks will not be touched. Nothing will be deleted.`
+              : isRemove
+                ? "Only tasks imported from Sample Classroom will be removed. Manual tasks will be kept."
+                : isUnlink
+                  ? "This disconnects local sample mode. Imported sample tasks remain in Student Hub."
+                  : "This uses local demo data only. No Google account will be connected."}
           </p>
         </div>
         <div className="data-confirmation-actions">
@@ -2364,11 +2469,13 @@ function ClassroomConnectionConfirmation({ action, onCancel, onConfirm }) {
             className="data-confirm-button"
             onClick={onConfirm}
           >
-            {isRemove
-              ? "Remove sample imported tasks"
-              : isUnlink
-                ? "Unlink"
-                : "Link sample"}
+            {isArchiveRealNoDue
+              ? "Archive Classroom items"
+              : isRemove
+                ? "Remove sample imported tasks"
+                : isUnlink
+                  ? "Unlink"
+                  : "Link sample"}
           </button>
         </div>
       </section>
