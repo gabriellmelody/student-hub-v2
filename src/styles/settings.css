@@ -1672,6 +1672,10 @@
   border-color: var(--border-soft);
   background: transparent;
   color: var(--text-secondary);
+  min-height: 26px;
+  padding: 4px 8px;
+  font-size: 0.63rem;
+  font-weight: 680;
 }
 
 .integration-card-actions .secondary:hover {

@@ -643,6 +643,7 @@ function IntegrationsSettings({
       message: "",
       error: "",
       importResult: null,
+      importResultCopy: null,
       selectedAssignmentIds: {},
     });
   const [realClassroomCourseSelections, setRealClassroomCourseSelections] =
@@ -1312,6 +1313,7 @@ function IntegrationsSettings({
       error: "",
       message: "",
       importResult: null,
+      importResultCopy: null,
       selectedAssignmentIds: {},
     }));
 
@@ -1396,6 +1398,7 @@ function IntegrationsSettings({
           "Assignments loaded as a read-only preview. No tasks were created.",
         error: "",
         importResult: null,
+        importResultCopy: null,
         selectedAssignmentIds,
       });
     } catch {
@@ -1442,6 +1445,7 @@ function IntegrationsSettings({
         ...currentPreview,
         error: "Select at least one assignment to import or sync.",
         importResult: null,
+        importResultCopy: null,
       }));
       return;
     }
@@ -1451,25 +1455,27 @@ function IntegrationsSettings({
         ...currentPreview,
         error: "Link included classes to Subjects before importing assignments.",
         importResult: null,
+        importResultCopy: null,
       }));
       return;
     }
 
     const result = importRealClassroomAssignments(importableAssignments);
+    const resultCopy = getRealClassroomImportResultCopy(
+      result,
+      importableAssignments.length
+    );
 
     setRealClassroomAssignmentPreview((currentPreview) => ({
       ...currentPreview,
       error: "",
-      message: `${result.importedCount} new assignment${
-        result.importedCount === 1 ? "" : "s"
-      } imported · ${result.updatedCount} existing assignment${
-        result.updatedCount === 1 ? "" : "s"
-      } updated · ${result.skippedCount} already up to date or skipped · 0 duplicates created · 0 manual tasks changed · 0 tasks deleted.`,
+      message: resultCopy.inlineSummary,
       importResult: result,
+      importResultCopy: resultCopy,
     }));
     setSuccessToast({
-      title: "Assignments imported",
-      summary: `${result.importedCount} imported · ${result.updatedCount} updated · 0 duplicates`,
+      title: resultCopy.title,
+      summary: resultCopy.toastSummary,
     });
   }
 
@@ -1733,7 +1739,11 @@ function IntegrationCard({
         </span>
       </div>
 
-      <p className="integration-description">{integration.description}</p>
+      <p className="integration-description">
+        {isRealClassroom && realClassroomSession.connected
+          ? "Classroom is connected. Manage classes, preview assignments, and import selected work."
+          : integration.description}
+      </p>
       {isClassroom && (
         <p className="integration-helper">
           {isLinkedSample
@@ -1743,7 +1753,7 @@ function IntegrationCard({
       )}
       {isRealClassroom && (
         <div className="integration-helper integration-real-classroom-note">
-          <p>Connect, manage classes, preview assignments, import selected.</p>
+          <p>Manage classes, preview work, and import only what you select.</p>
         </div>
       )}
       {isRealClassroom && (
@@ -1888,6 +1898,39 @@ function getRealClassroomCourseCounts(courses, selections) {
   };
 }
 
+function getRealClassroomImportResultCopy(result, checkedCount) {
+  const importedCount = Number(result?.importedCount) || 0;
+  const updatedCount = Number(result?.updatedCount) || 0;
+  const skippedCount = Number(result?.skippedCount) || 0;
+  const totalChecked =
+    checkedCount || importedCount + updatedCount + skippedCount;
+  const checkedLabel = `${totalChecked} assignment${
+    totalChecked === 1 ? "" : "s"
+  } checked`;
+
+  if (importedCount > 0) {
+    return {
+      title: "Assignments imported",
+      toastSummary: `${importedCount} imported · ${updatedCount} updated · 0 duplicates`,
+      inlineSummary: `${totalChecked} checked · ${importedCount} imported · ${updatedCount} updated · no duplicates`,
+    };
+  }
+
+  if (updatedCount > 0) {
+    return {
+      title: "Assignments synced",
+      toastSummary: `${updatedCount} updated · 0 duplicates`,
+      inlineSummary: `${totalChecked} checked · ${updatedCount} updated · no duplicates`,
+    };
+  }
+
+  return {
+    title: "Already up to date",
+    toastSummary: `${checkedLabel} · 0 new imports · 0 duplicates`,
+    inlineSummary: `${totalChecked} checked · already up to date · no duplicates`,
+  };
+}
+
 function RealClassroomCourseSummary({ courseState, selections }) {
   const courses = courseState.courses;
   const { includedCount, ignoredCount, needsReviewCount } =
@@ -1947,11 +1990,11 @@ function RealClassroomCompactStatus({
           <dd>{includedCount}</dd>
         </div>
         <div>
-          <dt>Linked</dt>
+          <dt>Subject links</dt>
           <dd>{linkedCount}</dd>
         </div>
         <div>
-          <dt>Tasks</dt>
+          <dt>Imported</dt>
           <dd>{importedCount}</dd>
         </div>
         <div>
@@ -2034,9 +2077,7 @@ function RealClassroomCourseReviewModal({
             <h3 id="real-classroom-review-title">
               Manage Classroom
             </h3>
-            <p>
-              Choose classes, link Subjects, then import selected assignments.
-            </p>
+            <p>Choose classes, link Subjects, and import selected work.</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close class review">
             Close
@@ -2245,10 +2286,8 @@ function RealClassroomCourseReviewModal({
           <section className="real-classroom-tab-panel real-classroom-tab-panel--assignments">
             <div className="real-classroom-tab-heading">
               <div>
-                <strong>Assignment preview</strong>
-                <p>
-                  Review what to add or update.
-                </p>
+                <strong>Assignments</strong>
+                <p>Only selected assignments become tasks.</p>
               </div>
               <button
                 type="button"
@@ -2444,8 +2483,8 @@ function RealClassroomAssignmentPreview({
     <section className="real-classroom-assignment-preview" aria-live="polite">
       <div className="real-classroom-assignment-preview-header">
         <div>
-          <strong>Assignment preview</strong>
-          <p>Only selected assignments become Student Hub tasks.</p>
+          <strong>Preview</strong>
+          <p>Only selected assignments become tasks.</p>
         </div>
         {preview.summary && (
           <span>
@@ -2459,9 +2498,7 @@ function RealClassroomAssignmentPreview({
         <div className="real-classroom-import-panel">
           <div>
             <strong>Import / sync selected</strong>
-            <p>
-              Turned-in and no-due-date items are shown but not selected.
-            </p>
+            <p>Manual tasks are never changed.</p>
             <small>
               {selectedCount} selected · {importableCount} new · {updatedCount} updated · {importedCount} already imported
             </small>
@@ -2486,10 +2523,12 @@ function RealClassroomAssignmentPreview({
             <span>✓</span>
           </div>
           <div>
-            <strong>Assignments imported</strong>
+            <strong>
+              {preview.importResultCopy?.title || "Assignments synced"}
+            </strong>
             <p>
-              {preview.importResult.importedCount} imported ·{" "}
-              {preview.importResult.updatedCount} updated · 0 duplicates
+              {preview.importResultCopy?.toastSummary ||
+                `${preview.importResult.importedCount} imported · ${preview.importResult.updatedCount} updated · 0 duplicates`}
             </p>
           </div>
         </div>
@@ -2541,8 +2580,7 @@ function RealClassroomAssignmentPreview({
             </button>
           </div>
           <p>
-            Due-date active work and missing work are selected by default.
-            Turned-in and no-due-date items are not.
+            Turned-in and no-due-date items are not selected by default.
           </p>
         </div>
       )}
