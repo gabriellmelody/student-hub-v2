@@ -573,36 +573,92 @@
   font-size: 0.56rem;
 }
 
-.real-classroom-course-review {
+.real-classroom-course-summary-card {
   display: grid;
-  gap: 12px;
-  margin: 0 var(--density-panel-padding) var(--density-panel-padding);
-  padding: 14px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  background: var(--surface-raised);
+  gap: 5px;
+  margin-top: 9px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-subtle);
   color: var(--text-muted);
-  font-size: 0.7rem;
-  line-height: 1.42;
-  box-shadow: var(--shadow-subtle);
+  font-size: 0.64rem;
+  line-height: 1.4;
 }
 
-.real-classroom-course-review > strong,
-.real-classroom-review-heading strong {
+.real-classroom-course-summary-card strong {
   color: var(--text-secondary);
-  font-size: 0.82rem;
+  font-size: 0.66rem;
 }
 
-.real-classroom-course-review p,
+.real-classroom-course-summary-card p,
+.real-classroom-course-summary-card small,
+.real-classroom-course-summary-card span,
+.real-classroom-modal-header p,
+.real-classroom-modal-footer p,
 .real-classroom-course-row h4 {
   margin: 0;
 }
 
+.real-classroom-course-summary-card small,
+.real-classroom-course-summary-card span {
+  color: var(--text-muted);
+  font-size: 0.58rem;
+}
+
+.real-classroom-course-summary-card button,
+.real-classroom-modal-header button,
+.real-classroom-modal-footer button {
+  appearance: none;
+  width: fit-content;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid var(--accent-border);
+  border-radius: 7px;
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+  font-family: inherit;
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.real-classroom-modal-backdrop {
+  z-index: 90;
+}
+
+.real-classroom-course-modal {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  gap: 12px;
+  width: min(860px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 44px));
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-modal);
+}
+
+.real-classroom-modal-header,
 .real-classroom-review-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
+}
+
+.real-classroom-modal-header h3 {
+  margin: 2px 0 5px;
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.real-classroom-modal-header p,
+.real-classroom-modal-footer p {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
 }
 
 .real-classroom-review-heading > span {
@@ -652,7 +708,7 @@
 .real-classroom-course-list {
   display: grid;
   gap: 8px;
-  max-height: min(52vh, 520px);
+  min-height: 0;
   overflow-y: auto;
   padding-right: 4px;
   scrollbar-color: var(--border-hover) transparent;
@@ -744,9 +800,12 @@
   color: var(--accent-soft);
 }
 
-.real-classroom-storage-note {
-  color: var(--text-muted);
-  font-size: 0.62rem;
+.real-classroom-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 2px;
 }
 
 .integration-card-message {
@@ -2061,7 +2120,7 @@
 }
 
 @media (max-width: 720px) {
-  .real-classroom-review-heading,
+  .real-classroom-modal-header,
   .real-classroom-connection-status {
     display: grid;
   }

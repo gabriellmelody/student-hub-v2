@@ -423,6 +423,7 @@ function IntegrationsSettings({
     (task) => task.source === "classroom-mock"
   ).length;
   const [showMockPreview, setShowMockPreview] = useState(false);
+  const [showRealClassroomReview, setShowRealClassroomReview] = useState(false);
   const [pendingAction, setPendingAction] = useState(null);
   const [syncMessage, setSyncMessage] = useState("");
   const [realClassroomSetup, setRealClassroomSetup] = useState({
@@ -797,11 +798,24 @@ function IntegrationsSettings({
               onPreview={() => setShowMockPreview(true)}
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
+              onOpenRealClassroomReview={() => setShowRealClassroomReview(true)}
             />
           ))}
         </div>
+      </section>
 
-        <RealClassroomCourseReview
+      {showMockPreview && (
+        <MockClassroomPreview
+          tasks={tasks}
+          subjects={subjects}
+          setSubjects={setSubjects}
+          onCourseMappingChange={updateCourseMapping}
+          onClose={() => setShowMockPreview(false)}
+        />
+      )}
+
+      {showRealClassroomReview && (
+        <RealClassroomCourseReviewModal
           courseState={realClassroomCourses}
           selections={realClassroomCourseSelections}
           onSelectCourse={updateRealClassroomCourseSelection}
@@ -812,16 +826,7 @@ function IntegrationsSettings({
             updateAllRealClassroomCourseSelections("ignored")
           }
           onResetChoices={resetRealClassroomCourseSelections}
-        />
-      </section>
-
-      {showMockPreview && (
-        <MockClassroomPreview
-          tasks={tasks}
-          subjects={subjects}
-          setSubjects={setSubjects}
-          onCourseMappingChange={updateCourseMapping}
-          onClose={() => setShowMockPreview(false)}
+          onClose={() => setShowRealClassroomReview(false)}
         />
       )}
 
@@ -851,6 +856,7 @@ function IntegrationCard({
   onPreview,
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
+  onOpenRealClassroomReview,
 }) {
   const isClassroom = integration.id === "google-classroom";
   const isRealClassroom = integration.id === "real-google-classroom";
@@ -900,6 +906,13 @@ function IntegrationCard({
         <RealClassroomConnectionStatus
           session={realClassroomSession}
           setup={realClassroomSetup}
+        />
+      )}
+      {isRealClassroom && (
+        <RealClassroomCourseSummary
+          courseState={realClassroomCourses}
+          selections={realClassroomCourseSelections}
+          onOpenReview={onOpenRealClassroomReview}
         />
       )}
       {isLinkedSample && (
@@ -1017,16 +1030,7 @@ function IntegrationCard({
   );
 }
 
-function RealClassroomCourseReview({
-  courseState,
-  selections,
-  onSelectCourse,
-  onIncludeAll,
-  onIgnoreAll,
-  onResetChoices,
-}) {
-  const courses = courseState.courses;
-  const hasLoaded = courseState.lastCheckedAt || courseState.error;
+function getRealClassroomCourseCounts(courses, selections) {
   const includedCount = courses.filter(
     (course) =>
       selections[course.classroomCourseId || course.externalId] === "included"
@@ -1040,116 +1044,176 @@ function RealClassroomCourseReview({
     courses.length - includedCount - ignoredCount
   );
 
-  if (!hasLoaded && !courseState.loading) {
-    return (
-      <div className="real-classroom-course-review">
-        <div className="real-classroom-review-heading">
-          <div>
-            <strong>Class review</strong>
-            <p>
-              Load read-only courses, then choose which classes Student Hub
-              should use later. Assignments are not imported yet.
-            </p>
-          </div>
-        </div>
-      </div>
-    );
+  return {
+    includedCount,
+    ignoredCount,
+    needsReviewCount,
+  };
+}
+
+function RealClassroomCourseSummary({ courseState, selections, onOpenReview }) {
+  const courses = courseState.courses;
+  const hasCourses = courses.length > 0;
+  const { includedCount, ignoredCount, needsReviewCount } =
+    getRealClassroomCourseCounts(courses, selections);
+
+  if (!courseState.lastCheckedAt && !courseState.error && !courseState.loading) {
+    return null;
   }
 
   return (
-    <div className="real-classroom-course-review" aria-live="polite">
-      <div className="real-classroom-review-heading">
-        <div>
-          <strong>Class review</strong>
-          <p>
-            {courseState.loading
-              ? "Loading active Classroom courses..."
-              : courseState.error ||
-                courseState.message ||
-                "Choose which classes Student Hub should use later."}
-          </p>
-        </div>
-        {courseState.lastCheckedAt && (
-          <span>{formatConnectionTime(courseState.lastCheckedAt)}</span>
-        )}
-      </div>
+    <div className="real-classroom-course-summary-card" aria-live="polite">
+      <strong>
+        {courseState.loading
+          ? "Loading courses"
+          : courseState.error
+            ? "Courses not loaded"
+            : `${courses.length} courses loaded`}
+      </strong>
+      <p>
+        {courseState.loading
+          ? "Reading active Classroom courses..."
+          : courseState.error ||
+            `${includedCount} included · ${ignoredCount} ignored · ${needsReviewCount} need review`}
+      </p>
+      {courseState.lastCheckedAt && (
+        <small>Last loaded {formatConnectionTime(courseState.lastCheckedAt)}</small>
+      )}
+      {hasCourses && (
+        <button type="button" onClick={onOpenReview}>
+          Review classes
+        </button>
+      )}
+      <span>Assignments are not imported yet.</span>
+    </div>
+  );
+}
 
-      {courseState.summary && (
+function RealClassroomCourseReviewModal({
+  courseState,
+  selections,
+  onSelectCourse,
+  onIncludeAll,
+  onIgnoreAll,
+  onResetChoices,
+  onClose,
+}) {
+  const courses = courseState.courses;
+  const { includedCount, ignoredCount, needsReviewCount } =
+    getRealClassroomCourseCounts(courses, selections);
+
+  useEffect(() => {
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div
+      className="data-confirmation-backdrop real-classroom-modal-backdrop"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <section
+        className="real-classroom-course-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="real-classroom-review-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="real-classroom-modal-header">
+          <div>
+            <p className="settings-group-label">Real Google Classroom</p>
+            <h3 id="real-classroom-review-title">
+              Review Google Classroom classes
+            </h3>
+            <p>
+              Choose which classes Student Hub should use later. Assignments
+              are not imported yet.
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close class review">
+            Close
+          </button>
+        </header>
+
         <div className="real-classroom-course-summary">
-          <span>{courseState.summary.count || 0} total</span>
+          <span>{courses.length} total</span>
           <span>{includedCount} included</span>
           <span>{ignoredCount} ignored</span>
           <span>{needsReviewCount} needs review</span>
           <span>No tasks created</span>
         </div>
-      )}
 
-      {courses.length > 0 && (
-        <>
-          <div className="real-classroom-course-actions">
-            <button type="button" onClick={onIncludeAll}>
-              Include all
-            </button>
-            <button type="button" onClick={onIgnoreAll}>
-              Ignore all
-            </button>
-            <button type="button" onClick={onResetChoices}>
-              Reset choices
-            </button>
-          </div>
+        <div className="real-classroom-course-actions">
+          <button type="button" onClick={onIncludeAll}>
+            Include all
+          </button>
+          <button type="button" onClick={onIgnoreAll}>
+            Ignore all
+          </button>
+          <button type="button" onClick={onResetChoices}>
+            Reset choices
+          </button>
+        </div>
 
-          <div className="real-classroom-course-list">
-            {courses.map((course) => {
-              const courseId = course.classroomCourseId || course.externalId;
-              const selection = selections[courseId] || "needs-review";
+        <div className="real-classroom-course-list">
+          {courses.map((course) => {
+            const courseId = course.classroomCourseId || course.externalId;
+            const selection = selections[courseId] || "needs-review";
 
-              return (
-                <article className="real-classroom-course-row" key={courseId}>
-                  <div className="real-classroom-course-main">
-                    <h4>{course.name}</h4>
-                    <p>
-                      {[
-                        course.section,
-                        course.description || course.courseState,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") || "No section"}
-                    </p>
-                  </div>
-                  <span className={`real-classroom-course-chip ${selection}`}>
-                    {selection === "included"
-                      ? "Included"
-                      : selection === "ignored"
-                        ? "Ignored"
-                        : "Needs review"}
-                  </span>
-                  <div className="real-classroom-course-choice">
-                    <button
-                      type="button"
-                      className={selection === "included" ? "is-selected" : ""}
-                      onClick={() => onSelectCourse(courseId, "included")}
-                    >
-                      Include
-                    </button>
-                    <button
-                      type="button"
-                      className={selection === "ignored" ? "is-selected" : ""}
-                      onClick={() => onSelectCourse(courseId, "ignored")}
-                    >
-                      Ignore
-                    </button>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-        </>
-      )}
+            return (
+              <article className="real-classroom-course-row" key={courseId}>
+                <div className="real-classroom-course-main">
+                  <h4>{course.name}</h4>
+                  <p>
+                    {[course.section, course.description || course.courseState]
+                      .filter(Boolean)
+                      .join(" · ") || "No section"}
+                  </p>
+                </div>
+                <span className={`real-classroom-course-chip ${selection}`}>
+                  {selection === "included"
+                    ? "Included"
+                    : selection === "ignored"
+                      ? "Ignored"
+                      : "Needs review"}
+                </span>
+                <div className="real-classroom-course-choice">
+                  <button
+                    type="button"
+                    className={selection === "included" ? "is-selected" : ""}
+                    onClick={() => onSelectCourse(courseId, "included")}
+                  >
+                    Include
+                  </button>
+                  <button
+                    type="button"
+                    className={selection === "ignored" ? "is-selected" : ""}
+                    onClick={() => onSelectCourse(courseId, "ignored")}
+                  >
+                    Ignore
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
 
-      <p className="real-classroom-storage-note">
-        Only include/ignore choices are saved locally. No Google tokens are
-        stored in localStorage.
-      </p>
+        <footer className="real-classroom-modal-footer">
+          <p>
+            Only include/ignore choices are saved locally. No Google tokens are
+            stored in localStorage.
+          </p>
+          <button type="button" onClick={onClose}>
+            Done
+          </button>
+        </footer>
+      </section>
     </div>
   );
 }
