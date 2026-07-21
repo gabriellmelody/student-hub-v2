@@ -13,37 +13,44 @@ function getCallbackParam(request, name) {
   return callbackUrl.searchParams.get(name);
 }
 
-function summarizeTokenResponse(tokenResponse) {
-  return {
-    hasAccessToken: typeof tokenResponse.access_token === "string",
-    hasRefreshToken: typeof tokenResponse.refresh_token === "string",
-    expiresIn:
-      typeof tokenResponse.expires_in === "number"
-        ? tokenResponse.expires_in
-        : null,
-    scope:
-      typeof tokenResponse.scope === "string" ? tokenResponse.scope : null,
-    tokenType:
-      typeof tokenResponse.token_type === "string"
-        ? tokenResponse.token_type
-        : null,
-  };
+async function readSafeJson(fetchResponse) {
+  try {
+    return await fetchResponse.json();
+  } catch {
+    return null;
+  }
 }
 
-function getSafeGoogleError(tokenResponse) {
-  if (!tokenResponse || typeof tokenResponse !== "object") {
-    return "Google token endpoint returned an unexpected response.";
+function getSafeGoogleError(googleResponse, fallbackMessage) {
+  if (!googleResponse || typeof googleResponse !== "object") {
+    return fallbackMessage;
   }
 
   return (
-    tokenResponse.error_description ||
-    tokenResponse.error ||
-    "Google token endpoint rejected the authorization code."
+    googleResponse.error_description ||
+    googleResponse.error?.message ||
+    (typeof googleResponse.error === "string" ? googleResponse.error : "") ||
+    fallbackMessage
   );
 }
 
+function normalizeClassroomCourse(course, lastSyncedAt) {
+  return {
+    source: "classroom",
+    externalId: String(course?.id || ""),
+    classroomCourseId: String(course?.id || ""),
+    name: String(course?.name || "Untitled course"),
+    section: String(course?.section || ""),
+    description: String(course?.descriptionHeading || course?.description || ""),
+    courseState: String(course?.courseState || ""),
+    alternateLink: String(course?.alternateLink || ""),
+    sourceUpdatedAt: String(course?.updateTime || ""),
+    lastSyncedAt,
+  };
+}
+
 export default async function handler(request, response) {
-  // Safe OAuth proof only: exchange server-side, summarize success, discard tokens.
+  // Safe OAuth proof only: exchange server-side, read courses once, discard tokens.
   const config = getGoogleClassroomOAuthConfigStatus();
 
   if (!config.configured) {
@@ -78,6 +85,8 @@ export default async function handler(request, response) {
   const authorizationCode = getCallbackParam(request, "code");
 
   if (authorizationCode) {
+    let requestStage = "token_exchange";
+
     try {
       const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
         method: "POST",
@@ -93,7 +102,7 @@ export default async function handler(request, response) {
           grant_type: "authorization_code",
         }),
       });
-      const tokenJson = await tokenResponse.json();
+      const tokenJson = await readSafeJson(tokenResponse);
 
       if (!tokenResponse.ok) {
         response.status(400).json({
@@ -101,33 +110,105 @@ export default async function handler(request, response) {
           status: "token_exchange_failed",
           configured: true,
           message: "Google OAuth token exchange failed.",
-          googleError: getSafeGoogleError(tokenJson),
+          googleError: getSafeGoogleError(
+            tokenJson,
+            "Google token endpoint rejected the authorization code."
+          ),
           nextStep:
             "Start the authorization flow again or review the OAuth configuration.",
         });
         return;
       }
 
+      if (typeof tokenJson?.access_token !== "string") {
+        response.status(502).json({
+          ok: false,
+          status: "token_exchange_failed",
+          configured: true,
+          message: "Google OAuth token exchange did not return an access token.",
+          googleError: "Token endpoint returned an unexpected response.",
+          nextStep:
+            "Try the authorization flow again after checking the OAuth configuration.",
+        });
+        return;
+      }
+
+      requestStage = "courses_fetch";
+
+      const coursesResponse = await fetch(
+        "https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE",
+        {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${tokenJson.access_token}`,
+          },
+        }
+      );
+      const coursesJson = await readSafeJson(coursesResponse);
+
+      if (!coursesResponse.ok) {
+        response.status(502).json({
+          ok: false,
+          status: "courses_fetch_failed",
+          configured: true,
+          message:
+            "Google OAuth worked, but Student Hub could not read Classroom courses.",
+          googleError: getSafeGoogleError(
+            coursesJson,
+            "Google Classroom courses endpoint returned an unexpected response."
+          ),
+          nextStep:
+            "Check Classroom permissions, scopes, and whether the selected Google account has Classroom access.",
+        });
+        return;
+      }
+
+      const lastSyncedAt = new Date().toISOString();
+      const courses = Array.isArray(coursesJson?.courses)
+        ? coursesJson.courses.map((course) =>
+            normalizeClassroomCourse(course, lastSyncedAt)
+          )
+        : [];
+
       response.status(200).json({
         ok: true,
-        status: "token_exchange_verified_not_stored",
+        status: "courses_read_verified_not_stored",
         configured: true,
         message:
-          "Google OAuth token exchange worked. Tokens were received server-side and discarded.",
-        tokenSummary: summarizeTokenResponse(tokenJson),
+          courses.length > 0
+            ? "Google Classroom courses were read successfully. Tokens were discarded and no tasks were imported."
+            : "Google Classroom connected, but no active courses were found for this account.",
+        courseSummary: {
+          count: courses.length,
+          returnedCourseStates: ["ACTIVE"],
+        },
+        courses,
         nextStep:
-          "Store tokens securely server-side before reading Classroom courses.",
+          "Store connection securely before showing courses inside the app.",
       });
     } catch {
-      response.status(502).json({
-        ok: false,
-        status: "token_exchange_failed",
-        configured: true,
-        message: "Google OAuth token exchange could not be completed.",
-        googleError: "Token endpoint request failed.",
-        nextStep:
-          "Try the authorization flow again after checking the serverless runtime.",
-      });
+      if (requestStage === "token_exchange") {
+        response.status(502).json({
+          ok: false,
+          status: "token_exchange_failed",
+          configured: true,
+          message: "Google OAuth token exchange could not be completed.",
+          googleError: "Token endpoint request failed.",
+          nextStep:
+            "Try the authorization flow again after checking the serverless runtime.",
+        });
+      } else {
+        response.status(502).json({
+          ok: false,
+          status: "courses_fetch_failed",
+          configured: true,
+          message:
+            "Google OAuth worked, but Student Hub could not read Classroom courses.",
+          googleError: "Classroom courses request failed.",
+          nextStep:
+            "Check Classroom permissions, scopes, and whether the selected Google account has Classroom access.",
+        });
+      }
     }
     return;
   }
