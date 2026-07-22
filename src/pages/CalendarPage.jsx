@@ -15,6 +15,100 @@ import {
   updateTaskTitleWithDetection,
 } from "../utils/appUtils.js";
 
+const calendarDotLimit = 5;
+
+const effortKeywordGroups = {
+  high: [
+    "test",
+    "exam",
+    "assessment",
+    "essay",
+    "project",
+    "presentation",
+    "lab report",
+    "final",
+    "draft",
+    "research",
+  ],
+  medium: [
+    "worksheet",
+    "practice",
+    "questions",
+    "reading",
+    "paragraph",
+    "homework",
+  ],
+  low: ["vocab", "review", "watch", "check", "form", "short"],
+};
+
+const effortLabels = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+};
+
+function textIncludesKeyword(text, keyword) {
+  return new RegExp(`\\b${keyword.replaceAll(" ", "\\s+")}\\b`, "i").test(text);
+}
+
+function getCalendarEffortLevel(task) {
+  const numericEffort = Number(task.effort);
+
+  if (Number.isFinite(numericEffort) && numericEffort > 0) {
+    if (numericEffort <= 2) return "low";
+    if (numericEffort >= 4) return "high";
+    return "medium";
+  }
+
+  if (["urgent", "high"].includes(task.importance)) return "high";
+  if (["assessment", "project"].includes(task.taskType)) return "high";
+  if (task.taskType === "revision") return "medium";
+
+  const searchText = [
+    task.title,
+    task.subject,
+    task.taskType,
+    task.importance,
+    ...(Array.isArray(task.detectedTags) ? task.detectedTags : []),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  if (
+    effortKeywordGroups.high.some((keyword) =>
+      textIncludesKeyword(searchText, keyword)
+    )
+  ) {
+    return "high";
+  }
+
+  if (
+    effortKeywordGroups.medium.some((keyword) =>
+      textIncludesKeyword(searchText, keyword)
+    )
+  ) {
+    return "medium";
+  }
+
+  if (
+    effortKeywordGroups.low.some((keyword) =>
+      textIncludesKeyword(searchText, keyword)
+    )
+  ) {
+    return "low";
+  }
+
+  return "medium";
+}
+
+function getCalendarDotStyle(event, colourMode) {
+  if (colourMode === "subject" && event.subjectColour) {
+    return { "--calendar-dot-color": event.subjectColour };
+  }
+
+  return undefined;
+}
+
 function createCalendarTaskDraft(dueDate) {
   return {
     subject: "",
@@ -34,6 +128,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     () => new Date(today.getFullYear(), today.getMonth(), 1)
   );
   const [selectedDate, setSelectedDate] = useState(() => formatDateKey(today));
+  const [dotColourMode, setDotColourMode] = useState("subject");
   const [showCalendarTaskForm, setShowCalendarTaskForm] = useState(false);
   const [calendarTaskDraft, setCalendarTaskDraft] = useState(() =>
     createCalendarTaskDraft(formatDateKey(today))
@@ -100,10 +195,34 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
 
   return (
     <div className="page calendar-page">
-      <header className="page-header">
-        <p className="eyebrow">Calendar</p>
-        <h2>School calendar</h2>
-        <p>Due dates from your tasks and Classroom imports.</p>
+      <header className="page-header calendar-page-header">
+        <div>
+          <p className="eyebrow">Calendar</p>
+          <h2>School calendar</h2>
+          <p>Due dates from your tasks and Classroom imports.</p>
+        </div>
+
+        <div className="calendar-colour-toggle" aria-label="Calendar dot colour mode">
+          <span>Colour by</span>
+          <div>
+            <button
+              type="button"
+              className={dotColourMode === "subject" ? "active" : ""}
+              aria-pressed={dotColourMode === "subject"}
+              onClick={() => setDotColourMode("subject")}
+            >
+              Subject
+            </button>
+            <button
+              type="button"
+              className={dotColourMode === "effort" ? "active" : ""}
+              aria-pressed={dotColourMode === "effort"}
+              onClick={() => setDotColourMode("effort")}
+            >
+              Effort
+            </button>
+          </div>
+        </div>
       </header>
 
       <div className="calendar-layout">
@@ -153,6 +272,14 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               const dayEvents = calendarEvents.filter(
                 (event) => event.date === day.dateKey
               );
+              const activeDayEvents = dayEvents.filter(
+                (event) => !event.completed
+              );
+              const visibleDots = activeDayEvents.slice(0, calendarDotLimit);
+              const hiddenDotCount = Math.max(
+                0,
+                activeDayEvents.length - visibleDots.length
+              );
               const isSelected = day.dateKey === selectedDate;
 
               return (
@@ -168,33 +295,42 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                   aria-label={`${day.date.toLocaleDateString(undefined, {
                     month: "long",
                     day: "numeric",
-                  })}, ${dayEvents.length} task${
-                    dayEvents.length === 1 ? "" : "s"
+                  })}, ${activeDayEvents.length} active task${
+                    activeDayEvents.length === 1 ? "" : "s"
                   } due`}
                   onClick={() => selectCalendarDay(day)}
                 >
                   <span className="calendar-day-number">{day.date.getDate()}</span>
 
-                  <span className="calendar-day-events">
-                    {dayEvents.slice(0, 2).map((event) => (
-                      <span
-                        className={`calendar-event-label ${
-                          event.completed ? "completed" : ""
-                        } ${event.subjectColour ? "has-subject-colour" : ""}`}
-                        data-source={event.source}
-                        key={event.id}
-                        style={
-                          event.subjectColour
-                            ? { "--subject-color": event.subjectColour }
-                            : undefined
-                        }
-                      >
-                        <i aria-hidden="true" />
-                        <em>{event.title}</em>
-                      </span>
-                    ))}
-                    {dayEvents.length > 2 && (
-                      <small>+{dayEvents.length - 2} more</small>
+                  <span
+                    className="calendar-task-dots"
+                    aria-hidden="true"
+                    data-colour-mode={dotColourMode}
+                  >
+                    {visibleDots.map((event) => {
+                      const effortLevel = getCalendarEffortLevel(event);
+
+                      return (
+                        <span
+                          key={event.id}
+                          className={`calendar-task-dot calendar-dot-${dotColourMode} calendar-dot-effort-${effortLevel} ${
+                            dotColourMode === "subject" && event.subjectColour
+                              ? "has-subject-colour"
+                              : ""
+                          }`}
+                          style={getCalendarDotStyle(event, dotColourMode)}
+                          title={`${event.title} · ${
+                            dotColourMode === "effort"
+                              ? `${effortLabels[effortLevel]} effort`
+                              : event.subject || "No subject"
+                          }`}
+                        />
+                      );
+                    })}
+                    {hiddenDotCount > 0 && (
+                      <small className="calendar-dot-overflow">
+                        +{hiddenDotCount}
+                      </small>
                     )}
                   </span>
                 </button>
@@ -331,6 +467,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               {selectedEvents.map((event) => {
                 const daysLeft = getDaysLeft(event.date);
                 const signalBadges = getTaskSignalBadges(event);
+                const effortLevel = getCalendarEffortLevel(event);
                 const hasClassroomSource = [
                   "classroom",
                   "classroom-mock",
@@ -367,6 +504,13 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                           ))}
                         </span>
                       )}
+                      <span className="calendar-effort-summary">
+                        <span
+                          className={`calendar-effort-chip calendar-effort-${effortLevel}`}
+                        >
+                          {effortLabels[effortLevel]} effort
+                        </span>
+                      </span>
                     </span>
                     <span
                       className={
