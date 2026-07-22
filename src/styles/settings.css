@@ -1701,6 +1701,54 @@
   color: var(--accent-soft);
 }
 
+.google-calendar-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.google-calendar-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: var(--surface-subtle);
+}
+
+.google-calendar-colour {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--google-calendar-colour);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--google-calendar-colour) 14%, transparent);
+}
+
+.google-calendar-row strong,
+.google-calendar-row small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.google-calendar-row strong {
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.google-calendar-row small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.6rem;
+  font-weight: 650;
+}
+
 .integration-link-button {
   margin-left: 0;
 }

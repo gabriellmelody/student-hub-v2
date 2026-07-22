@@ -71,25 +71,39 @@ function getInitialNavigationState() {
     activePage: "home",
     settingsView: "hub",
     classroomCallbackStatus: null,
+    googleCalendarCallbackStatus: null,
   };
 
   if (typeof window === "undefined") return fallbackState;
 
   const params = new URLSearchParams(window.location.search);
   const classroomResult = params.get("classroom");
+  const googleCalendarResult = params.get("googleCalendar");
+  const settingsTab = params.get("tab");
   const opensIntegrations =
     params.get("settings") === "integrations" ||
+    settingsTab === "integrations" ||
     classroomResult === "connected" ||
-    classroomResult === "error";
+    classroomResult === "error" ||
+    googleCalendarResult === "connected" ||
+    googleCalendarResult === "error";
+  const opensSettings = window.location.pathname === "/settings";
 
   return {
-    activePage: opensIntegrations ? "settings" : "home",
+    activePage: opensIntegrations || opensSettings ? "settings" : "home",
     settingsView: opensIntegrations ? "integrations" : "hub",
     classroomCallbackStatus:
       classroomResult === "connected" || classroomResult === "error"
         ? {
             result: classroomResult,
             status: params.get("classroomStatus") || "",
+          }
+        : null,
+    googleCalendarCallbackStatus:
+      googleCalendarResult === "connected" || googleCalendarResult === "error"
+        ? {
+            result: googleCalendarResult,
+            status: params.get("googleCalendarStatus") || "",
           }
         : null,
   };
@@ -1747,6 +1761,9 @@ function App() {
             updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
             initialView={settingsView}
             classroomCallbackStatus={initialNavigation.classroomCallbackStatus}
+            googleCalendarCallbackStatus={
+              initialNavigation.googleCalendarCallbackStatus
+            }
           />
         )}
       </section>

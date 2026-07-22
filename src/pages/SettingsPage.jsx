@@ -234,6 +234,7 @@ function SettingsPage({
   updateMockClassroomCourseSubject,
   initialView = "hub",
   classroomCallbackStatus = null,
+  googleCalendarCallbackStatus = null,
 }) {
   const [settingsView, setSettingsView] = useState(() => initialView || "hub");
 
@@ -586,6 +587,7 @@ function SettingsPage({
           restoreArchivedClassroomTasks={restoreArchivedClassroomTasks}
           updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
           classroomCallbackStatus={classroomCallbackStatus}
+          googleCalendarCallbackStatus={googleCalendarCallbackStatus}
         />
       ) : (
         <HelpSettings />
@@ -605,6 +607,7 @@ function IntegrationsSettings({
   restoreArchivedClassroomTasks,
   updateMockClassroomCourseSubject,
   classroomCallbackStatus,
+  googleCalendarCallbackStatus,
 }) {
   const sampleCourses = buildMockClassroomPreview(mockClassroomData);
   const importedCount = tasks.filter(
@@ -634,6 +637,21 @@ function IntegrationsSettings({
   const [realClassroomCourses, setRealClassroomCourses] = useState({
     loading: false,
     courses: [],
+    summary: null,
+    lastCheckedAt: "",
+    message: "",
+    error: "",
+  });
+  const [googleCalendarSession, setGoogleCalendarSession] = useState({
+    checking: true,
+    connected: false,
+    status: "checking",
+    message: "Checking Google Calendar...",
+    tokenSummary: null,
+  });
+  const [googleCalendarCalendars, setGoogleCalendarCalendars] = useState({
+    loading: false,
+    calendars: [],
     summary: null,
     lastCheckedAt: "",
     message: "",
@@ -794,6 +812,7 @@ function IntegrationsSettings({
 
   useEffect(() => {
     checkRealClassroomSession();
+    checkGoogleCalendarSession();
   }, []);
 
   useEffect(() => {
@@ -804,6 +823,16 @@ function IntegrationsSettings({
       summary: "Ready to manage classes",
     });
   }, [classroomCallbackStatus]);
+
+  useEffect(() => {
+    if (googleCalendarCallbackStatus?.result !== "connected") return;
+
+    setSuccessToast({
+      title: "Google Calendar connected",
+      summary: "Ready to load calendars",
+    });
+    checkGoogleCalendarSession();
+  }, [googleCalendarCallbackStatus]);
 
   useEffect(() => {
     if (!successToast) return undefined;
@@ -1051,6 +1080,124 @@ function IntegrationsSettings({
         ...currentState,
         loading: false,
         error: "Could not load Classroom courses. Try again later.",
+      }));
+    }
+  }
+
+  async function checkGoogleCalendarSession() {
+    setGoogleCalendarSession((currentState) => ({
+      ...currentState,
+      checking: true,
+    }));
+
+    try {
+      const response = await fetch("/api/google-calendar/session", {
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+      const result = await response.json();
+
+      setGoogleCalendarSession({
+        checking: false,
+        connected: result.connected === true,
+        status: result.status || "unknown",
+        message:
+          result.connected === true
+            ? "Google Calendar connected."
+            : result.message || "No Google Calendar connected.",
+        tokenSummary: result.tokenSummary || null,
+      });
+    } catch {
+      setGoogleCalendarSession({
+        checking: false,
+        connected: false,
+        status: "session_check_failed",
+        message: "Could not check Google Calendar status.",
+        tokenSummary: null,
+      });
+    }
+  }
+
+  async function loadGoogleCalendars() {
+    setGoogleCalendarCalendars((currentState) => ({
+      ...currentState,
+      loading: true,
+      message: "",
+      error: "",
+    }));
+
+    try {
+      const response = await fetch("/api/google-calendar/calendars", {
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+      const result = await response.json();
+
+      if (!response.ok || result.ok !== true) {
+        if (
+          result.status === "no_calendar_session" ||
+          result.status === "calendar_session_invalid_or_expired"
+        ) {
+          setGoogleCalendarSession({
+            checking: false,
+            connected: false,
+            status: result.status,
+            message:
+              result.status === "no_calendar_session"
+                ? "No Google Calendar connected."
+                : "Google Calendar connection expired. Connect again.",
+            tokenSummary: null,
+          });
+        }
+
+        setGoogleCalendarCalendars((currentState) => ({
+          ...currentState,
+          loading: false,
+          error:
+            result.status === "no_calendar_session"
+              ? "Connect Google Calendar first, then load calendars."
+              : result.message || "Could not load Google calendars.",
+        }));
+        return;
+      }
+
+      const loadedCalendars = Array.isArray(result.calendars)
+        ? result.calendars
+        : [];
+
+      setGoogleCalendarCalendars({
+        loading: false,
+        calendars: loadedCalendars,
+        summary: result.calendarSummary || null,
+        lastCheckedAt: new Date().toISOString(),
+        message:
+          loadedCalendars.length === 0
+            ? "Google Calendar connected, but no calendars were found."
+            : "Calendars loaded. Events are not imported yet.",
+        error: "",
+      });
+      setGoogleCalendarSession((currentState) => ({
+        ...currentState,
+        checking: false,
+        connected: true,
+        status: "calendar_session_available",
+        message: "Google Calendar connected.",
+      }));
+      setSuccessToast({
+        title: "Google Calendar ready",
+        summary: `${loadedCalendars.length} calendar${
+          loadedCalendars.length === 1 ? "" : "s"
+        } found`,
+      });
+    } catch {
+      setGoogleCalendarCalendars((currentState) => ({
+        ...currentState,
+        loading: false,
+        error: "Could not load Google calendars. Try again later.",
       }));
     }
   }
@@ -1550,6 +1697,9 @@ function IntegrationsSettings({
         {classroomCallbackStatus && (
           <RealClassroomReturnStatus status={classroomCallbackStatus} />
         )}
+        {googleCalendarCallbackStatus && (
+          <GoogleCalendarReturnStatus status={googleCalendarCallbackStatus} />
+        )}
 
         <div className="integration-card-grid">
           {visibleIntegrations.map((integration) => (
@@ -1565,6 +1715,8 @@ function IntegrationsSettings({
               realClassroomCourseSelections={realClassroomCourseSelections}
               realClassroomCleanup={realClassroomCleanup}
               realClassroomImportedCount={realClassroomImportedCount}
+              googleCalendarSession={googleCalendarSession}
+              googleCalendarCalendars={googleCalendarCalendars}
               realClassroomLinkedSubjectCount={
                 Object.keys(realClassroomCourseSubjectLinks).length
               }
@@ -1575,6 +1727,7 @@ function IntegrationsSettings({
               onPreview={() => setShowMockPreview(true)}
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
+              onLoadGoogleCalendars={loadGoogleCalendars}
             />
           ))}
         </div>
@@ -1675,6 +1828,30 @@ function RealClassroomReturnStatus({ status }) {
   );
 }
 
+function GoogleCalendarReturnStatus({ status }) {
+  const connected = status.result === "connected";
+
+  return (
+    <div
+      className={`real-classroom-return-status ${
+        connected ? "connected" : "error"
+      }`}
+      aria-live="polite"
+    >
+      <strong>
+        {connected
+          ? "Google Calendar connected"
+          : "Google Calendar connection needs attention"}
+      </strong>
+      <p>
+        {connected
+          ? "Load calendars to review available calendar lists."
+          : "Google Calendar did not finish connecting. Try again."}
+      </p>
+    </div>
+  );
+}
+
 function ClassroomSuccessToast({ title, summary, onClose }) {
   return (
     <div className="classroom-success-toast" role="status" aria-live="polite">
@@ -1702,6 +1879,8 @@ function IntegrationCard({
   realClassroomCleanup,
   realClassroomImportedCount,
   realClassroomLinkedSubjectCount,
+  googleCalendarSession,
+  googleCalendarCalendars,
   onLink,
   onSync,
   onUnlink,
@@ -1709,15 +1888,21 @@ function IntegrationCard({
   onPreview,
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
+  onLoadGoogleCalendars,
 }) {
   const isClassroom = integration.id === "google-classroom";
   const isRealClassroom = integration.id === "real-google-classroom";
+  const isGoogleCalendar = integration.id === "google-calendar";
   const isLinkedSample = isClassroom && classroomConnection.linked;
   const status = isClassroom
     ? isLinkedSample
       ? "linked-sample"
       : "not-linked"
-    : integration.status;
+    : isGoogleCalendar
+      ? googleCalendarSession.connected
+        ? "linked"
+        : "not-linked"
+      : integration.status;
   const { includedCount } = getRealClassroomCourseCounts(
     realClassroomCourses.courses,
     realClassroomCourseSelections
@@ -1743,6 +1928,8 @@ function IntegrationCard({
       <p className="integration-description">
         {isRealClassroom && realClassroomSession.connected
           ? "Classroom is connected. Manage classes, preview assignments, and import selected work."
+          : isGoogleCalendar && googleCalendarSession.connected
+            ? "Google Calendar is connected. Load calendars to review what Student Hub can use later."
           : integration.description}
       </p>
       {isClassroom && (
@@ -1757,6 +1944,11 @@ function IntegrationCard({
           <p>Manage classes, preview work, and import only what you select.</p>
         </div>
       )}
+      {isGoogleCalendar && (
+        <div className="integration-helper integration-real-classroom-note">
+          <p>Phase 1 lists calendars only. Events are not loaded yet.</p>
+        </div>
+      )}
       {isRealClassroom && (
         <RealClassroomCompactStatus
           session={realClassroomSession}
@@ -1765,6 +1957,12 @@ function IntegrationCard({
           linkedCount={realClassroomLinkedSubjectCount}
           importedCount={realClassroomImportedCount}
           archivedCount={realClassroomCleanup.archivedCount}
+        />
+      )}
+      {isGoogleCalendar && (
+        <GoogleCalendarCompactStatus
+          session={googleCalendarSession}
+          calendarState={googleCalendarCalendars}
         />
       )}
       {isLinkedSample && (
@@ -1867,6 +2065,31 @@ function IntegrationCard({
                 {realClassroomSetup.checking ? "Checking..." : "Check setup"}
               </button>
             </>
+          ) : isGoogleCalendar ? (
+            <>
+              <a
+                className="integration-oauth-prototype-link"
+                href="/api/google-calendar/connect"
+              >
+                {googleCalendarSession.connected
+                  ? "Reconnect Calendar"
+                  : "Connect Google Calendar"}
+              </a>
+              {googleCalendarSession.connected && (
+                <button
+                  type="button"
+                  className="integration-preview-button"
+                  onClick={onLoadGoogleCalendars}
+                  disabled={googleCalendarCalendars.loading}
+                >
+                  {googleCalendarCalendars.loading
+                    ? "Loading calendars..."
+                    : googleCalendarCalendars.calendars.length > 0
+                      ? "Manage calendars"
+                      : "Load calendars"}
+                </button>
+              )}
+            </>
           ) : (
             <button type="button" className="integration-link-button" disabled>
               {integrationStatusLabels[status]}
@@ -1874,6 +2097,9 @@ function IntegrationCard({
           )
         )}
       </div>
+      {isGoogleCalendar && googleCalendarCalendars.calendars.length > 0 && (
+        <GoogleCalendarList calendars={googleCalendarCalendars.calendars} />
+      )}
     </article>
   );
 }
@@ -2006,6 +2232,64 @@ function RealClassroomCompactStatus({
       {courseState.lastCheckedAt && (
         <small>Last sync {formatConnectionTime(courseState.lastCheckedAt)}</small>
       )}
+    </div>
+  );
+}
+
+function GoogleCalendarCompactStatus({ session, calendarState }) {
+  const connected = session.connected === true;
+  const calendarCount = calendarState.calendars.length;
+
+  return (
+    <div className="real-classroom-compact-status" aria-live="polite">
+      <div>
+        <strong>{connected ? "Connected" : "Not connected"}</strong>
+        <span>
+          {connected ? "Read-only calendar lists" : "Connect to list calendars"}
+        </span>
+      </div>
+      <dl>
+        <div>
+          <dt>Calendars</dt>
+          <dd>{calendarCount}</dd>
+        </div>
+        <div>
+          <dt>Events</dt>
+          <dd>Not yet</dd>
+        </div>
+      </dl>
+      {calendarState.lastCheckedAt && (
+        <small>Last loaded {formatConnectionTime(calendarState.lastCheckedAt)}</small>
+      )}
+      {calendarState.error && <small>{calendarState.error}</small>}
+      {!calendarState.error && calendarState.message && (
+        <small>{calendarState.message}</small>
+      )}
+    </div>
+  );
+}
+
+function GoogleCalendarList({ calendars }) {
+  return (
+    <div className="google-calendar-list" aria-label="Loaded Google calendars">
+      {calendars.map((calendar) => (
+        <div className="google-calendar-row" key={calendar.id}>
+          <span
+            className="google-calendar-colour"
+            style={{
+              "--google-calendar-colour":
+                calendar.backgroundColor || "var(--accent)",
+            }}
+            aria-hidden="true"
+          />
+          <span>
+            <strong>{calendar.summary || calendar.name}</strong>
+            <small>
+              {calendar.primary ? "Primary calendar" : calendar.accessRole || "Calendar"}
+            </small>
+          </span>
+        </div>
+      ))}
     </div>
   );
 }

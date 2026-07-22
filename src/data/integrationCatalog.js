@@ -39,8 +39,8 @@ export const integrationCatalog = [
     name: "Google Calendar",
     provider: "Google",
     description:
-      "Show school-only events beside local task deadlines in the Calendar.",
-    status: "planned-later",
+      "Connect read-only access to list your calendars before events are added later.",
+    status: "not-linked",
     enabled: false,
     canLink: false,
     canUnlink: false,
