@@ -42,7 +42,6 @@ import {
   restoreSavedPlanBlocks,
   saveTodayPlanSnapshot,
   getDefaultEveningPlannerDraft,
-  getStudyPlanPresetTimes,
   buildEveningPlan,
   createDemoTasks,
   loadCompletedTaskHistory,
@@ -1801,19 +1800,6 @@ function EveningPlannerModal({
     setDraft((currentDraft) => ({
       ...currentDraft,
       [field]: value,
-      ...(field === "startTime" || field === "endTime"
-        ? { planType: "custom" }
-        : {}),
-    }));
-  }
-
-  function applyPlanType(planType) {
-    const presetTimes = getStudyPlanPresetTimes(planType);
-
-    setDraft((currentDraft) => ({
-      ...currentDraft,
-      planType,
-      ...(planType === "custom" ? {} : presetTimes),
     }));
   }
 
@@ -1846,25 +1832,6 @@ function EveningPlannerModal({
               ×
             </button>
           </header>
-
-          <div className="study-plan-preset-row" aria-label="Plan type">
-            {[
-              ["evening", "This evening"],
-              ["morning", "This morning"],
-              ["today", "Today"],
-              ["custom", "Custom"],
-            ].map(([value, label]) => (
-              <button
-                type="button"
-                key={value}
-                className={draft.planType === value ? "active" : ""}
-                aria-pressed={draft.planType === value}
-                onClick={() => applyPlanType(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
 
           <div className="evening-planner-fields">
             <label>

@@ -110,36 +110,6 @@
   gap: 10px;
 }
 
-.study-plan-preset-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
-}
-
-.study-plan-preset-row button {
-  min-height: 30px;
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 5px 9px;
-  background: var(--surface-input);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 0.68rem;
-  font-weight: 720;
-  cursor: pointer;
-}
-
-.study-plan-preset-row button:hover {
-  border-color: var(--accent-border);
-  color: var(--accent-soft);
-}
-
-.study-plan-preset-row button.active {
-  border-color: var(--accent-border);
-  background: var(--accent-tint);
-  color: var(--accent-soft);
-}
-
 .evening-plan-options {
   grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr));
   align-items: end;
@@ -954,8 +924,7 @@
 
   .evening-planner-fields,
   .evening-plan-options,
-  .evening-energy-row,
-  .study-plan-preset-row {
+  .evening-energy-row {
     grid-template-columns: 1fr;
   }
 
