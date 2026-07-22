@@ -20,14 +20,10 @@ function HomePage({
   completedTasks,
   noDeadlineTasks,
   hiddenBacklogCount,
-  hoursAvailable,
-  setHoursAvailable,
-  startTime,
-  setStartTime,
   progressPercentage,
   nextTask,
-  generatePlan,
   openEveningPlanner,
+  hasPlan,
   setActivePage,
   homeLayout,
   widgetConfig,
@@ -426,37 +422,16 @@ function HomePage({
         >
           {renderWidgetControls(widget)}
           <div className="home-widget-header">
-            <h3>Today setup</h3>
+            <h3>Study plan</h3>
           </div>
 
-          <div className="setup-row">
-            <label>
-              <span>Hours available</span>
-              <input
-                type="number"
-                min="0"
-                max="12"
-                value={hoursAvailable}
-                onChange={(event) => setHoursAvailable(event.target.value)}
-              />
-            </label>
-
-            <label>
-              <span>Start time</span>
-              <input
-                type="time"
-                value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
-              />
-            </label>
-          </div>
+          <p className="home-plan-helper">
+            Pick a time window and let Student Hub build a plan from your tasks.
+          </p>
 
           <div className="home-plan-actions">
             <button className="primary-button" onClick={openEveningPlanner}>
-              Plan my evening
-            </button>
-            <button className="secondary-button" onClick={generatePlan}>
-              Plan my day
+              {hasPlan ? "Regenerate plan" : "Create plan"}
             </button>
           </div>
         </section>

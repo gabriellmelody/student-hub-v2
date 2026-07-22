@@ -381,8 +381,14 @@
 
 .home-plan-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   gap: 7px;
+}
+
+.home-plan-helper {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.45;
 }
 
 .home-widget--summary {

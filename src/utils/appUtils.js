@@ -1085,15 +1085,39 @@ function timeToMinutes(timeValue) {
 }
 
 export function getDefaultEveningPlannerDraft() {
+  const defaultTimes = getStudyPlanPresetTimes("evening");
+
+  return {
+    planType: "evening",
+    startTime: defaultTimes.startTime,
+    endTime: defaultTimes.endTime,
+    energy: "normal",
+    includeBreaks: true,
+    maxFocusMinutes: 35,
+    planStyle: "balanced",
+  };
+}
+
+export function getStudyPlanPresetTimes(planType) {
   const now = new Date();
+  const selectedType = ["morning", "today", "evening"].includes(planType)
+    ? planType
+    : "custom";
+
+  if (selectedType === "morning") {
+    return { startTime: "09:00", endTime: "12:00" };
+  }
+
+  if (selectedType === "evening") {
+    return { startTime: "16:30", endTime: "20:30" };
+  }
+
   const roundedMinutes = Math.ceil(now.getMinutes() / 15) * 15;
   const roundedNow = new Date(now);
   roundedNow.setMinutes(roundedMinutes, 0, 0);
-  const fallbackStart = new Date(now);
-  fallbackStart.setHours(17, 0, 0, 0);
   const fallbackEnd = new Date(now);
   fallbackEnd.setHours(20, 30, 0, 0);
-  const startDate = roundedNow.getHours() >= 15 ? roundedNow : fallbackStart;
+  const startDate = roundedNow;
   const endDate = new Date(
     Math.max(fallbackEnd.getTime(), startDate.getTime() + 90 * 60 * 1000)
   );
@@ -1101,10 +1125,6 @@ export function getDefaultEveningPlannerDraft() {
   return {
     startTime: formatDateTimeAsInputTime(startDate),
     endTime: formatDateTimeAsInputTime(endDate),
-    energy: "normal",
-    includeBreaks: true,
-    maxFocusMinutes: 35,
-    planStyle: "balanced",
   };
 }
 
@@ -1343,7 +1363,12 @@ export function buildEveningPlan({
   return {
     ok: true,
     blocks: cleanPlanSequence(blocks),
-    scheduledTaskCount: blocks.filter((block) => block.type === "study").length,
+    scheduledTaskCount: new Set(
+      blocks
+        .filter((block) => block.type === "study")
+        .map((block) => block.taskId)
+    ).size,
+    breakCount: blocks.filter((block) => block.type === "break").length,
     windowMinutes: availableMinutes,
   };
 }

@@ -16,13 +16,13 @@
   color: var(--text-secondary);
 }
 
-.plan-evening-button {
+.plan-primary-create-button {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-contrast);
 }
 
-.plan-evening-button:hover {
+.plan-primary-create-button:hover {
   border-color: var(--accent-hover);
   background: var(--accent-hover);
   color: var(--accent-contrast);
@@ -108,6 +108,36 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.study-plan-preset-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.study-plan-preset-row button {
+  min-height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: var(--surface-input);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.study-plan-preset-row button:hover {
+  border-color: var(--accent-border);
+  color: var(--accent-soft);
+}
+
+.study-plan-preset-row button.active {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
 }
 
 .evening-plan-options {
@@ -925,7 +955,7 @@
   .evening-planner-fields,
   .evening-plan-options,
   .evening-energy-row,
-  .home-plan-actions {
+  .study-plan-preset-row {
     grid-template-columns: 1fr;
   }
 

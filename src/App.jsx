@@ -42,6 +42,7 @@ import {
   restoreSavedPlanBlocks,
   saveTodayPlanSnapshot,
   getDefaultEveningPlannerDraft,
+  getStudyPlanPresetTimes,
   buildEveningPlan,
   createDemoTasks,
   loadCompletedTaskHistory,
@@ -1176,7 +1177,7 @@ function App() {
     }
 
     if (replaceExisting && planBlocks.some((block) => block.locked === true)) {
-      setEveningPlannerError("Unlock locked blocks before replacing tonight’s plan.");
+      setEveningPlannerError("Unlock locked blocks before replacing this plan.");
       setEveningPlannerNeedsReplace(false);
       return;
     }
@@ -1204,10 +1205,16 @@ function App() {
     setActivePage("plan");
     closeEveningPlanner();
     setEveningPlanSuccess({
-      title: "Evening planned",
+      title: replaceExisting ? "Plan updated" : "Plan created",
       summary: `${result.scheduledTaskCount} task${
         result.scheduledTaskCount === 1 ? "" : "s"
-      } scheduled`,
+      } scheduled${
+        result.breakCount > 0
+          ? ` · ${result.breakCount} break${
+              result.breakCount === 1 ? "" : "s"
+            } added`
+          : ""
+      }`,
     });
   }
 
@@ -1629,14 +1636,10 @@ function App() {
             noDeadlineTasks={noDeadlineTasks}
             visibleBacklog={visibleBacklog}
             hiddenBacklogCount={hiddenBacklogCount}
-            hoursAvailable={hoursAvailable}
-            setHoursAvailable={setHoursAvailable}
-            startTime={startTime}
-            setStartTime={updatePlanStartTime}
             progressPercentage={progressPercentage}
             nextTask={nextTask}
-            generatePlan={generatePlan}
             openEveningPlanner={openEveningPlanner}
+            hasPlan={planBlocks.length > 0}
             setActivePage={setActivePage}
             homeLayout={homeLayout}
             widgetConfig={widgetConfig}
@@ -1668,9 +1671,6 @@ function App() {
         {activePage === "plan" && (
           <PlanPage
             planBlocks={planBlocks}
-            startTime={startTime}
-            setStartTime={updatePlanStartTime}
-            generatePlan={generatePlan}
             clearPlan={clearPlan}
             addManualPlanBlock={addManualPlanBlock}
             movePlanStudyBlock={movePlanStudyBlock}
@@ -1680,8 +1680,6 @@ function App() {
             reorderPlanBlock={reorderPlanBlock}
             planMoveFeedback={planMoveFeedback}
             completeTaskFromPlan={completeTaskFromPlan}
-            hoursAvailable={hoursAvailable}
-            setHoursAvailable={setHoursAvailable}
             stalePlanDate={stalePlanDate}
             startFreshPlan={startFreshPlan}
             openEveningPlanner={openEveningPlanner}
@@ -1803,6 +1801,19 @@ function EveningPlannerModal({
     setDraft((currentDraft) => ({
       ...currentDraft,
       [field]: value,
+      ...(field === "startTime" || field === "endTime"
+        ? { planType: "custom" }
+        : {}),
+    }));
+  }
+
+  function applyPlanType(planType) {
+    const presetTimes = getStudyPlanPresetTimes(planType);
+
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      planType,
+      ...(planType === "custom" ? {} : presetTimes),
     }));
   }
 
@@ -1827,14 +1838,33 @@ function EveningPlannerModal({
         <form onSubmit={submitPlan}>
           <header className="evening-planner-header">
             <div>
-              <p className="eyebrow">Tonight</p>
-              <h3 id="evening-planner-title">Plan my evening</h3>
+              <p className="eyebrow">Planner</p>
+              <h3 id="evening-planner-title">Create study plan</h3>
               <p>Choose when you’re free. You can edit it after.</p>
             </div>
             <button type="button" onClick={onClose} aria-label="Close planner">
               ×
             </button>
           </header>
+
+          <div className="study-plan-preset-row" aria-label="Plan type">
+            {[
+              ["evening", "This evening"],
+              ["morning", "This morning"],
+              ["today", "Today"],
+              ["custom", "Custom"],
+            ].map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                className={draft.planType === value ? "active" : ""}
+                aria-pressed={draft.planType === value}
+                onClick={() => applyPlanType(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
           <div className="evening-planner-fields">
             <label>
@@ -1858,7 +1888,7 @@ function EveningPlannerModal({
           <section className="evening-plan-options">
             <div>
               <strong>Plan options</strong>
-              <p>Adjust how intense tonight’s plan should feel.</p>
+              <p>Adjust how intense the plan should feel.</p>
             </div>
 
             <label className="evening-break-toggle">
@@ -1922,8 +1952,8 @@ function EveningPlannerModal({
 
           {needsReplace && (
             <div className="evening-planner-notice">
-              <strong>Replace tonight’s plan?</strong>
-              <p>You already have a plan. Replace it with this evening plan?</p>
+              <strong>Replace current plan?</strong>
+              <p>This will replace the plan already in Today’s Plan.</p>
             </div>
           )}
 
@@ -1935,11 +1965,11 @@ function EveningPlannerModal({
             </button>
             {needsReplace ? (
               <button type="button" className="primary-button" onClick={onReplace}>
-                Replace tonight’s plan
+                Replace current plan
               </button>
             ) : (
               <button type="submit" className="primary-button">
-                Create evening plan
+                Create plan
               </button>
             )}
           </footer>

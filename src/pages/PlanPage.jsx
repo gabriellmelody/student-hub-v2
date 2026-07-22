@@ -19,9 +19,6 @@ function createManualBlockDraft() {
 
 function PlanPage({
   planBlocks,
-  startTime,
-  setStartTime,
-  generatePlan,
   clearPlan,
   addManualPlanBlock,
   movePlanStudyBlock,
@@ -31,8 +28,6 @@ function PlanPage({
   reorderPlanBlock,
   planMoveFeedback,
   completeTaskFromPlan,
-  hoursAvailable,
-  setHoursAvailable,
   stalePlanDate,
   startFreshPlan,
   openEveningPlanner,
@@ -420,47 +415,12 @@ function PlanPage({
 
             <button
               type="button"
-              className="small-button plan-evening-button"
+              className="small-button plan-primary-create-button"
               onClick={openEveningPlanner}
             >
-              Plan my evening
-            </button>
-
-            <button
-              className="small-button"
-              disabled={hasLockedBlocks}
-              title={
-                hasLockedBlocks
-                  ? "Unlock all blocks before regenerating"
-                  : undefined
-              }
-              onClick={generatePlan}
-            >
-              {planBlocks.length > 0 ? "Regenerate" : "Plan my day"}
+              {planBlocks.length > 0 ? "Regenerate plan" : "Create plan"}
             </button>
           </div>
-        </div>
-
-        <div className="setup-row">
-          <label>
-            <span>Hours available</span>
-            <input
-              type="number"
-              min="0"
-              max="12"
-              value={hoursAvailable}
-              onChange={(event) => setHoursAvailable(event.target.value)}
-            />
-          </label>
-
-          <label>
-            <span>Start time</span>
-            <input
-              type="time"
-              value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
-            />
-          </label>
         </div>
 
         {stalePlanDate && (
