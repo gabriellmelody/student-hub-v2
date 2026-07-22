@@ -41,6 +41,8 @@ import {
   isSavedPlanForToday,
   restoreSavedPlanBlocks,
   saveTodayPlanSnapshot,
+  getDefaultEveningPlannerDraft,
+  buildEveningPlan,
   createDemoTasks,
   loadCompletedTaskHistory,
   upsertCompletedTaskHistory,
@@ -171,6 +173,15 @@ function App() {
   );
   const [planMoveFeedback, setPlanMoveFeedback] = useState(null);
   const planMoveFeedbackTimerRef = useRef(null);
+  const [eveningPlannerOpen, setEveningPlannerOpen] = useState(false);
+  const [eveningPlannerDraft, setEveningPlannerDraft] = useState(
+    getDefaultEveningPlannerDraft
+  );
+  const [eveningPlannerError, setEveningPlannerError] = useState("");
+  const [eveningPlannerNeedsReplace, setEveningPlannerNeedsReplace] =
+    useState(false);
+  const [eveningPlanSuccess, setEveningPlanSuccess] = useState(null);
+  const eveningPlanSuccessTimerRef = useRef(null);
 
   const [newTask, setNewTask] = useState(createEmptyTaskDraft);
 
@@ -410,6 +421,17 @@ function App() {
   useEffect(() => {
     return () => clearTimeout(planMoveFeedbackTimerRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!eveningPlanSuccess) return undefined;
+
+    clearTimeout(eveningPlanSuccessTimerRef.current);
+    eveningPlanSuccessTimerRef.current = setTimeout(() => {
+      setEveningPlanSuccess(null);
+    }, 3600);
+
+    return () => clearTimeout(eveningPlanSuccessTimerRef.current);
+  }, [eveningPlanSuccess]);
 
   function isCompletedInClassroom(task) {
     return (
@@ -1133,6 +1155,62 @@ function App() {
     setActivePage("plan");
   }
 
+  function openEveningPlanner() {
+    setEveningPlannerDraft(getDefaultEveningPlannerDraft());
+    setEveningPlannerError("");
+    setEveningPlannerNeedsReplace(false);
+    setEveningPlannerOpen(true);
+  }
+
+  function closeEveningPlanner() {
+    setEveningPlannerOpen(false);
+    setEveningPlannerError("");
+    setEveningPlannerNeedsReplace(false);
+  }
+
+  function createEveningPlan({ replaceExisting = false } = {}) {
+    if (planBlocks.length > 0 && !replaceExisting) {
+      setEveningPlannerNeedsReplace(true);
+      setEveningPlannerError("");
+      return;
+    }
+
+    if (replaceExisting && planBlocks.some((block) => block.locked === true)) {
+      setEveningPlannerError("Unlock locked blocks before replacing tonight’s plan.");
+      setEveningPlannerNeedsReplace(false);
+      return;
+    }
+
+    const result = buildEveningPlan({
+      tasks: visibleTasks,
+      startTime: eveningPlannerDraft.startTime,
+      endTime: eveningPlannerDraft.endTime,
+      energy: eveningPlannerDraft.energy,
+      includeBreaks: eveningPlannerDraft.includeBreaks,
+      maxFocusMinutes: eveningPlannerDraft.maxFocusMinutes,
+      planStyle: eveningPlannerDraft.planStyle,
+    });
+
+    if (!result.ok) {
+      setEveningPlannerError(result.reason);
+      setEveningPlannerNeedsReplace(false);
+      return;
+    }
+
+    setStalePlanDate(null);
+    setStartTime(eveningPlannerDraft.startTime);
+    setHoursAvailable(Number((result.windowMinutes / 60).toFixed(2)));
+    setPlanBlocks(recalculatePlanTimes(result.blocks, eveningPlannerDraft.startTime));
+    setActivePage("plan");
+    closeEveningPlanner();
+    setEveningPlanSuccess({
+      title: "Evening planned",
+      summary: `${result.scheduledTaskCount} task${
+        result.scheduledTaskCount === 1 ? "" : "s"
+      } scheduled`,
+    });
+  }
+
   function movePlanStudyBlock(blockId, direction) {
     const studyPositions = planBlocks.reduce((positions, block, index) => {
       if (block.type === "study") positions.push(index);
@@ -1558,6 +1636,7 @@ function App() {
             progressPercentage={progressPercentage}
             nextTask={nextTask}
             generatePlan={generatePlan}
+            openEveningPlanner={openEveningPlanner}
             setActivePage={setActivePage}
             homeLayout={homeLayout}
             widgetConfig={widgetConfig}
@@ -1605,6 +1684,7 @@ function App() {
             setHoursAvailable={setHoursAvailable}
             stalePlanDate={stalePlanDate}
             startFreshPlan={startFreshPlan}
+            openEveningPlanner={openEveningPlanner}
           />
         )}
 
@@ -1677,7 +1757,210 @@ function App() {
           setEditMode={setRightRailEditMode}
         />
       )}
+
+      {eveningPlannerOpen && (
+        <EveningPlannerModal
+          draft={eveningPlannerDraft}
+          setDraft={setEveningPlannerDraft}
+          error={eveningPlannerError}
+          needsReplace={eveningPlannerNeedsReplace}
+          onClose={closeEveningPlanner}
+          onPlan={() => createEveningPlan()}
+          onReplace={() => createEveningPlan({ replaceExisting: true })}
+        />
+      )}
+
+      {eveningPlanSuccess && (
+        <EveningPlanSuccessToast
+          title={eveningPlanSuccess.title}
+          summary={eveningPlanSuccess.summary}
+          onClose={() => setEveningPlanSuccess(null)}
+        />
+      )}
     </main>
+  );
+}
+
+function EveningPlannerModal({
+  draft,
+  setDraft,
+  error,
+  needsReplace,
+  onClose,
+  onPlan,
+  onReplace,
+}) {
+  useEffect(() => {
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  function updateDraft(field, value) {
+    setDraft((currentDraft) => ({
+      ...currentDraft,
+      [field]: value,
+    }));
+  }
+
+  function submitPlan(event) {
+    event.preventDefault();
+    onPlan();
+  }
+
+  return (
+    <div
+      className="evening-planner-backdrop"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <section
+        className="evening-planner-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="evening-planner-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <form onSubmit={submitPlan}>
+          <header className="evening-planner-header">
+            <div>
+              <p className="eyebrow">Tonight</p>
+              <h3 id="evening-planner-title">Plan my evening</h3>
+              <p>Choose when you’re free. You can edit it after.</p>
+            </div>
+            <button type="button" onClick={onClose} aria-label="Close planner">
+              ×
+            </button>
+          </header>
+
+          <div className="evening-planner-fields">
+            <label>
+              <span>Start</span>
+              <input
+                type="time"
+                value={draft.startTime}
+                onChange={(event) => updateDraft("startTime", event.target.value)}
+              />
+            </label>
+            <label>
+              <span>End</span>
+              <input
+                type="time"
+                value={draft.endTime}
+                onChange={(event) => updateDraft("endTime", event.target.value)}
+              />
+            </label>
+          </div>
+
+          <section className="evening-plan-options">
+            <div>
+              <strong>Plan options</strong>
+              <p>Adjust how intense tonight’s plan should feel.</p>
+            </div>
+
+            <label className="evening-break-toggle">
+              <span>Include breaks</span>
+              <button
+                type="button"
+                className={draft.includeBreaks ? "active" : ""}
+                aria-pressed={draft.includeBreaks}
+                onClick={() => updateDraft("includeBreaks", !draft.includeBreaks)}
+              >
+                {draft.includeBreaks ? "Yes" : "No"}
+              </button>
+            </label>
+
+            <label>
+              <span>Max focus block</span>
+              <select
+                value={draft.maxFocusMinutes}
+                onChange={(event) =>
+                  updateDraft("maxFocusMinutes", Number(event.target.value))
+                }
+              >
+                <option value={25}>25 min</option>
+                <option value={35}>35 min</option>
+                <option value={45}>45 min</option>
+                <option value={60}>60 min</option>
+              </select>
+            </label>
+
+            <label>
+              <span>Plan style</span>
+              <select
+                value={draft.planStyle}
+                onChange={(event) => updateDraft("planStyle", event.target.value)}
+              >
+                <option value="light">Light</option>
+                <option value="balanced">Balanced</option>
+                <option value="push">Push me</option>
+              </select>
+            </label>
+          </section>
+
+          <div className="evening-energy-row" aria-label="Energy level">
+            <span>Energy</span>
+            {[
+              ["low", "Low"],
+              ["normal", "Normal"],
+              ["high", "High"],
+            ].map(([value, label]) => (
+              <button
+                type="button"
+                key={value}
+                className={draft.energy === value ? "active" : ""}
+                aria-pressed={draft.energy === value}
+                onClick={() => updateDraft("energy", value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {needsReplace && (
+            <div className="evening-planner-notice">
+              <strong>Replace tonight’s plan?</strong>
+              <p>You already have a plan. Replace it with this evening plan?</p>
+            </div>
+          )}
+
+          {error && <p className="evening-planner-error">{error}</p>}
+
+          <footer className="evening-planner-actions">
+            <button type="button" onClick={onClose}>
+              Cancel
+            </button>
+            {needsReplace ? (
+              <button type="button" className="primary-button" onClick={onReplace}>
+                Replace tonight’s plan
+              </button>
+            ) : (
+              <button type="submit" className="primary-button">
+                Create evening plan
+              </button>
+            )}
+          </footer>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function EveningPlanSuccessToast({ title, summary, onClose }) {
+  return (
+    <div className="evening-plan-success-toast" role="status" aria-live="polite">
+      <button type="button" aria-label="Dismiss success message" onClick={onClose}>
+        ×
+      </button>
+      <div className="evening-plan-success-check" aria-hidden="true">
+        <span>✓</span>
+      </div>
+      <strong>{title}</strong>
+      <p>{summary}</p>
+    </div>
   );
 }
 

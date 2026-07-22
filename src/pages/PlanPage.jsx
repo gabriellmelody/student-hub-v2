@@ -35,6 +35,7 @@ function PlanPage({
   setHoursAvailable,
   stalePlanDate,
   startFreshPlan,
+  openEveningPlanner,
 }) {
   const hasLockedBlocks = planBlocks.some((block) => block.locked === true);
   const [editingBlockId, setEditingBlockId] = useState(null);
@@ -416,6 +417,14 @@ function PlanPage({
                 Clear
               </button>
             )}
+
+            <button
+              type="button"
+              className="small-button plan-evening-button"
+              onClick={openEveningPlanner}
+            >
+              Plan my evening
+            </button>
 
             <button
               className="small-button"

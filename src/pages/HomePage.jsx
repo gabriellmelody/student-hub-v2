@@ -27,6 +27,7 @@ function HomePage({
   progressPercentage,
   nextTask,
   generatePlan,
+  openEveningPlanner,
   setActivePage,
   homeLayout,
   widgetConfig,
@@ -450,9 +451,14 @@ function HomePage({
             </label>
           </div>
 
-          <button className="primary-button" onClick={generatePlan}>
-            Plan my day
-          </button>
+          <div className="home-plan-actions">
+            <button className="primary-button" onClick={openEveningPlanner}>
+              Plan my evening
+            </button>
+            <button className="secondary-button" onClick={generatePlan}>
+              Plan my day
+            </button>
+          </div>
         </section>
       );
     }

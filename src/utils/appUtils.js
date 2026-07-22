@@ -1065,6 +1065,289 @@ export function saveTodayPlanSnapshot({
   );
 }
 
+function timeToMinutes(timeValue) {
+  if (!/^\d{2}:\d{2}$/.test(String(timeValue || ""))) return null;
+
+  const [hours, minutes] = timeValue.split(":").map(Number);
+
+  if (
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return null;
+  }
+
+  return hours * 60 + minutes;
+}
+
+export function getDefaultEveningPlannerDraft() {
+  const now = new Date();
+  const roundedMinutes = Math.ceil(now.getMinutes() / 15) * 15;
+  const roundedNow = new Date(now);
+  roundedNow.setMinutes(roundedMinutes, 0, 0);
+  const fallbackStart = new Date(now);
+  fallbackStart.setHours(17, 0, 0, 0);
+  const fallbackEnd = new Date(now);
+  fallbackEnd.setHours(20, 30, 0, 0);
+  const startDate = roundedNow.getHours() >= 15 ? roundedNow : fallbackStart;
+  const endDate = new Date(
+    Math.max(fallbackEnd.getTime(), startDate.getTime() + 90 * 60 * 1000)
+  );
+
+  return {
+    startTime: formatDateTimeAsInputTime(startDate),
+    endTime: formatDateTimeAsInputTime(endDate),
+    energy: "normal",
+    includeBreaks: true,
+    maxFocusMinutes: 35,
+    planStyle: "balanced",
+  };
+}
+
+function formatDateTimeAsInputTime(date) {
+  return `${String(date.getHours()).padStart(2, "0")}:${String(
+    date.getMinutes()
+  ).padStart(2, "0")}`;
+}
+
+function isInactiveClassroomTask(task) {
+  return (
+    task.source === "classroom" &&
+    ["done", "returned", "turned_in", "submitted"].includes(
+      task.classroomStatusCategory
+    )
+  );
+}
+
+function getEveningTaskScore(task) {
+  const daysLeft = getDaysLeft(task.dueDate);
+  const importanceScore = { urgent: 36, high: 20, normal: 0 };
+  const typeScore =
+    task.taskType === "assessment"
+      ? 18
+      : task.taskType === "project"
+        ? 10
+        : task.taskType === "revision"
+          ? 8
+          : 0;
+  const dueScore =
+    daysLeft === null
+      ? -18
+      : daysLeft < 0
+        ? 70
+        : daysLeft === 0
+          ? 62
+          : daysLeft === 1
+            ? 50
+            : daysLeft <= 3
+              ? 38
+              : daysLeft <= 7
+                ? 22
+                : 8;
+
+  return (
+    dueScore +
+    (importanceScore[task.importance] || 0) +
+    typeScore +
+    (Number(task.effort) || 2)
+  );
+}
+
+function getEveningTaskDuration(task, energy) {
+  const effort = Number(task.effort) || 2;
+  const effortDurations = {
+    1: 25,
+    2: 30,
+    3: 35,
+    4: 45,
+    5: 50,
+  };
+  const energyAdjustment = energy === "low" ? -5 : energy === "high" ? 10 : 0;
+  const assessmentBoost =
+    task.taskType === "assessment" || task.importance === "high" ? 10 : 0;
+  const duration = (effortDurations[effort] || 35) + energyAdjustment + assessmentBoost;
+
+  return Math.min(60, Math.max(25, duration));
+}
+
+export function buildEveningPlan({
+  tasks,
+  startTime,
+  endTime,
+  energy = "normal",
+  includeBreaks = true,
+  maxFocusMinutes = 35,
+  planStyle = "balanced",
+}) {
+  const startMinutes = timeToMinutes(startTime);
+  const endMinutes = timeToMinutes(endTime);
+
+  if (startMinutes === null || endMinutes === null) {
+    return {
+      ok: false,
+      reason: "Choose a start and end time.",
+      blocks: [],
+    };
+  }
+
+  if (endMinutes <= startMinutes) {
+    return {
+      ok: false,
+      reason: "Choose an end time after your start time.",
+      blocks: [],
+    };
+  }
+
+  const availableMinutes = endMinutes - startMinutes;
+
+  if (availableMinutes < 30) {
+    return {
+      ok: false,
+      reason: "Give yourself at least 30 minutes.",
+      blocks: [],
+    };
+  }
+
+  const styleBufferMultiplier =
+    planStyle === "light" ? 1.7 : planStyle === "push" ? 0.45 : 1;
+  const baseBufferMinutes =
+    availableMinutes >= 120 ? 15 : availableMinutes >= 75 ? 10 : 0;
+  const bufferMinutes = Math.round(baseBufferMinutes * styleBufferMultiplier);
+  let remainingMinutes = Math.max(0, availableMinutes - bufferMinutes);
+  const safeMaxFocusMinutes = [25, 35, 45, 60].includes(
+    Number(maxFocusMinutes)
+  )
+    ? Number(maxFocusMinutes)
+    : 35;
+  const styleBlockMultiplier =
+    planStyle === "light" ? 0.85 : planStyle === "push" ? 1.18 : 1;
+  const maxStudyBlocks =
+    planStyle === "light" ? 2 : planStyle === "push" ? 6 : 4;
+  const breakDuration = energy === "low" ? 10 : 5;
+  const candidateTasks = tasks
+    .filter(
+      (task) =>
+        task &&
+        !task.completed &&
+        !task.archived &&
+        !task.ignored &&
+        !isInactiveClassroomTask(task)
+    )
+    .sort((firstTask, secondTask) => {
+      const scoreDifference =
+        getEveningTaskScore(secondTask) - getEveningTaskScore(firstTask);
+
+      if (scoreDifference !== 0) return scoreDifference;
+      return compareTasksSmart(firstTask, secondTask);
+    });
+
+  if (candidateTasks.length === 0) {
+    return {
+      ok: false,
+      reason: "No active tasks to plan yet.",
+      blocks: [],
+    };
+  }
+
+  const blocks = [];
+  let currentOffset = 0;
+
+  for (const task of candidateTasks) {
+    const studyBlockCount = blocks.filter((block) => block.type === "study").length;
+    if (studyBlockCount >= maxStudyBlocks) break;
+    if (remainingMinutes < 25) break;
+
+    let remainingTaskMinutes = Math.round(
+      getEveningTaskDuration(task, energy) * styleBlockMultiplier
+    );
+
+    while (
+      remainingTaskMinutes >= 20 &&
+      remainingMinutes >= 25 &&
+      blocks.filter((block) => block.type === "study").length < maxStudyBlocks
+    ) {
+      const duration = Math.min(
+        safeMaxFocusMinutes,
+        remainingTaskMinutes,
+        remainingMinutes
+      );
+
+      if (duration < 20) break;
+
+      blocks.push({
+        id: `evening-${task.id}-${currentOffset}`,
+        type: "study",
+        source: "generated",
+        taskSource: task.source || "manual",
+        edited: false,
+        locked: false,
+        taskId: task.id,
+        calendarEventId: null,
+        subject: task.subject,
+        title: task.title,
+        start: formatTime(startTime, currentOffset),
+        end: formatTime(startTime, currentOffset + duration),
+        duration,
+        effort: task.effort,
+        taskType: task.taskType,
+        importance: task.importance,
+        detectedTags: task.detectedTags,
+        importanceSource: task.importanceSource,
+        classroomCourseId: task.classroomCourseId || null,
+        classroomCourseName: task.classroomCourseName || "",
+        externalId: task.externalId || null,
+        tip: getTaskTip(task),
+      });
+
+      currentOffset += duration;
+      remainingMinutes -= duration;
+      remainingTaskMinutes -= duration;
+
+      if (includeBreaks && remainingMinutes >= breakDuration + 25) {
+        blocks.push({
+          id: `evening-break-${currentOffset}`,
+          type: "break",
+          source: "generated",
+          edited: false,
+          locked: false,
+          taskId: null,
+          calendarEventId: null,
+          start: formatTime(startTime, currentOffset),
+          end: formatTime(startTime, currentOffset + breakDuration),
+          duration: breakDuration,
+          title: "Break",
+          tip:
+            energy === "low"
+              ? "Reset properly before the next block."
+              : "Step away for a few minutes.",
+        });
+
+        currentOffset += breakDuration;
+        remainingMinutes -= breakDuration;
+      }
+    }
+  }
+
+  if (blocks.length === 0) {
+    return {
+      ok: false,
+      reason: "No task fits this time window yet.",
+      blocks: [],
+    };
+  }
+
+  return {
+    ok: true,
+    blocks: cleanPlanSequence(blocks),
+    scheduledTaskCount: blocks.filter((block) => block.type === "study").length,
+    windowMinutes: availableMinutes,
+  };
+}
+
 export function createSubjectDraft(courseSystem = "IB") {
   return {
     name: "",

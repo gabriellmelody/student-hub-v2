@@ -374,8 +374,15 @@
 }
 
 .home-widget--focus > button,
-.home-widget--setup > button {
+.home-widget--setup > button,
+.home-plan-actions {
   margin-top: auto;
+}
+
+.home-plan-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 7px;
 }
 
 .home-widget--summary {
