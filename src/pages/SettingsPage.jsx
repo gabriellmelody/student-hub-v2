@@ -236,6 +236,11 @@ function SettingsPage({
   classroomCallbackStatus = null,
 }) {
   const [settingsView, setSettingsView] = useState(() => initialView || "hub");
+
+  useEffect(() => {
+    setSettingsView(initialView || "hub");
+  }, [initialView]);
+
   const viewCopy = {
     hub: {
       eyebrow: "Settings",

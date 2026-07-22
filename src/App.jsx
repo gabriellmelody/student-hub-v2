@@ -16,6 +16,7 @@ import {
   COMPLETED_HISTORY_STORAGE_KEY,
   COMPLETED_TASK_RETENTION_MS,
   DEFAULT_ACCENT_COLOR,
+  accentColorPresets,
   STUDENT_HUB_STORAGE_KEYS,
   WIDGET_CONFIG_STORAGE_KEY,
   TODAY_PLAN_STORAGE_KEY,
@@ -97,6 +98,9 @@ function getInitialNavigationState() {
 function App() {
   const [initialNavigation] = useState(getInitialNavigationState);
   const [activePage, setActivePage] = useState(initialNavigation.activePage);
+  const [settingsView, setSettingsView] = useState(
+    initialNavigation.settingsView
+  );
   const [homeEditMode, setHomeEditMode] = useState(false);
   const [rightRailEditMode, setRightRailEditMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -255,7 +259,8 @@ function App() {
     setRightRailEditMode(true);
   }
 
-  function openSettings() {
+  function openSettings(view = "hub") {
+    setSettingsView(view);
     setActivePage("settings");
   }
 
@@ -1610,6 +1615,11 @@ function App() {
           collapsed={sidebarCollapsed}
           active={activePage === "settings"}
           openSettings={openSettings}
+          theme={theme}
+          setTheme={setTheme}
+          accentColor={accentColor}
+          setAccentColor={setAccentColor}
+          accentColorPresets={accentColorPresets.slice(0, 5)}
         />
 
         <div className="sidebar-footer">
@@ -1735,7 +1745,7 @@ function App() {
             archiveNoDueDateClassroomTasks={archiveNoDueDateClassroomTasks}
             restoreArchivedClassroomTasks={restoreArchivedClassroomTasks}
             updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
-            initialView={initialNavigation.settingsView}
+            initialView={settingsView}
             classroomCallbackStatus={initialNavigation.classroomCallbackStatus}
           />
         )}

@@ -21,6 +21,11 @@ function AccountMenu({
   collapsed,
   active,
   openSettings,
+  theme,
+  setTheme,
+  accentColor,
+  setAccentColor,
+  accentColorPresets,
 }) {
   const [open, setOpen] = useState(false);
   const menuRef = useRef(null);
@@ -65,7 +70,7 @@ function AccountMenu({
       const viewportPadding = 10;
       const menuGap = 8;
       const buttonRect = accountButton.getBoundingClientRect();
-      const menuWidth = Math.min(224, window.innerWidth - viewportPadding * 2);
+      const menuWidth = Math.min(252, window.innerWidth - viewportPadding * 2);
       const maxHeight = Math.max(100, window.innerHeight - viewportPadding * 2);
 
       menuPanel.style.width = `${menuWidth}px`;
@@ -129,18 +134,52 @@ function AccountMenu({
               ···
             </span>
           </div>
+          <div className="sidebar-account-personalisation">
+            <div className="sidebar-account-menu-section-title">
+              <span aria-hidden="true">◐</span>
+              <strong>Personalisation</strong>
+            </div>
+            <div
+              className="sidebar-account-theme-controls"
+              role="group"
+              aria-label="Appearance"
+            >
+              {["light", "dark"].map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={theme === option ? "active" : ""}
+                  aria-pressed={theme === option}
+                  onClick={() => setTheme(option)}
+                >
+                  {option === "light" ? "Light" : "Dark"}
+                </button>
+              ))}
+            </div>
+            <div
+              className="sidebar-account-accent-controls"
+              aria-label="Accent colour"
+            >
+              {accentColorPresets.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  className={accentColor === preset.value ? "active" : ""}
+                  aria-label={`${preset.label} accent`}
+                  aria-pressed={accentColor === preset.value}
+                  title={preset.label}
+                  style={{ "--account-accent-color": preset.value }}
+                  onClick={() => setAccentColor(preset.value)}
+                >
+                  <span aria-hidden="true">✓</span>
+                </button>
+              ))}
+            </div>
+          </div>
           <button
             type="button"
             role="menuitem"
-            onClick={() => chooseItem(openSettings)}
-          >
-            <span aria-hidden="true">◐</span>
-            <span>Personalisation</span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => chooseItem(openSettings)}
+            onClick={() => chooseItem(() => openSettings("hub"))}
           >
             <span aria-hidden="true">⚙</span>
             <span>Settings</span>
@@ -148,7 +187,7 @@ function AccountMenu({
           <button
             type="button"
             role="menuitem"
-            onClick={() => chooseItem(openSettings)}
+            onClick={() => chooseItem(() => openSettings("integrations"))}
           >
             <span aria-hidden="true">⇄</span>
             <span>Integrations</span>
@@ -156,7 +195,7 @@ function AccountMenu({
           <button
             type="button"
             role="menuitem"
-            onClick={() => chooseItem(openSettings)}
+            onClick={() => chooseItem(() => openSettings("help"))}
           >
             <span aria-hidden="true">?</span>
             <span>Help / FAQ</span>

@@ -38,8 +38,10 @@
 
   .sidebar,
   .sidebar.collapsed {
+    height: auto;
     min-height: auto;
     position: static;
+    overflow: visible;
     border-right: none;
     border-bottom: 1px solid var(--border);
     padding: var(--density-sidebar-mobile-padding);
@@ -61,6 +63,7 @@
     flex-direction: row;
     min-height: 0;
     overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .nav > .nav-button:last-child {
