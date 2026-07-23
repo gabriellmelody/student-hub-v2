@@ -2686,7 +2686,7 @@ function GoogleCalendarManagerModal({
 
   return (
     <div
-      className="data-confirmation-backdrop real-classroom-modal-backdrop"
+      className="data-confirmation-backdrop real-classroom-modal-backdrop google-calendar-manager-backdrop"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !showSavedConfirmation) {
@@ -2713,14 +2713,6 @@ function GoogleCalendarManagerModal({
               The planner will avoid events from calendars marked Block study
               time.
             </p>
-          </div>
-          <div className="google-calendar-manager-close-actions">
-            <button type="button" className="secondary" onClick={onClose}>
-              Close
-            </button>
-            <button type="button" onClick={saveChoices}>
-              Save choices
-            </button>
           </div>
         </header>
 
@@ -2786,6 +2778,15 @@ function GoogleCalendarManagerModal({
             })
           )}
         </div>
+
+        <footer className="google-calendar-manager-footer">
+          <button type="button" className="secondary" onClick={onClose}>
+            Close
+          </button>
+          <button type="button" onClick={saveChoices}>
+            Save choices
+          </button>
+        </footer>
 
         {showSavedConfirmation && (
           <div
