@@ -25,7 +25,7 @@ function getCallbackRedirectLocation(calendarStatus, detailStatus = "") {
     redirectParams.set("googleCalendarStatus", detailStatus);
   }
 
-  return `/settings?${redirectParams.toString()}`;
+  return `/?${redirectParams.toString()}`;
 }
 
 function sendCallbackResult(request, response, statusCode, payload) {
