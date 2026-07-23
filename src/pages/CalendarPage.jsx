@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import SubjectField from "../components/SubjectField.jsx";
 import TaskClassificationFields from "../components/TaskClassificationFields.jsx";
 import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
@@ -16,6 +16,9 @@ import {
 } from "../utils/appUtils.js";
 
 const calendarDotLimit = 5;
+const googleCalendarEventLimit = 3;
+const GOOGLE_CALENDAR_PREFERENCES_KEY =
+  "studentHub.googleCalendarPreferences";
 
 const effortKeywordGroups = {
   high: [
@@ -46,6 +49,134 @@ const effortLabels = {
   medium: "Medium",
   high: "High",
 };
+
+function loadGoogleCalendarPreferences() {
+  if (typeof window === "undefined") return {};
+
+  try {
+    const parsed = JSON.parse(
+      window.localStorage.getItem(GOOGLE_CALENDAR_PREFERENCES_KEY) || "{}"
+    );
+
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function getVisibleGoogleCalendarPreferences(preferences) {
+  return Object.values(preferences).filter(
+    (preference) =>
+      preference?.calendarId &&
+      preference.showInStudentHub === true
+  );
+}
+
+function normalizeCalendarMatchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getGoogleEventDayKeys(event) {
+  if (!event?.start) return [];
+
+  if (event.allDay) {
+    const startDate = parseDateKey(event.start);
+    const endDate = event.end ? parseDateKey(event.end) : startDate;
+    const dayKeys = [];
+    const currentDate = new Date(startDate);
+    const exclusiveEnd = new Date(endDate);
+
+    if (exclusiveEnd <= currentDate) {
+      return [formatDateKey(currentDate)];
+    }
+
+    while (currentDate < exclusiveEnd) {
+      dayKeys.push(formatDateKey(currentDate));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    return dayKeys;
+  }
+
+  const startDate = new Date(event.start);
+  const endDate = event.end ? new Date(event.end) : startDate;
+  const dayKeys = [];
+  const currentDate = new Date(
+    startDate.getFullYear(),
+    startDate.getMonth(),
+    startDate.getDate()
+  );
+  const finalDate = new Date(
+    endDate.getFullYear(),
+    endDate.getMonth(),
+    endDate.getDate()
+  );
+
+  while (currentDate <= finalDate) {
+    dayKeys.push(formatDateKey(currentDate));
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return dayKeys;
+}
+
+function googleEventOccursOnDate(event, dateKey) {
+  return getGoogleEventDayKeys(event).includes(dateKey);
+}
+
+function getGoogleEventDateKey(event) {
+  return getGoogleEventDayKeys(event)[0] || "";
+}
+
+function shouldSuppressGoogleCalendarEvent(event, dateKey, tasks) {
+  if (event?.duplicateRisk?.source !== "classroom") return false;
+
+  const eventTitle = normalizeCalendarMatchText(event.title);
+  if (!eventTitle) return false;
+
+  return tasks.some((task) => {
+    return (
+      task.source === "classroom" &&
+      task.archived !== true &&
+      task.dueDate === dateKey &&
+      normalizeCalendarMatchText(task.title) === eventTitle
+    );
+  });
+}
+
+function getCalendarEventTimeLabel(event) {
+  if (event.allDay) return "All day";
+
+  const startDate = new Date(event.start);
+  const endDate = event.end ? new Date(event.end) : null;
+  const formatOptions = {
+    hour: "numeric",
+    minute: "2-digit",
+  };
+
+  if (!Number.isFinite(startDate.getTime())) return "";
+
+  const startLabel = startDate.toLocaleTimeString(undefined, formatOptions);
+
+  if (!endDate || !Number.isFinite(endDate.getTime())) return startLabel;
+
+  return `${startLabel}–${endDate.toLocaleTimeString(
+    undefined,
+    formatOptions
+  )}`;
+}
+
+function getGoogleCalendarEventStyle(event) {
+  return {
+    "--calendar-event-color":
+      event.backgroundColor || event.calendarColor || "var(--accent-soft)",
+  };
+}
 
 function textIncludesKeyword(text, keyword) {
   return new RegExp(`\\b${keyword.replaceAll(" ", "\\s+")}\\b`, "i").test(text);
@@ -133,12 +264,170 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
   const [calendarTaskDraft, setCalendarTaskDraft] = useState(() =>
     createCalendarTaskDraft(formatDateKey(today))
   );
+  const [googleCalendarPreferences, setGoogleCalendarPreferences] = useState(
+    loadGoogleCalendarPreferences
+  );
+  const [googleCalendarEvents, setGoogleCalendarEvents] = useState({
+    loading: false,
+    events: [],
+    lastLoadedAt: "",
+    message: "",
+    error: "",
+  });
   const calendarEvents = getTaskCalendarEvents(tasks, subjects);
   const calendarDays = getMonthCalendarDays(visibleMonth);
   const selectedEvents = calendarEvents.filter(
     (event) => event.date === selectedDate
   );
+  const visibleGoogleCalendarPreferences = useMemo(
+    () => getVisibleGoogleCalendarPreferences(googleCalendarPreferences),
+    [googleCalendarPreferences]
+  );
+  const selectedGoogleCalendarIds = useMemo(
+    () =>
+      visibleGoogleCalendarPreferences
+        .map((preference) => preference.calendarId)
+        .filter(Boolean),
+    [visibleGoogleCalendarPreferences]
+  );
+  const googleCalendarPreferenceMap = useMemo(() => {
+    return Object.fromEntries(
+      visibleGoogleCalendarPreferences.map((preference) => [
+        preference.calendarId,
+        preference,
+      ])
+    );
+  }, [visibleGoogleCalendarPreferences]);
+  const visibleGoogleCalendarEvents = useMemo(() => {
+    return googleCalendarEvents.events.filter((event) => {
+      return !getGoogleEventDayKeys(event).some((dateKey) =>
+        shouldSuppressGoogleCalendarEvent(event, dateKey, tasks)
+      );
+    });
+  }, [googleCalendarEvents.events, tasks]);
+  const selectedScheduleEvents = visibleGoogleCalendarEvents.filter((event) =>
+    googleEventOccursOnDate(event, selectedDate)
+  );
   const selectedDateValue = parseDateKey(selectedDate);
+  const eventRangeStart = calendarDays[0]?.date;
+  const eventRangeEnd = calendarDays[calendarDays.length - 1]?.date;
+  const googleCalendarRequestKey = selectedGoogleCalendarIds.join("|");
+
+  useEffect(() => {
+    function handleStorageChange(event) {
+      if (event.key !== GOOGLE_CALENDAR_PREFERENCES_KEY) return;
+
+      setGoogleCalendarPreferences(loadGoogleCalendarPreferences());
+    }
+
+    window.addEventListener("storage", handleStorageChange);
+
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
+  async function loadGoogleCalendarEvents({ quiet = false } = {}) {
+    if (selectedGoogleCalendarIds.length === 0) {
+      setGoogleCalendarEvents({
+        loading: false,
+        events: [],
+        lastLoadedAt: "",
+        message: "Choose calendars in Settings to show events here.",
+        error: "",
+      });
+      return;
+    }
+
+    if (!eventRangeStart || !eventRangeEnd) return;
+
+    const rangeStart = new Date(
+      eventRangeStart.getFullYear(),
+      eventRangeStart.getMonth(),
+      eventRangeStart.getDate()
+    );
+    const rangeEnd = new Date(
+      eventRangeEnd.getFullYear(),
+      eventRangeEnd.getMonth(),
+      eventRangeEnd.getDate() + 1
+    );
+
+    setGoogleCalendarEvents((currentState) => ({
+      ...currentState,
+      loading: true,
+      message: quiet ? currentState.message : "Loading schedule...",
+      error: "",
+    }));
+
+    try {
+      const response = await fetch("/api/google-calendar/events", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          selectedCalendarIds: selectedGoogleCalendarIds,
+          timeMin: rangeStart.toISOString(),
+          timeMax: rangeEnd.toISOString(),
+        }),
+      });
+      const result = await response.json();
+
+      if (!response.ok || result.ok !== true) {
+        setGoogleCalendarEvents((currentState) => ({
+          ...currentState,
+          loading: false,
+          events: [],
+          message: "",
+          error:
+            result.status === "no_calendar_session" ||
+            result.status === "calendar_session_invalid_or_expired"
+              ? "Reconnect Google Calendar to show events."
+              : result.message || "Calendar events are unavailable.",
+        }));
+        return;
+      }
+
+      const loadedEvents = Array.isArray(result.events) ? result.events : [];
+      const eventsWithPreferences = loadedEvents.map((event) => {
+        const preference = googleCalendarPreferenceMap[event.calendarId] || {};
+
+        return {
+          ...event,
+          calendarName:
+            event.calendarName ||
+            preference.calendarName ||
+            "Google Calendar",
+          duplicateRisk: preference.duplicateRisk || null,
+        };
+      });
+
+      setGoogleCalendarEvents({
+        loading: false,
+        events: eventsWithPreferences,
+        lastLoadedAt: new Date().toISOString(),
+        message:
+          eventsWithPreferences.length > 0
+            ? `${eventsWithPreferences.length} calendar event${
+                eventsWithPreferences.length === 1 ? "" : "s"
+              } loaded.`
+            : "No Google Calendar events in this view.",
+        error: "",
+      });
+    } catch {
+      setGoogleCalendarEvents((currentState) => ({
+        ...currentState,
+        loading: false,
+        events: [],
+        message: "",
+        error: "Calendar events are unavailable.",
+      }));
+    }
+  }
+
+  useEffect(() => {
+    loadGoogleCalendarEvents({ quiet: true });
+  }, [visibleMonth, googleCalendarRequestKey]);
 
   function changeMonth(offset) {
     const nextMonth = new Date(
@@ -280,6 +569,17 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                 0,
                 activeDayEvents.length - visibleDots.length
               );
+              const dayGoogleCalendarEvents = visibleGoogleCalendarEvents.filter(
+                (event) => googleEventOccursOnDate(event, day.dateKey)
+              );
+              const visibleEventBars = dayGoogleCalendarEvents.slice(
+                0,
+                googleCalendarEventLimit
+              );
+              const hiddenEventCount = Math.max(
+                0,
+                dayGoogleCalendarEvents.length - visibleEventBars.length
+              );
               const isSelected = day.dateKey === selectedDate;
 
               return (
@@ -301,6 +601,26 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                   onClick={() => selectCalendarDay(day)}
                 >
                   <span className="calendar-day-number">{day.date.getDate()}</span>
+
+                  {visibleEventBars.length > 0 && (
+                    <span className="calendar-google-events" aria-hidden="true">
+                      {visibleEventBars.map((event) => (
+                        <span
+                          className="calendar-google-event-bar"
+                          key={`${event.calendarId}-${event.id}-${day.dateKey}`}
+                          style={getGoogleCalendarEventStyle(event)}
+                          title={`${event.title} · ${event.calendarName}`}
+                        >
+                          <span>{event.title}</span>
+                        </span>
+                      ))}
+                      {hiddenEventCount > 0 && (
+                        <small className="calendar-google-event-overflow">
+                          +{hiddenEventCount} more
+                        </small>
+                      )}
+                    </span>
+                  )}
 
                   <span
                     className="calendar-task-dots"
@@ -353,8 +673,12 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
             </div>
             <div className="calendar-detail-actions">
               <span>
-                {selectedEvents.length} task
+                {selectedEvents.length} due
                 {selectedEvents.length === 1 ? "" : "s"}
+              </span>
+              <span>
+                {selectedScheduleEvents.length} event
+                {selectedScheduleEvents.length === 1 ? "" : "s"}
               </span>
               <button type="button" onClick={openCalendarTaskForm}>
                 + Add task
@@ -462,85 +786,155 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
             </form>
           )}
 
-          {selectedEvents.length > 0 ? (
-            <div className="calendar-task-list">
-              {selectedEvents.map((event) => {
-                const daysLeft = getDaysLeft(event.date);
-                const signalBadges = getTaskSignalBadges(event);
-                const effortLevel = getCalendarEffortLevel(event);
-                const hasClassroomSource = [
-                  "classroom",
-                  "classroom-mock",
-                ].includes(event.taskSource);
+          <section className="calendar-detail-section">
+            <div className="calendar-detail-section-heading">
+              <h4>Tasks due</h4>
+            </div>
 
-                return (
-                  <button
-                    type="button"
-                    className={`calendar-task-item ${
-                      event.completed ? "completed" : ""
-                    } ${event.subjectColour ? "has-subject-colour" : ""}`}
-                    data-source={event.source}
-                    key={event.id}
-                    style={
-                      event.subjectColour
-                        ? { "--subject-color": event.subjectColour }
-                        : undefined
-                    }
-                    onClick={() => setActivePage("tasks")}
-                  >
-                    <span>
-                      <small>{event.subject}</small>
-                      <strong>{event.title}</strong>
-                      {(signalBadges.length > 0 || hasClassroomSource) && (
-                        <span className="task-signal-badges">
-                          <TaskSourceBadge task={event} />
-                          {signalBadges.map((badge) => (
-                            <span
-                              className={`task-signal-badge task-signal-${badge.tone}`}
-                              key={`${badge.tone}-${badge.label}`}
-                            >
-                              {badge.label}
-                            </span>
-                          ))}
-                        </span>
-                      )}
-                      <span className="calendar-effort-summary">
-                        <span
-                          className={`calendar-effort-chip calendar-effort-${effortLevel}`}
-                        >
-                          {effortLabels[effortLevel]} effort
+            {selectedEvents.length > 0 ? (
+              <div className="calendar-task-list">
+                {selectedEvents.map((event) => {
+                  const daysLeft = getDaysLeft(event.date);
+                  const signalBadges = getTaskSignalBadges(event);
+                  const effortLevel = getCalendarEffortLevel(event);
+                  const hasClassroomSource = [
+                    "classroom",
+                    "classroom-mock",
+                  ].includes(event.taskSource);
+
+                  return (
+                    <button
+                      type="button"
+                      className={`calendar-task-item ${
+                        event.completed ? "completed" : ""
+                      } ${event.subjectColour ? "has-subject-colour" : ""}`}
+                      data-source={event.source}
+                      key={event.id}
+                      style={
+                        event.subjectColour
+                          ? { "--subject-color": event.subjectColour }
+                          : undefined
+                      }
+                      onClick={() => setActivePage("tasks")}
+                    >
+                      <span>
+                        <small>{event.subject}</small>
+                        <strong>{event.title}</strong>
+                        {(signalBadges.length > 0 || hasClassroomSource) && (
+                          <span className="task-signal-badges">
+                            <TaskSourceBadge task={event} />
+                            {signalBadges.map((badge) => (
+                              <span
+                                className={`task-signal-badge task-signal-${badge.tone}`}
+                                key={`${badge.tone}-${badge.label}`}
+                              >
+                                {badge.label}
+                              </span>
+                            ))}
+                          </span>
+                        )}
+                        <span className="calendar-effort-summary">
+                          <span
+                            className={`calendar-effort-chip calendar-effort-${effortLevel}`}
+                          >
+                            {effortLabels[effortLevel]} effort
+                          </span>
                         </span>
                       </span>
-                    </span>
-                    <span
-                      className={
-                        event.completed
-                          ? "calendar-task-status completed"
-                          : `calendar-task-status urgency ${getUrgencyClass(
-                              daysLeft
-                            )}`
-                      }
-                    >
-                      {event.completed ? "Completed" : getUrgencyLabel(daysLeft)}
-                    </span>
-                  </button>
-                );
-              })}
+                      <span
+                        className={
+                          event.completed
+                            ? "calendar-task-status completed"
+                            : `calendar-task-status urgency ${getUrgencyClass(
+                                daysLeft
+                              )}`
+                        }
+                      >
+                        {event.completed
+                          ? "Completed"
+                          : getUrgencyLabel(daysLeft)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="calendar-empty-state">
+                <h3>
+                  {calendarEvents.length === 0
+                    ? "No due dates yet."
+                    : "No tasks due."}
+                </h3>
+                <p>
+                  {calendarEvents.length === 0
+                    ? "Add a due date to see it here."
+                    : "Pick another day or add a task."}
+                </p>
+              </div>
+            )}
+          </section>
+
+          <section className="calendar-detail-section">
+            <div className="calendar-detail-section-heading">
+              <h4>Schedule</h4>
+              <button
+                type="button"
+                onClick={() => loadGoogleCalendarEvents()}
+                disabled={
+                  googleCalendarEvents.loading ||
+                  selectedGoogleCalendarIds.length === 0
+                }
+              >
+                {googleCalendarEvents.loading ? "Refreshing..." : "Refresh"}
+              </button>
             </div>
-          ) : (
-            <div className="calendar-empty-state">
-              <h3>
-                {calendarEvents.length === 0
-                  ? "No due dates yet."
-                  : "No school tasks due."}
-              </h3>
-              <p>
-                {calendarEvents.length === 0
-                  ? "Add a due date to see it here."
-                  : "Pick another day or add a task."}
-              </p>
-            </div>
-          )}
+
+            {googleCalendarEvents.error ? (
+              <div className="calendar-empty-state">
+                <h3>Events unavailable</h3>
+                <p>{googleCalendarEvents.error}</p>
+              </div>
+            ) : selectedGoogleCalendarIds.length === 0 ? (
+              <div className="calendar-empty-state">
+                <h3>No calendars selected.</h3>
+                <p>Choose calendars in Settings to show events here.</p>
+              </div>
+            ) : selectedScheduleEvents.length > 0 ? (
+              <div className="calendar-google-event-list">
+                {selectedScheduleEvents.map((event) => (
+                  <article
+                    className="calendar-google-event-item"
+                    key={`${event.calendarId}-${event.id}-${getGoogleEventDateKey(event)}`}
+                    style={getGoogleCalendarEventStyle(event)}
+                  >
+                    <span className="calendar-google-event-time">
+                      {getCalendarEventTimeLabel(event)}
+                    </span>
+                    <span>
+                      <strong>{event.title}</strong>
+                      <small>
+                        {event.calendarName}
+                        {event.location ? ` · ${event.location}` : ""}
+                      </small>
+                    </span>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="calendar-empty-state">
+                <h3>
+                  {googleCalendarEvents.loading
+                    ? "Loading events..."
+                    : "No events scheduled."}
+                </h3>
+                <p>
+                  {googleCalendarEvents.loading
+                    ? "Reading selected calendars."
+                    : "Selected calendars have no events on this day."}
+                </p>
+              </div>
+            )}
+          </section>
 
           <button
             type="button"

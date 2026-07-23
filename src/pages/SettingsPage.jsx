@@ -2284,7 +2284,7 @@ function IntegrationCard({
       )}
       {isGoogleCalendar && (
         <div className="integration-helper integration-real-classroom-note">
-          <p>Phase 1 lists calendars only. Events are not loaded yet.</p>
+          <p>Choose which calendars show as schedule events in Student Hub.</p>
         </div>
       )}
       {isRealClassroom && (

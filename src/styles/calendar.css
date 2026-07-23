@@ -194,6 +194,42 @@
   min-height: 12px;
 }
 
+.calendar-google-events {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+.calendar-google-event-bar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--calendar-event-color, var(--accent-soft)) 34%, var(--border));
+  border-radius: 999px;
+  padding: 2px 5px;
+  background: color-mix(in srgb, var(--calendar-event-color, var(--accent-soft)) 16%, var(--surface-raised));
+  color: var(--text-secondary);
+  box-shadow: inset 2px 0 var(--calendar-event-color, var(--accent-soft));
+}
+
+.calendar-google-event-bar span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.56rem;
+  font-weight: 700;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.calendar-google-event-overflow {
+  color: var(--text-muted);
+  font-size: 0.56rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .calendar-task-dot {
   width: 6px;
   height: 6px;
@@ -286,6 +322,7 @@
 
 .calendar-detail-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
@@ -374,6 +411,50 @@
 .calendar-task-list {
   display: grid;
   gap: var(--density-task-gap);
+}
+
+.calendar-detail-section {
+  display: grid;
+  gap: var(--density-task-gap);
+  margin-top: var(--density-panel-header-gap);
+}
+
+.calendar-detail-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.calendar-detail-section-heading h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.74rem;
+  font-weight: 740;
+}
+
+.calendar-detail-section-heading button {
+  min-height: var(--density-small-button-height);
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: var(--density-small-button-padding);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-size: 0.64rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.calendar-detail-section-heading button:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.calendar-detail-section-heading button:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .calendar-task-item {
@@ -484,6 +565,62 @@
   color: var(--text-muted);
 }
 
+.calendar-google-event-list {
+  display: grid;
+  gap: var(--density-task-gap);
+}
+
+.calendar-google-event-item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 1px solid color-mix(in srgb, var(--calendar-event-color, var(--accent-soft)) 24%, var(--border-raised));
+  border-radius: 8px;
+  padding: var(--density-task-y) var(--density-task-x);
+  background: color-mix(in srgb, var(--calendar-event-color, var(--accent-soft)) 8%, var(--surface-raised));
+  box-shadow: inset 2px 0 var(--calendar-event-color, var(--accent-soft));
+  color: var(--text);
+}
+
+.calendar-google-event-item > span:last-child {
+  min-width: 0;
+}
+
+.calendar-google-event-time {
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.6rem;
+  font-weight: 740;
+  white-space: nowrap;
+}
+
+.calendar-google-event-item strong,
+.calendar-google-event-item small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-google-event-item strong {
+  color: var(--text);
+  font-size: var(--density-task-title-size);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.calendar-google-event-item small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
 .calendar-empty-state {
   padding: var(--density-empty-padding);
   border: 1px dashed var(--border-strong);
@@ -523,5 +660,18 @@
 
   .calendar-colour-toggle button {
     flex: 1;
+  }
+
+  .calendar-google-event-bar span {
+    max-width: 100%;
+  }
+
+  .calendar-google-event-item {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .calendar-google-event-time {
+    width: fit-content;
   }
 }

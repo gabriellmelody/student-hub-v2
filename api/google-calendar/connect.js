@@ -2,6 +2,7 @@ import { getGoogleCalendarOAuthConfigStatus } from "./_config.js";
 
 const GOOGLE_CALENDAR_READONLY_SCOPES = [
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  "https://www.googleapis.com/auth/calendar.events.readonly",
 ];
 
 function isReadinessCheck(request) {
