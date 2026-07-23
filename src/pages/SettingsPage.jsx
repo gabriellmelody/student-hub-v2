@@ -139,6 +139,7 @@ function getDefaultGoogleCalendarPreference(calendar) {
     calendarName: calendar?.summary || calendar?.name || "Untitled calendar",
     showInStudentHub: selectedByGoogle,
     useAsBusyTime: selectedByGoogle,
+    duplicateRisk: null,
   };
 }
 
@@ -155,6 +156,22 @@ function normalizeGoogleCalendarPreference(calendarId, preference) {
         : "",
     showInStudentHub: preference.showInStudentHub === true,
     useAsBusyTime: preference.useAsBusyTime === true,
+    duplicateRisk:
+      preference.duplicateRisk &&
+      typeof preference.duplicateRisk === "object" &&
+      preference.duplicateRisk.source === REAL_CLASSROOM_SOURCE
+        ? {
+            source: REAL_CLASSROOM_SOURCE,
+            classroomCourseId:
+              typeof preference.duplicateRisk.classroomCourseId === "string"
+                ? preference.duplicateRisk.classroomCourseId
+                : "",
+            classroomCourseName:
+              typeof preference.duplicateRisk.classroomCourseName === "string"
+                ? preference.duplicateRisk.classroomCourseName
+                : "",
+          }
+        : null,
   };
 }
 
@@ -185,7 +202,146 @@ function loadGoogleCalendarPreferences() {
   }
 }
 
-function mergeGoogleCalendarPreferences(preferences, calendars) {
+function normalizeCalendarCourseMatchName(value) {
+  return normalizeSubjectName(value)
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function removeCalendarCourseYearTokens(value) {
+  return value
+    .split(" ")
+    .filter(
+      (token) =>
+        !/^(?:s|f)?20\d{2}$/.test(token) &&
+        !/^\d{2}\d{2}$/.test(token) &&
+        !/^(?:20)?\d{2}(?:20)?\d{2}$/.test(token) &&
+        !/^(?:20)?\d{2}$/.test(token)
+    )
+    .join(" ")
+    .trim();
+}
+
+function getCalendarCourseMatchParts(value) {
+  const normalizedName = normalizeCalendarCourseMatchName(value);
+  const withoutYearTokens = removeCalendarCourseYearTokens(normalizedName);
+
+  return {
+    normalizedName,
+    withoutYearTokens,
+    meaningfulTokenCount: withoutYearTokens
+      .split(" ")
+      .filter((token) => token.length > 1 && !/^p\d+$/i.test(token)).length,
+  };
+}
+
+function calendarNameMatchesClassroomCourse(calendarName, courseName) {
+  const calendarParts = getCalendarCourseMatchParts(calendarName);
+  const courseParts = getCalendarCourseMatchParts(courseName);
+
+  if (
+    !calendarParts.normalizedName ||
+    !courseParts.normalizedName ||
+    calendarParts.meaningfulTokenCount < 2 ||
+    courseParts.meaningfulTokenCount < 2
+  ) {
+    return false;
+  }
+
+  return (
+    calendarParts.normalizedName === courseParts.normalizedName ||
+    (calendarParts.withoutYearTokens.length >= 8 &&
+      courseParts.withoutYearTokens.length >= 8 &&
+      calendarParts.withoutYearTokens === courseParts.withoutYearTokens)
+  );
+}
+
+function getClassroomCalendarDuplicateRiskMap({
+  calendars,
+  courses,
+  selections,
+  subjectLinks,
+  tasks,
+  classroomConnected,
+}) {
+  if (!classroomConnected) return {};
+
+  const importedCourseMap = new Map();
+
+  tasks.forEach((task) => {
+    if (task.source !== REAL_CLASSROOM_SOURCE || !task.classroomCourseId) {
+      return;
+    }
+
+    importedCourseMap.set(task.classroomCourseId, {
+      classroomCourseId: task.classroomCourseId,
+      classroomCourseName: task.classroomCourseName || "",
+    });
+  });
+
+  if (importedCourseMap.size === 0) return {};
+
+  const coursesById = new Map();
+
+  courses.forEach((course) => {
+    const courseId = getRealClassroomCourseId(course);
+
+    if (!courseId) return;
+
+    coursesById.set(courseId, {
+      classroomCourseId: courseId,
+      classroomCourseName: course.name || course.classroomCourseName || "",
+    });
+  });
+
+  importedCourseMap.forEach((importedCourse, courseId) => {
+    if (!coursesById.has(courseId)) {
+      coursesById.set(courseId, importedCourse);
+    }
+  });
+
+  const duplicateRiskMap = {};
+
+  calendars.forEach((calendar) => {
+    const calendarId = getGoogleCalendarId(calendar);
+    const calendarName = calendar.summary || calendar.name || "";
+
+    if (!calendarId || !calendarName) return;
+
+    const matchedCourse = Array.from(coursesById.values()).find((course) => {
+      const courseId = course.classroomCourseId;
+      const courseIsIncludedOrLinked =
+        selections[courseId] === "included" || Boolean(subjectLinks[courseId]);
+
+      return (
+        courseIsIncludedOrLinked &&
+        importedCourseMap.has(courseId) &&
+        calendarNameMatchesClassroomCourse(
+          calendarName,
+          course.classroomCourseName
+        )
+      );
+    });
+
+    if (!matchedCourse) return;
+
+    duplicateRiskMap[calendarId] = {
+      source: REAL_CLASSROOM_SOURCE,
+      classroomCourseId: matchedCourse.classroomCourseId,
+      classroomCourseName: matchedCourse.classroomCourseName,
+    };
+  });
+
+  return duplicateRiskMap;
+}
+
+function mergeGoogleCalendarPreferences(
+  preferences,
+  calendars,
+  duplicateRiskMap = {}
+) {
   const nextPreferences = { ...preferences };
 
   calendars.forEach((calendar) => {
@@ -194,12 +350,24 @@ function mergeGoogleCalendarPreferences(preferences, calendars) {
     if (!calendarId) return;
 
     const savedPreference = nextPreferences[calendarId];
+    const duplicateRisk = duplicateRiskMap[calendarId] || null;
+    const defaultPreference = {
+      ...getDefaultGoogleCalendarPreference(calendar),
+      ...(duplicateRisk
+        ? {
+            showInStudentHub: false,
+            useAsBusyTime: false,
+            duplicateRisk,
+          }
+        : {}),
+    };
 
     nextPreferences[calendarId] = {
-      ...getDefaultGoogleCalendarPreference(calendar),
+      ...defaultPreference,
       ...savedPreference,
       calendarId,
       calendarName: calendar.summary || calendar.name || "Untitled calendar",
+      duplicateRisk,
     };
   });
 
@@ -1265,6 +1433,14 @@ function IntegrationsSettings({
       const loadedCalendars = Array.isArray(result.calendars)
         ? result.calendars
         : [];
+      const duplicateRiskMap = getClassroomCalendarDuplicateRiskMap({
+        calendars: loadedCalendars,
+        courses: realClassroomCourses.courses,
+        selections: realClassroomCourseSelections,
+        subjectLinks: realClassroomCourseSubjectLinks,
+        tasks,
+        classroomConnected: realClassroomSession.connected,
+      });
 
       setGoogleCalendarCalendars({
         loading: false,
@@ -1278,7 +1454,11 @@ function IntegrationsSettings({
         error: "",
       });
       setGoogleCalendarPreferences((currentPreferences) =>
-        mergeGoogleCalendarPreferences(currentPreferences, loadedCalendars)
+        mergeGoogleCalendarPreferences(
+          currentPreferences,
+          loadedCalendars,
+          duplicateRiskMap
+        )
       );
       setGoogleCalendarSession((currentState) => ({
         ...currentState,
@@ -2477,6 +2657,13 @@ function GoogleCalendarManagerModal({
 
     return preference.useAsBusyTime;
   }).length;
+  const duplicateRiskCount = calendars.filter((calendar) => {
+    const preference =
+      preferences[getGoogleCalendarId(calendar)] ||
+      getDefaultGoogleCalendarPreference(calendar);
+
+    return Boolean(preference.duplicateRisk);
+  }).length;
 
   useEffect(() => {
     function closeOnEscape(event) {
@@ -2521,6 +2708,9 @@ function GoogleCalendarManagerModal({
           <span>{calendars.length} calendars</span>
           <span>{shownCount} shown</span>
           <span>{busyCount} busy time</span>
+          {duplicateRiskCount > 0 && (
+            <span>{duplicateRiskCount} Classroom assignment calendars</span>
+          )}
           {calendarState.lastCheckedAt && (
             <span>Loaded {formatConnectionTime(calendarState.lastCheckedAt)}</span>
           )}
@@ -2597,8 +2787,19 @@ function GoogleCalendarManagerRow({ calendar, preference, onTogglePreference }) 
         <strong>{calendarName}</strong>
         <span>
           {calendar.primary && <em>Primary</em>}
+          {preference.duplicateRisk && (
+            <em className="google-calendar-classroom-risk">
+              Classroom assignments
+            </em>
+          )}
           {calendar.accessRole && <small>{calendar.accessRole}</small>}
         </span>
+        {preference.duplicateRisk && (
+          <p>
+            Assignments from this class are already handled through Google
+            Classroom.
+          </p>
+        )}
       </div>
       <label className="google-calendar-switch">
         <input
