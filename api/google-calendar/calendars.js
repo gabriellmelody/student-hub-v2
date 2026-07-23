@@ -27,6 +27,7 @@ function normalizeCalendar(calendar) {
     summary: String(calendar?.summary || "Untitled calendar"),
     name: String(calendar?.summary || "Untitled calendar"),
     primary: calendar?.primary === true,
+    selected: calendar?.selected === true,
     accessRole: String(calendar?.accessRole || ""),
     backgroundColor: String(calendar?.backgroundColor || ""),
   };
