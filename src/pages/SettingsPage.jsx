@@ -2642,6 +2642,7 @@ function GoogleCalendarManagerModal({
   onHideAll,
   onClose,
 }) {
+  const [showSavedConfirmation, setShowSavedConfirmation] = useState(false);
   const calendars = calendarState.calendars;
   const shownCount = calendars.filter((calendar) => {
     const preference =
@@ -2667,20 +2668,30 @@ function GoogleCalendarManagerModal({
 
   useEffect(() => {
     function closeOnEscape(event) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape" && !showSavedConfirmation) onClose();
     }
 
     window.addEventListener("keydown", closeOnEscape);
 
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+  }, [onClose, showSavedConfirmation]);
+
+  function saveChoices() {
+    setShowSavedConfirmation(true);
+
+    window.setTimeout(() => {
+      onClose();
+    }, 1250);
+  }
 
   return (
     <div
       className="data-confirmation-backdrop real-classroom-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget && !showSavedConfirmation) {
+          onClose();
+        }
       }}
     >
       <section
@@ -2695,19 +2706,28 @@ function GoogleCalendarManagerModal({
             <p className="settings-group-label">Google Calendar</p>
             <h3 id="google-calendar-manager-title">Manage calendars</h3>
             <p>
-              Choose which calendars Student Hub should show later. Nothing is
-              changed in Google.
+              Choose what Student Hub should show and what should block study
+              time. Nothing is changed in Google.
+            </p>
+            <p>
+              The planner will avoid events from calendars marked Block study
+              time.
             </p>
           </div>
-          <button type="button" onClick={onClose}>
-            Done
-          </button>
+          <div className="google-calendar-manager-close-actions">
+            <button type="button" className="secondary" onClick={onClose}>
+              Close
+            </button>
+            <button type="button" onClick={saveChoices}>
+              Save choices
+            </button>
+          </div>
         </header>
 
         <div className="google-calendar-manager-summary">
           <span>{calendars.length} calendars</span>
           <span>{shownCount} shown</span>
-          <span>{busyCount} busy time</span>
+          <span>{busyCount} block study time</span>
           {duplicateRiskCount > 0 && (
             <span>{duplicateRiskCount} Classroom assignment calendars</span>
           )}
@@ -2766,6 +2786,20 @@ function GoogleCalendarManagerModal({
             })
           )}
         </div>
+
+        {showSavedConfirmation && (
+          <div
+            className="google-calendar-save-confirmation"
+            role="status"
+            aria-live="polite"
+          >
+            <div className="classroom-success-check" aria-hidden="true">
+              <span>✓</span>
+            </div>
+            <strong>Calendar choices saved</strong>
+            <p>Student Hub will remember these settings.</p>
+          </div>
+        )}
       </section>
     </div>
   );
@@ -2823,7 +2857,7 @@ function GoogleCalendarManagerRow({ calendar, preference, onTogglePreference }) 
             })
           }
         />
-        <span>Use as busy time</span>
+        <span>Block study time</span>
       </label>
     </div>
   );
