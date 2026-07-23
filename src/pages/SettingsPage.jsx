@@ -2644,20 +2644,6 @@ function GoogleCalendarManagerModal({
 }) {
   const [showSavedConfirmation, setShowSavedConfirmation] = useState(false);
   const calendars = calendarState.calendars;
-  const shownCount = calendars.filter((calendar) => {
-    const preference =
-      preferences[getGoogleCalendarId(calendar)] ||
-      getDefaultGoogleCalendarPreference(calendar);
-
-    return preference.showInStudentHub;
-  }).length;
-  const busyCount = calendars.filter((calendar) => {
-    const preference =
-      preferences[getGoogleCalendarId(calendar)] ||
-      getDefaultGoogleCalendarPreference(calendar);
-
-    return preference.useAsBusyTime;
-  }).length;
   const duplicateRiskCount = calendars.filter((calendar) => {
     const preference =
       preferences[getGoogleCalendarId(calendar)] ||
@@ -2701,47 +2687,57 @@ function GoogleCalendarManagerModal({
         aria-labelledby="google-calendar-manager-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className="google-calendar-manager-header">
-          <div>
-            <p className="settings-group-label">Google Calendar</p>
-            <h3 id="google-calendar-manager-title">Manage calendars</h3>
-            <p>
-              Choose what Student Hub should show and what should block study
-              time. Nothing is changed in Google.
-            </p>
-            <p>
-              The planner will avoid events from calendars marked Block study
-              time.
-            </p>
+        <div className="google-calendar-manager-top">
+          <header className="google-calendar-manager-header">
+            <div>
+              <p className="settings-group-label">Google Calendar</p>
+              <h3 id="google-calendar-manager-title">Manage calendars</h3>
+              <p>
+                Choose what Student Hub should show and what should block study
+                time. Nothing is changed in Google.
+              </p>
+              <p>
+                The planner will avoid events from calendars marked Block study
+                time.
+              </p>
+            </div>
+          </header>
+
+          <div className="google-calendar-manager-summary">
+            <span>{calendars.length} calendars</span>
+            {duplicateRiskCount > 0 && (
+              <span>{duplicateRiskCount} Classroom assignment calendars</span>
+            )}
+            {calendarState.lastCheckedAt && (
+              <small>
+                Loaded {formatConnectionTime(calendarState.lastCheckedAt)}
+              </small>
+            )}
           </div>
-        </header>
 
-        <div className="google-calendar-manager-summary">
-          <span>{calendars.length} calendars</span>
-          <span>{shownCount} shown</span>
-          <span>{busyCount} block study time</span>
-          {duplicateRiskCount > 0 && (
-            <span>{duplicateRiskCount} Classroom assignment calendars</span>
-          )}
-          {calendarState.lastCheckedAt && (
-            <span>Loaded {formatConnectionTime(calendarState.lastCheckedAt)}</span>
-          )}
-        </div>
-
-        <div className="google-calendar-manager-actions">
-          <button type="button" onClick={onShowAll} disabled={calendars.length === 0}>
-            Show all
-          </button>
-          <button type="button" onClick={onHideAll} disabled={calendars.length === 0}>
-            Hide all
-          </button>
-          <button
-            type="button"
-            onClick={onLoadCalendars}
-            disabled={calendarState.loading}
-          >
-            {calendarState.loading ? "Refreshing..." : "Refresh calendars"}
-          </button>
+          <div className="google-calendar-manager-actions">
+            <button
+              type="button"
+              onClick={onShowAll}
+              disabled={calendars.length === 0}
+            >
+              Show all
+            </button>
+            <button
+              type="button"
+              onClick={onHideAll}
+              disabled={calendars.length === 0}
+            >
+              Hide all
+            </button>
+            <button
+              type="button"
+              onClick={onLoadCalendars}
+              disabled={calendarState.loading}
+            >
+              {calendarState.loading ? "Refreshing..." : "Refresh calendars"}
+            </button>
+          </div>
         </div>
 
         <div className="google-calendar-manager-list">
@@ -2781,7 +2777,7 @@ function GoogleCalendarManagerModal({
 
         <footer className="google-calendar-manager-footer">
           <button type="button" className="secondary" onClick={onClose}>
-            Close
+            Cancel
           </button>
           <button type="button" onClick={saveChoices}>
             Save choices

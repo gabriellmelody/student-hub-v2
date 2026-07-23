@@ -1754,15 +1754,23 @@
 .google-calendar-manager-modal {
   position: relative;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 13px;
   width: min(1100px, calc(100vw - 48px));
   max-width: 1100px;
   min-width: 0;
-  max-height: calc(100vh - 48px);
+  height: min(900px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: 16px auto;
   padding: 18px;
   border-radius: 18px;
   overflow: hidden;
+}
+
+.google-calendar-manager-top {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
 }
 
 .google-calendar-manager-header {
@@ -1839,6 +1847,13 @@
   font-weight: 700;
 }
 
+.google-calendar-manager-summary small {
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 650;
+}
+
 .google-calendar-manager-actions button:not(:disabled):hover {
   border-color: var(--border-hover);
   background: var(--surface-hover);
@@ -1866,7 +1881,7 @@
 .google-calendar-manager-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) minmax(170px, max-content) minmax(158px, max-content);
+  grid-template-columns: 16px minmax(0, 1fr) minmax(150px, 178px) minmax(142px, 170px);
   align-items: center;
   gap: 10px;
   padding: 10px;
@@ -1932,6 +1947,10 @@
   white-space: nowrap;
 }
 
+.google-calendar-switch span {
+  min-width: 0;
+}
+
 .google-calendar-switch input {
   width: 34px;
   height: 20px;
@@ -1991,11 +2010,26 @@
   font-size: 0.72rem;
 }
 
+@media (max-width: 920px) {
+  .google-calendar-manager-row {
+    grid-template-columns: 16px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .google-calendar-switch {
+    grid-column: 2;
+    justify-content: space-between;
+    white-space: normal;
+  }
+}
+
 @media (max-width: 760px) {
   .google-calendar-manager-modal {
     width: calc(100vw - 24px);
     max-width: calc(100vw - 24px);
-    max-height: calc(100vh - 24px);
+    height: min(900px, calc(100dvh - 24px));
+    max-height: calc(100dvh - 24px);
+    margin: 12px auto;
     padding: 14px;
   }
 
@@ -2012,16 +2046,6 @@
     flex: 1;
   }
 
-  .google-calendar-manager-row {
-    grid-template-columns: 16px minmax(0, 1fr);
-    align-items: start;
-  }
-
-  .google-calendar-switch {
-    grid-column: 2;
-    justify-content: space-between;
-    white-space: normal;
-  }
 }
 
 .integration-link-button {
@@ -2688,7 +2712,7 @@
   align-items: center;
   justify-items: center;
   overflow: hidden;
-  padding: 24px;
+  padding: 0 24px;
 }
 
 .data-confirmation {
@@ -2706,7 +2730,9 @@
   width: min(1100px, calc(100vw - 48px));
   max-width: 1100px;
   min-width: 0;
-  max-height: calc(100vh - 48px);
+  height: min(900px, calc(100dvh - 32px));
+  max-height: calc(100dvh - 32px);
+  margin: 16px auto;
   padding: 18px;
   border-color: var(--border);
   border-radius: 18px;
@@ -2715,10 +2741,16 @@
 }
 
 @media (max-width: 760px) {
+  .data-confirmation-backdrop.google-calendar-manager-backdrop {
+    padding: 0 12px;
+  }
+
   .data-confirmation.google-calendar-manager-modal {
     width: calc(100vw - 24px);
     max-width: calc(100vw - 24px);
-    max-height: calc(100vh - 24px);
+    height: min(900px, calc(100dvh - 24px));
+    max-height: calc(100dvh - 24px);
+    margin: 12px auto;
     padding: 14px;
   }
 }
