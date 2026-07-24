@@ -190,6 +190,20 @@
   background: var(--accent-tint);
 }
 
+.evening-planner-notice button {
+  min-height: var(--density-small-button-height);
+  margin-top: 8px;
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+  padding: var(--density-small-button-padding);
+  background: var(--surface-raised);
+  color: var(--accent-soft);
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
 .evening-planner-error {
   margin: 0;
   border: 1px solid var(--effort-high-border);

@@ -44,6 +44,7 @@ import {
   saveTodayPlanSnapshot,
   getDefaultEveningPlannerDraft,
   buildEveningPlan,
+  timeToMinutes,
   createDemoTasks,
   loadCompletedTaskHistory,
   upsertCompletedTaskHistory,
@@ -52,6 +53,9 @@ import {
   getExternalSourceKey,
 } from "./utils/appUtils.js";
 import { createTaskFromMockAssignment } from "./utils/classroomMockUtils.js";
+
+const GOOGLE_CALENDAR_PREFERENCES_KEY =
+  "studentHub.googleCalendarPreferences";
 
 function createEmptyTaskDraft() {
   return {
@@ -64,6 +68,80 @@ function createEmptyTaskDraft() {
     detectedTags: [],
     importanceSource: "auto",
   };
+}
+
+function getBusyGoogleCalendarIds() {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const preferences = JSON.parse(
+      window.localStorage.getItem(GOOGLE_CALENDAR_PREFERENCES_KEY) || "{}"
+    );
+
+    if (!preferences || typeof preferences !== "object") return [];
+
+    return Object.values(preferences)
+      .filter(
+        (preference) =>
+          preference?.calendarId && preference.useAsBusyTime === true
+      )
+      .map((preference) => preference.calendarId)
+      .sort((left, right) => left.localeCompare(right));
+  } catch {
+    return [];
+  }
+}
+
+function getPlanningDate() {
+  const planningDate = new Date();
+
+  planningDate.setHours(0, 0, 0, 0);
+  return planningDate;
+}
+
+function getPlanningDateTime(planningDate, minutes) {
+  const date = new Date(planningDate);
+
+  date.setMinutes(minutes);
+  return date;
+}
+
+function getEventBusyIntervals(events, planningDate, startMinutes, endMinutes) {
+  const dayStart = new Date(planningDate);
+  const windowStart = getPlanningDateTime(planningDate, startMinutes).getTime();
+  const windowEnd = getPlanningDateTime(planningDate, endMinutes).getTime();
+
+  return (Array.isArray(events) ? events : [])
+    .filter((event) => event && event.allDay !== true)
+    .map((event) => {
+      const eventStart = Date.parse(event.start);
+      const eventEnd = Date.parse(event.end || event.start);
+
+      if (!Number.isFinite(eventStart) || !Number.isFinite(eventEnd)) {
+        return null;
+      }
+
+      const clippedStart = Math.max(windowStart, eventStart);
+      const clippedEnd = Math.min(windowEnd, eventEnd);
+
+      if (clippedEnd <= clippedStart) return null;
+
+      return {
+        startMinutes: Math.round((clippedStart - dayStart.getTime()) / 60000),
+        endMinutes: Math.round((clippedEnd - dayStart.getTime()) / 60000),
+      };
+    })
+    .filter(Boolean);
+}
+
+function formatPlannerMinutes(minutes) {
+  const safeMinutes = Math.max(0, Math.round(Number(minutes) || 0));
+  const hours = Math.floor(safeMinutes / 60);
+  const remainingMinutes = safeMinutes % 60;
+
+  if (hours === 0) return `${remainingMinutes} min`;
+  if (remainingMinutes === 0) return `${hours} hr`;
+  return `${hours} hr ${remainingMinutes} min`;
 }
 
 function getInitialNavigationState() {
@@ -198,6 +276,12 @@ function App() {
   const [eveningPlannerError, setEveningPlannerError] = useState("");
   const [eveningPlannerNeedsReplace, setEveningPlannerNeedsReplace] =
     useState(false);
+  const [eveningPlannerCheckingCalendar, setEveningPlannerCheckingCalendar] =
+    useState(false);
+  const [
+    eveningPlannerCanContinueWithoutCalendar,
+    setEveningPlannerCanContinueWithoutCalendar,
+  ] = useState(false);
   const [eveningPlanSuccess, setEveningPlanSuccess] = useState(null);
   const eveningPlanSuccessTimerRef = useRef(null);
 
@@ -1178,6 +1262,8 @@ function App() {
     setEveningPlannerDraft(getDefaultEveningPlannerDraft());
     setEveningPlannerError("");
     setEveningPlannerNeedsReplace(false);
+    setEveningPlannerCheckingCalendar(false);
+    setEveningPlannerCanContinueWithoutCalendar(false);
     setEveningPlannerOpen(true);
   }
 
@@ -1185,19 +1271,100 @@ function App() {
     setEveningPlannerOpen(false);
     setEveningPlannerError("");
     setEveningPlannerNeedsReplace(false);
+    setEveningPlannerCheckingCalendar(false);
+    setEveningPlannerCanContinueWithoutCalendar(false);
   }
 
-  function createEveningPlan({ replaceExisting = false } = {}) {
+  async function fetchPlanningBusyIntervals() {
+    const busyCalendarIds = getBusyGoogleCalendarIds();
+
+    if (busyCalendarIds.length === 0) return [];
+
+    const startMinutes = timeToMinutes(eveningPlannerDraft.startTime);
+    const endMinutes = timeToMinutes(eveningPlannerDraft.endTime);
+
+    if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) {
+      return [];
+    }
+
+    const planningDate = getPlanningDate();
+    const response = await fetch("/api/google-calendar/events", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        selectedCalendarIds: busyCalendarIds,
+        timeMin: getPlanningDateTime(planningDate, startMinutes).toISOString(),
+        timeMax: getPlanningDateTime(planningDate, endMinutes).toISOString(),
+      }),
+    });
+    const result = await response.json();
+
+    if (!response.ok || result.ok !== true) {
+      throw new Error(
+        result.status === "no_calendar_session" ||
+          result.status === "calendar_session_invalid_or_expired" ||
+          result.status === "calendar_session_reconnect_required"
+          ? "Reconnect Google Calendar, or continue without Calendar."
+          : result.message || "Calendar is unavailable. Continue without Calendar?"
+      );
+    }
+
+    return getEventBusyIntervals(
+      result.events,
+      planningDate,
+      startMinutes,
+      endMinutes
+    );
+  }
+
+  async function createEveningPlan({
+    replaceExisting = false,
+    ignoreCalendar = false,
+  } = {}) {
+    if (eveningPlannerCheckingCalendar) return;
+
     if (planBlocks.length > 0 && !replaceExisting) {
       setEveningPlannerNeedsReplace(true);
       setEveningPlannerError("");
+      setEveningPlannerCanContinueWithoutCalendar(false);
       return;
     }
 
     if (replaceExisting && planBlocks.some((block) => block.locked === true)) {
       setEveningPlannerError("Unlock locked blocks before replacing this plan.");
       setEveningPlannerNeedsReplace(false);
+      setEveningPlannerCanContinueWithoutCalendar(false);
       return;
+    }
+
+    setEveningPlannerCanContinueWithoutCalendar(false);
+    setEveningPlannerError("");
+
+    let busyIntervals = [];
+
+    if (!ignoreCalendar && getBusyGoogleCalendarIds().length > 0) {
+      setEveningPlannerCheckingCalendar(true);
+      setEveningPlannerError("");
+
+      try {
+        busyIntervals = await fetchPlanningBusyIntervals();
+      } catch (error) {
+        setEveningPlannerCheckingCalendar(false);
+        setEveningPlannerCanContinueWithoutCalendar(true);
+        setEveningPlannerError(
+          error instanceof Error
+            ? error.message
+            : "Calendar is unavailable. Continue without Calendar?"
+        );
+        return;
+      }
+
+      setEveningPlannerCheckingCalendar(false);
+      setEveningPlannerError("");
     }
 
     const result = buildEveningPlan({
@@ -1208,6 +1375,7 @@ function App() {
       includeBreaks: eveningPlannerDraft.includeBreaks,
       maxFocusMinutes: eveningPlannerDraft.maxFocusMinutes,
       planStyle: eveningPlannerDraft.planStyle,
+      busyIntervals,
     });
 
     if (!result.ok) {
@@ -1218,10 +1386,18 @@ function App() {
 
     setStalePlanDate(null);
     setStartTime(eveningPlannerDraft.startTime);
-    setHoursAvailable(Number((result.windowMinutes / 60).toFixed(2)));
-    setPlanBlocks(recalculatePlanTimes(result.blocks, eveningPlannerDraft.startTime));
+    setHoursAvailable(
+      Number(((result.usableMinutes || result.windowMinutes) / 60).toFixed(2))
+    );
+    setPlanBlocks(result.blocks);
     setActivePage("plan");
     closeEveningPlanner();
+    const calendarSummary =
+      busyIntervals.length > 0 && result.unscheduledWorkMinutes > 0
+        ? ` · calendar leaves ${formatPlannerMinutes(
+            result.usableMinutes
+          )} free · some work could not be scheduled`
+        : "";
     setEveningPlanSuccess({
       title: replaceExisting ? "Plan updated" : "Plan created",
       summary: `${result.scheduledTaskCount} task${
@@ -1232,7 +1408,7 @@ function App() {
               result.breakCount === 1 ? "" : "s"
             } added`
           : ""
-      }`,
+      }${calendarSummary}`,
     });
   }
 
@@ -1788,9 +1964,17 @@ function App() {
           setDraft={setEveningPlannerDraft}
           error={eveningPlannerError}
           needsReplace={eveningPlannerNeedsReplace}
+          checkingCalendar={eveningPlannerCheckingCalendar}
+          canContinueWithoutCalendar={eveningPlannerCanContinueWithoutCalendar}
           onClose={closeEveningPlanner}
           onPlan={() => createEveningPlan()}
           onReplace={() => createEveningPlan({ replaceExisting: true })}
+          onContinueWithoutCalendar={() =>
+            createEveningPlan({
+              replaceExisting: eveningPlannerNeedsReplace,
+              ignoreCalendar: true,
+            })
+          }
         />
       )}
 
@@ -1810,9 +1994,12 @@ function EveningPlannerModal({
   setDraft,
   error,
   needsReplace,
+  checkingCalendar,
+  canContinueWithoutCalendar,
   onClose,
   onPlan,
   onReplace,
+  onContinueWithoutCalendar,
 }) {
   useEffect(() => {
     function closeOnEscape(event) {
@@ -1832,6 +2019,7 @@ function EveningPlannerModal({
 
   function submitPlan(event) {
     event.preventDefault();
+    if (checkingCalendar) return;
     onPlan();
   }
 
@@ -1951,19 +2139,45 @@ function EveningPlannerModal({
             </div>
           )}
 
+          {checkingCalendar && (
+            <div className="evening-planner-notice">
+              <strong>Checking your calendar...</strong>
+              <p>Student Hub is finding open study time.</p>
+            </div>
+          )}
+
           {error && <p className="evening-planner-error">{error}</p>}
 
+          {canContinueWithoutCalendar && (
+            <div className="evening-planner-notice">
+              <strong>Calendar could not be checked</strong>
+              <p>You can reconnect Calendar in Settings, or plan without it.</p>
+              <button type="button" onClick={onContinueWithoutCalendar}>
+                Continue without Calendar
+              </button>
+            </div>
+          )}
+
           <footer className="evening-planner-actions">
-            <button type="button" onClick={onClose}>
+            <button type="button" onClick={onClose} disabled={checkingCalendar}>
               Cancel
             </button>
             {needsReplace ? (
-              <button type="button" className="primary-button" onClick={onReplace}>
-                Replace current plan
+              <button
+                type="button"
+                className="primary-button"
+                onClick={onReplace}
+                disabled={checkingCalendar}
+              >
+                {checkingCalendar ? "Checking calendar..." : "Replace current plan"}
               </button>
             ) : (
-              <button type="submit" className="primary-button">
-                Create plan
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={checkingCalendar}
+              >
+                {checkingCalendar ? "Checking calendar..." : "Create plan"}
               </button>
             )}
           </footer>

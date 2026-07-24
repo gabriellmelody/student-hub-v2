@@ -1065,7 +1065,7 @@ export function saveTodayPlanSnapshot({
   );
 }
 
-function timeToMinutes(timeValue) {
+export function timeToMinutes(timeValue) {
   if (!/^\d{2}:\d{2}$/.test(String(timeValue || ""))) return null;
 
   const [hours, minutes] = timeValue.split(":").map(Number);
@@ -1082,6 +1082,95 @@ function timeToMinutes(timeValue) {
   }
 
   return hours * 60 + minutes;
+}
+
+function formatDurationSummary(minutes) {
+  const safeMinutes = Math.max(0, Math.round(Number(minutes) || 0));
+  const hours = Math.floor(safeMinutes / 60);
+  const remainingMinutes = safeMinutes % 60;
+
+  if (hours === 0) return `${remainingMinutes} min`;
+  if (remainingMinutes === 0) return `${hours} hr`;
+  return `${hours} hr ${remainingMinutes} min`;
+}
+
+function getMergedBusyIntervals(busyIntervals, startMinutes, endMinutes) {
+  const clippedIntervals = (Array.isArray(busyIntervals) ? busyIntervals : [])
+    .map((interval) => ({
+      startMinutes: Math.max(
+        startMinutes,
+        Math.round(Number(interval?.startMinutes))
+      ),
+      endMinutes: Math.min(
+        endMinutes,
+        Math.round(Number(interval?.endMinutes))
+      ),
+    }))
+    .filter(
+      (interval) =>
+        Number.isFinite(interval.startMinutes) &&
+        Number.isFinite(interval.endMinutes) &&
+        interval.endMinutes > interval.startMinutes
+    )
+    .sort((firstInterval, secondInterval) => {
+      return firstInterval.startMinutes - secondInterval.startMinutes;
+    });
+
+  return clippedIntervals.reduce((mergedIntervals, interval) => {
+    const previousInterval = mergedIntervals[mergedIntervals.length - 1];
+
+    if (
+      previousInterval &&
+      interval.startMinutes <= previousInterval.endMinutes
+    ) {
+      previousInterval.endMinutes = Math.max(
+        previousInterval.endMinutes,
+        interval.endMinutes
+      );
+      return mergedIntervals;
+    }
+
+    mergedIntervals.push({ ...interval });
+    return mergedIntervals;
+  }, []);
+}
+
+function getFreeStudyIntervals(startMinutes, endMinutes, busyIntervals) {
+  const mergedBusyIntervals = getMergedBusyIntervals(
+    busyIntervals,
+    startMinutes,
+    endMinutes
+  );
+  const freeIntervals = [];
+  let currentStart = startMinutes;
+
+  mergedBusyIntervals.forEach((busyInterval) => {
+    if (busyInterval.startMinutes > currentStart) {
+      freeIntervals.push({
+        startOffset: currentStart - startMinutes,
+        endOffset: busyInterval.startMinutes - startMinutes,
+      });
+    }
+
+    currentStart = Math.max(currentStart, busyInterval.endMinutes);
+  });
+
+  if (currentStart < endMinutes) {
+    freeIntervals.push({
+      startOffset: currentStart - startMinutes,
+      endOffset: endMinutes - startMinutes,
+    });
+  }
+
+  return {
+    busyIntervals: mergedBusyIntervals,
+    freeIntervals,
+    usableMinutes: freeIntervals.reduce(
+      (totalMinutes, interval) =>
+        totalMinutes + Math.max(0, interval.endOffset - interval.startOffset),
+      0
+    ),
+  };
 }
 
 export function getDefaultEveningPlannerDraft() {
@@ -1163,6 +1252,7 @@ export function buildEveningPlan({
   includeBreaks = true,
   maxFocusMinutes = 35,
   planStyle = "balanced",
+  busyIntervals = [],
 }) {
   const startMinutes = timeToMinutes(startTime);
   const endMinutes = timeToMinutes(endTime);
@@ -1193,12 +1283,46 @@ export function buildEveningPlan({
     };
   }
 
+  const freeTime = getFreeStudyIntervals(
+    startMinutes,
+    endMinutes,
+    busyIntervals
+  );
+
+  if (freeTime.usableMinutes <= 0 && freeTime.busyIntervals.length > 0) {
+    return {
+      ok: false,
+      reason:
+        "Your calendar has no free study time in this window. Choose a different time or change which calendars block study time.",
+      blocks: [],
+      windowMinutes: availableMinutes,
+      usableMinutes: 0,
+      busyMinutes: availableMinutes,
+    };
+  }
+
+  if (freeTime.usableMinutes < 30) {
+    return {
+      ok: false,
+      reason:
+        freeTime.busyIntervals.length > 0
+          ? `Your calendar leaves ${formatDurationSummary(
+              freeTime.usableMinutes
+            )} free. Choose a longer window.`
+          : "Give yourself at least 30 minutes.",
+      blocks: [],
+      windowMinutes: availableMinutes,
+      usableMinutes: freeTime.usableMinutes,
+      busyMinutes: availableMinutes - freeTime.usableMinutes,
+    };
+  }
+
   const styleBufferMultiplier =
     planStyle === "light" ? 1.7 : planStyle === "push" ? 0.45 : 1;
   const baseBufferMinutes =
     availableMinutes >= 120 ? 15 : availableMinutes >= 75 ? 10 : 0;
   const bufferMinutes = Math.round(baseBufferMinutes * styleBufferMultiplier);
-  let remainingMinutes = Math.max(0, availableMinutes - bufferMinutes);
+  let remainingMinutes = Math.max(0, freeTime.usableMinutes - bufferMinutes);
   const safeMaxFocusMinutes = [25, 35, 45, 60].includes(
     Number(maxFocusMinutes)
   )
@@ -1235,7 +1359,42 @@ export function buildEveningPlan({
   }
 
   const blocks = [];
-  let currentOffset = 0;
+  let intervalIndex = 0;
+  let currentOffset = freeTime.freeIntervals[0]?.startOffset || 0;
+  let scheduledStudyMinutes = 0;
+
+  function getCurrentFreeInterval() {
+    return freeTime.freeIntervals[intervalIndex] || null;
+  }
+
+  function moveToNextFreeInterval() {
+    intervalIndex += 1;
+    currentOffset = freeTime.freeIntervals[intervalIndex]?.startOffset || 0;
+  }
+
+  function ensureMinimumFreeTime(minimumMinutes) {
+    let currentInterval = getCurrentFreeInterval();
+
+    while (
+      currentInterval &&
+      currentInterval.endOffset - currentOffset < minimumMinutes
+    ) {
+      moveToNextFreeInterval();
+      currentInterval = getCurrentFreeInterval();
+    }
+
+    return currentInterval;
+  }
+
+  const totalCandidateWorkMinutes = candidateTasks.reduce(
+    (totalMinutes, task) => {
+      return (
+        totalMinutes +
+        Math.round(getEveningTaskDuration(task, energy) * styleBlockMultiplier)
+      );
+    },
+    0
+  );
 
   for (const task of candidateTasks) {
     const studyBlockCount = blocks.filter((block) => block.type === "study").length;
@@ -1251,10 +1410,16 @@ export function buildEveningPlan({
       remainingMinutes >= 25 &&
       blocks.filter((block) => block.type === "study").length < maxStudyBlocks
     ) {
+      const currentInterval = ensureMinimumFreeTime(20);
+
+      if (!currentInterval) break;
+
+      const intervalRemaining = currentInterval.endOffset - currentOffset;
       const duration = Math.min(
         safeMaxFocusMinutes,
         remainingTaskMinutes,
-        remainingMinutes
+        remainingMinutes,
+        intervalRemaining
       );
 
       if (duration < 20) break;
@@ -1287,8 +1452,21 @@ export function buildEveningPlan({
       currentOffset += duration;
       remainingMinutes -= duration;
       remainingTaskMinutes -= duration;
+      scheduledStudyMinutes += duration;
 
       if (includeBreaks && remainingMinutes >= breakDuration + 25) {
+        const breakInterval = getCurrentFreeInterval();
+
+        if (
+          !breakInterval ||
+          breakInterval.endOffset - currentOffset < breakDuration + 25
+        ) {
+          if (breakInterval && breakInterval.endOffset - currentOffset < 25) {
+            moveToNextFreeInterval();
+          }
+          continue;
+        }
+
         blocks.push({
           id: `evening-break-${currentOffset}`,
           type: "break",
@@ -1331,6 +1509,12 @@ export function buildEveningPlan({
     ).size,
     breakCount: blocks.filter((block) => block.type === "break").length,
     windowMinutes: availableMinutes,
+    usableMinutes: freeTime.usableMinutes,
+    busyMinutes: availableMinutes - freeTime.usableMinutes,
+    unscheduledWorkMinutes: Math.max(
+      0,
+      totalCandidateWorkMinutes - scheduledStudyMinutes
+    ),
   };
 }
 
