@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import SubjectField from "../components/SubjectField.jsx";
 import TaskClassificationFields from "../components/TaskClassificationFields.jsx";
 import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
@@ -273,7 +273,14 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     lastLoadedAt: "",
     message: "",
     error: "",
+    requestKey: "",
   });
+  const activeEventsRequestRef = useRef({
+    id: 0,
+    key: "",
+    controller: null,
+  });
+  const googleCalendarEventsCacheRef = useRef(new Map());
   const calendarEvents = getTaskCalendarEvents(tasks, subjects);
   const calendarDays = getMonthCalendarDays(visibleMonth);
   const selectedEvents = calendarEvents.filter(
@@ -287,7 +294,8 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     () =>
       visibleGoogleCalendarPreferences
         .map((preference) => preference.calendarId)
-        .filter(Boolean),
+        .filter(Boolean)
+        .sort((left, right) => left.localeCompare(right)),
     [visibleGoogleCalendarPreferences]
   );
   const googleCalendarPreferenceMap = useMemo(() => {
@@ -298,20 +306,30 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
       ])
     );
   }, [visibleGoogleCalendarPreferences]);
+  const selectedDateValue = parseDateKey(selectedDate);
+  const eventRangeStart = calendarDays[0]?.date;
+  const eventRangeEnd = calendarDays[calendarDays.length - 1]?.date;
+  const eventRangeStartKey = calendarDays[0]?.dateKey || "";
+  const eventRangeEndKey = calendarDays[calendarDays.length - 1]?.dateKey || "";
+  const googleCalendarRequestKey = [
+    eventRangeStartKey,
+    eventRangeEndKey,
+    selectedGoogleCalendarIds.join("|"),
+  ].join("::");
+  const currentViewGoogleCalendarEvents =
+    googleCalendarEvents.requestKey === googleCalendarRequestKey
+      ? googleCalendarEvents.events
+      : [];
   const visibleGoogleCalendarEvents = useMemo(() => {
-    return googleCalendarEvents.events.filter((event) => {
+    return currentViewGoogleCalendarEvents.filter((event) => {
       return !getGoogleEventDayKeys(event).some((dateKey) =>
         shouldSuppressGoogleCalendarEvent(event, dateKey, tasks)
       );
     });
-  }, [googleCalendarEvents.events, tasks]);
+  }, [currentViewGoogleCalendarEvents, tasks]);
   const selectedScheduleEvents = visibleGoogleCalendarEvents.filter((event) =>
     googleEventOccursOnDate(event, selectedDate)
   );
-  const selectedDateValue = parseDateKey(selectedDate);
-  const eventRangeStart = calendarDays[0]?.date;
-  const eventRangeEnd = calendarDays[calendarDays.length - 1]?.date;
-  const googleCalendarRequestKey = selectedGoogleCalendarIds.join("|");
 
   useEffect(() => {
     function handleStorageChange(event) {
@@ -325,19 +343,47 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
-  async function loadGoogleCalendarEvents({ quiet = false } = {}) {
+  useEffect(() => {
+    return () => {
+      activeEventsRequestRef.current.controller?.abort();
+    };
+  }, []);
+
+  async function loadGoogleCalendarEvents({
+    quiet = false,
+    bypassCache = false,
+  } = {}) {
+    const requestKey = googleCalendarRequestKey;
+
+    activeEventsRequestRef.current.controller?.abort();
+
     if (selectedGoogleCalendarIds.length === 0) {
+      activeEventsRequestRef.current = {
+        id: activeEventsRequestRef.current.id + 1,
+        key: requestKey,
+        controller: null,
+      };
       setGoogleCalendarEvents({
         loading: false,
         events: [],
         lastLoadedAt: "",
         message: "Choose calendars in Settings to show events here.",
         error: "",
+        requestKey,
       });
       return;
     }
 
     if (!eventRangeStart || !eventRangeEnd) return;
+
+    if (!bypassCache && googleCalendarEventsCacheRef.current.has(requestKey)) {
+      setGoogleCalendarEvents({
+        ...googleCalendarEventsCacheRef.current.get(requestKey),
+        loading: false,
+        requestKey,
+      });
+      return;
+    }
 
     const rangeStart = new Date(
       eventRangeStart.getFullYear(),
@@ -349,12 +395,22 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
       eventRangeEnd.getMonth(),
       eventRangeEnd.getDate() + 1
     );
+    const controller = new AbortController();
+    const requestId = activeEventsRequestRef.current.id + 1;
+
+    activeEventsRequestRef.current = {
+      id: requestId,
+      key: requestKey,
+      controller,
+    };
 
     setGoogleCalendarEvents((currentState) => ({
       ...currentState,
       loading: true,
+      events: currentState.requestKey === requestKey ? currentState.events : [],
       message: quiet ? currentState.message : "Loading schedule...",
       error: "",
+      requestKey,
     }));
 
     try {
@@ -365,6 +421,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
           Accept: "application/json",
           "Content-Type": "application/json",
         },
+        signal: controller.signal,
         body: JSON.stringify({
           selectedCalendarIds: selectedGoogleCalendarIds,
           timeMin: rangeStart.toISOString(),
@@ -372,6 +429,13 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
         }),
       });
       const result = await response.json();
+
+      if (
+        activeEventsRequestRef.current.id !== requestId ||
+        activeEventsRequestRef.current.key !== requestKey
+      ) {
+        return;
+      }
 
       if (!response.ok || result.ok !== true) {
         setGoogleCalendarEvents((currentState) => ({
@@ -384,6 +448,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
             result.status === "calendar_session_invalid_or_expired"
               ? "Reconnect Google Calendar to show events."
               : result.message || "Calendar events are unavailable.",
+          requestKey,
         }));
         return;
       }
@@ -401,8 +466,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
           duplicateRisk: preference.duplicateRisk || null,
         };
       });
-
-      setGoogleCalendarEvents({
+      const nextEventState = {
         loading: false,
         events: eventsWithPreferences,
         lastLoadedAt: new Date().toISOString(),
@@ -413,21 +477,35 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               } loaded.`
             : "No Google Calendar events in this view.",
         error: "",
-      });
-    } catch {
+        requestKey,
+      };
+
+      googleCalendarEventsCacheRef.current.set(requestKey, nextEventState);
+      setGoogleCalendarEvents(nextEventState);
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+
+      if (
+        activeEventsRequestRef.current.id !== requestId ||
+        activeEventsRequestRef.current.key !== requestKey
+      ) {
+        return;
+      }
+
       setGoogleCalendarEvents((currentState) => ({
         ...currentState,
         loading: false,
         events: [],
         message: "",
         error: "Calendar events are unavailable.",
+        requestKey,
       }));
     }
   }
 
   useEffect(() => {
     loadGoogleCalendarEvents({ quiet: true });
-  }, [visibleMonth, googleCalendarRequestKey]);
+  }, [googleCalendarRequestKey]);
 
   function changeMonth(offset) {
     const nextMonth = new Date(
@@ -879,7 +957,9 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               <h4>Schedule</h4>
               <button
                 type="button"
-                onClick={() => loadGoogleCalendarEvents()}
+                onClick={() =>
+                  loadGoogleCalendarEvents({ bypassCache: true })
+                }
                 disabled={
                   googleCalendarEvents.loading ||
                   selectedGoogleCalendarIds.length === 0
