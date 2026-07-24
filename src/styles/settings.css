@@ -1597,7 +1597,8 @@
 .classroom-course-actions button,
 .classroom-subject-link-actions button,
 .google-calendar-manager-header button,
-.google-calendar-manager-actions button {
+.google-calendar-manager-actions button,
+.google-calendar-manager-footer button {
   appearance: none;
   border: 1px solid var(--border-strong);
   border-radius: 7px;

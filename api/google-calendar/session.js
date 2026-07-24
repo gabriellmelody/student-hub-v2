@@ -1,7 +1,7 @@
-import { readCalendarSession } from "./_session.js";
+import { getValidCalendarSession } from "./_session.js";
 
-export default function handler(request, response) {
-  const sessionResult = readCalendarSession(request);
+export default async function handler(request, response) {
+  const sessionResult = await getValidCalendarSession(request, response);
 
   if (sessionResult.status === "no_calendar_session") {
     response.status(401).json({
@@ -16,9 +16,11 @@ export default function handler(request, response) {
   if (!sessionResult.ok) {
     response.status(401).json({
       ok: false,
-      status: "calendar_session_invalid_or_expired",
+      status: sessionResult.status || "calendar_session_invalid_or_expired",
       connected: false,
-      message: "Google Calendar session is invalid or expired. Connect again.",
+      message:
+        sessionResult.message ||
+        "Google Calendar session is invalid or expired. Connect again.",
     });
     return;
   }
@@ -33,6 +35,7 @@ export default function handler(request, response) {
       hasAccessToken: typeof session.access_token === "string",
       hasRefreshToken: typeof session.refresh_token === "string",
       expiresAt: session.expires_at,
+      sessionExpiresAt: session.session_expires_at || session.expires_at,
       scope: session.scope,
     },
   });

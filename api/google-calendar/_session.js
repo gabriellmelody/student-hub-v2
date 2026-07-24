@@ -2,7 +2,8 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 
 export const CALENDAR_SESSION_COOKIE_NAME = "student_hub_calendar_session";
 
-const SESSION_MAX_AGE_SECONDS = 60 * 60;
+const CALENDAR_SESSION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
+const ACCESS_TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 function base64UrlEncode(buffer) {
   return Buffer.from(buffer).toString("base64url");
@@ -108,32 +109,67 @@ function serializeCookie(value, maxAgeSeconds) {
 }
 
 export function createCalendarSessionCookie(tokenResponse) {
+  return createCalendarSessionCookieFromTokenResponse(tokenResponse);
+}
+
+export function createCalendarSessionCookieFromTokenResponse(
+  tokenResponse,
+  existingSession = null
+) {
   const now = Date.now();
   const tokenExpiresIn = Number(tokenResponse.expires_in);
-  const expiresInSeconds =
+  const accessExpiresInSeconds =
     Number.isFinite(tokenExpiresIn) && tokenExpiresIn > 0
-      ? Math.min(tokenExpiresIn, SESSION_MAX_AGE_SECONDS)
-      : SESSION_MAX_AGE_SECONDS;
-  const createdAt = new Date(now).toISOString();
-  const expiresAt = new Date(now + expiresInSeconds * 1000).toISOString();
+      ? tokenExpiresIn
+      : 60 * 60;
+  const accessExpiresAt = new Date(
+    now + accessExpiresInSeconds * 1000
+  ).toISOString();
+  const sessionExpiresAt = new Date(
+    now + CALENDAR_SESSION_MAX_AGE_SECONDS * 1000
+  ).toISOString();
+  const createdAt =
+    typeof existingSession?.created_at === "string"
+      ? existingSession.created_at
+      : new Date(now).toISOString();
+  const refreshToken =
+    typeof tokenResponse.refresh_token === "string"
+      ? tokenResponse.refresh_token
+      : typeof existingSession?.refresh_token === "string"
+        ? existingSession.refresh_token
+        : null;
   const payload = {
     access_token: tokenResponse.access_token,
-    ...(typeof tokenResponse.refresh_token === "string"
-      ? { refresh_token: tokenResponse.refresh_token }
-      : {}),
-    expires_at: expiresAt,
-    scope: typeof tokenResponse.scope === "string" ? tokenResponse.scope : "",
+    ...(refreshToken ? { refresh_token: refreshToken } : {}),
+    expires_at: accessExpiresAt,
+    access_expires_at: accessExpiresAt,
+    session_expires_at: sessionExpiresAt,
+    scope:
+      typeof tokenResponse.scope === "string"
+        ? tokenResponse.scope
+        : typeof existingSession?.scope === "string"
+          ? existingSession.scope
+          : "",
     token_type:
       typeof tokenResponse.token_type === "string"
         ? tokenResponse.token_type
-        : "",
+        : typeof existingSession?.token_type === "string"
+          ? existingSession.token_type
+          : "",
     created_at: createdAt,
+    refreshed_at: existingSession ? new Date(now).toISOString() : null,
   };
 
   return {
-    cookie: serializeCookie(encryptSessionPayload(payload), expiresInSeconds),
-    expiresAt,
-    hasRefreshToken: typeof tokenResponse.refresh_token === "string",
+    cookie: serializeCookie(
+      encryptSessionPayload(payload),
+      CALENDAR_SESSION_MAX_AGE_SECONDS
+    ),
+    expiresAt: sessionExpiresAt,
+    accessExpiresAt,
+    sessionExpiresAt,
+    hasRefreshToken: typeof refreshToken === "string",
+    session: payload,
   };
 }
 
@@ -150,9 +186,11 @@ export function readCalendarSession(request) {
 
   try {
     const payload = decryptSessionPayload(cookieValue);
-    const expiresAt = Date.parse(payload.expires_at);
+    const sessionExpiresAt = Date.parse(
+      payload.session_expires_at || payload.expires_at
+    );
 
-    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    if (!Number.isFinite(sessionExpiresAt) || sessionExpiresAt <= Date.now()) {
       return {
         ok: false,
         status: "calendar_session_invalid_or_expired",
@@ -170,4 +208,123 @@ export function readCalendarSession(request) {
       status: "calendar_session_invalid_or_expired",
     };
   }
+}
+
+function isAccessTokenExpiring(session, forceRefresh = false) {
+  if (forceRefresh) return true;
+
+  const accessExpiresAt = Date.parse(
+    session.access_expires_at || session.expires_at
+  );
+
+  return (
+    !Number.isFinite(accessExpiresAt) ||
+    accessExpiresAt - Date.now() <= ACCESS_TOKEN_REFRESH_BUFFER_MS
+  );
+}
+
+async function readSafeJson(fetchResponse) {
+  try {
+    return await fetchResponse.json();
+  } catch {
+    return null;
+  }
+}
+
+function getSafeGoogleError(googleResponse, fallbackMessage) {
+  if (!googleResponse || typeof googleResponse !== "object") {
+    return fallbackMessage;
+  }
+
+  return (
+    googleResponse.error_description ||
+    googleResponse.error?.message ||
+    (typeof googleResponse.error === "string" ? googleResponse.error : "") ||
+    fallbackMessage
+  );
+}
+
+export async function refreshCalendarSession(session, response) {
+  if (typeof session?.refresh_token !== "string") {
+    return {
+      ok: false,
+      status: "calendar_session_reconnect_required",
+      connected: false,
+      message: "Reconnect Google Calendar to refresh access.",
+    };
+  }
+
+  try {
+    const refreshResponse = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLASSROOM_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLASSROOM_CLIENT_SECRET,
+        refresh_token: session.refresh_token,
+        grant_type: "refresh_token",
+      }),
+    });
+    const refreshJson = await readSafeJson(refreshResponse);
+
+    if (!refreshResponse.ok || typeof refreshJson?.access_token !== "string") {
+      return {
+        ok: false,
+        status: "calendar_session_refresh_failed",
+        connected: false,
+        message: "Google Calendar session could not be refreshed.",
+        googleError: getSafeGoogleError(
+          refreshJson,
+          "Google token endpoint could not refresh the session."
+        ),
+      };
+    }
+
+    const sessionCookie = createCalendarSessionCookieFromTokenResponse(
+      refreshJson,
+      session
+    );
+
+    response.setHeader("Set-Cookie", sessionCookie.cookie);
+
+    return {
+      ok: true,
+      status: "calendar_session_refreshed",
+      connected: true,
+      session: sessionCookie.session,
+      refreshed: true,
+      sessionCookie,
+    };
+  } catch {
+    return {
+      ok: false,
+      status: "calendar_session_refresh_failed",
+      connected: false,
+      message: "Google Calendar session could not be refreshed.",
+      googleError: "Google token refresh request failed.",
+    };
+  }
+}
+
+export async function getValidCalendarSession(
+  request,
+  response,
+  { forceRefresh = false } = {}
+) {
+  const sessionResult = readCalendarSession(request);
+
+  if (!sessionResult.ok) return sessionResult;
+
+  if (!isAccessTokenExpiring(sessionResult.session, forceRefresh)) {
+    return {
+      ...sessionResult,
+      connected: true,
+      refreshed: false,
+    };
+  }
+
+  return refreshCalendarSession(sessionResult.session, response);
 }

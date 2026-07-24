@@ -1,7 +1,18 @@
-import { readCalendarSession } from "./_session.js";
+import {
+  getValidCalendarSession,
+  refreshCalendarSession,
+} from "./_session.js";
 
 const MAX_SELECTED_CALENDARS = 20;
 const MAX_EVENTS_PER_CALENDAR = 2500;
+
+class GoogleCalendarRequestError extends Error {
+  constructor(message, statusCode) {
+    super(message);
+    this.name = "GoogleCalendarRequestError";
+    this.statusCode = statusCode;
+  }
+}
 
 async function readRequestJson(request) {
   if (request.body && typeof request.body === "object") return request.body;
@@ -109,11 +120,12 @@ async function fetchCalendarMap(accessToken) {
   const calendarListJson = await readSafeJson(calendarListResponse);
 
   if (!calendarListResponse.ok) {
-    throw new Error(
+    throw new GoogleCalendarRequestError(
       getSafeGoogleError(
         calendarListJson,
         "Google Calendar list request failed."
-      )
+      ),
+      calendarListResponse.status
     );
   }
 
@@ -159,8 +171,12 @@ async function fetchEventsForCalendar({
     const eventsJson = await readSafeJson(eventsResponse);
 
     if (!eventsResponse.ok) {
-      throw new Error(
-        getSafeGoogleError(eventsJson, "Google Calendar events request failed.")
+      throw new GoogleCalendarRequestError(
+        getSafeGoogleError(
+          eventsJson,
+          "Google Calendar events request failed."
+        ),
+        eventsResponse.status
       );
     }
 
@@ -176,6 +192,39 @@ async function fetchEventsForCalendar({
   return events;
 }
 
+async function fetchSelectedCalendarEvents({
+  accessToken,
+  selectedCalendarIds,
+  timeMin,
+  timeMax,
+}) {
+  const calendarMap = await fetchCalendarMap(accessToken);
+  const selectedCalendars = selectedCalendarIds.map((calendarId) => {
+    return (
+      calendarMap.get(calendarId) || {
+        id: calendarId,
+        name: "Google Calendar",
+        backgroundColor: "",
+      }
+    );
+  });
+  const eventGroups = await Promise.all(
+    selectedCalendars.map((calendar) =>
+      fetchEventsForCalendar({
+        accessToken,
+        calendar,
+        timeMin,
+        timeMax,
+      })
+    )
+  );
+
+  return {
+    selectedCalendars,
+    events: eventGroups.flat(),
+  };
+}
+
 export default async function handler(request, response) {
   if (request.method !== "POST") {
     response.setHeader("Allow", "POST");
@@ -187,7 +236,7 @@ export default async function handler(request, response) {
     return;
   }
 
-  const sessionResult = readCalendarSession(request);
+  const sessionResult = await getValidCalendarSession(request, response);
 
   if (sessionResult.status === "no_calendar_session") {
     response.status(401).json({
@@ -202,9 +251,11 @@ export default async function handler(request, response) {
   if (!sessionResult.ok) {
     response.status(401).json({
       ok: false,
-      status: "calendar_session_invalid_or_expired",
+      status: sessionResult.status || "calendar_session_invalid_or_expired",
       connected: false,
-      message: "Google Calendar session is invalid or expired. Connect again.",
+      message:
+        sessionResult.message ||
+        "Google Calendar session is invalid or expired. Connect again.",
     });
     return;
   }
@@ -255,29 +306,52 @@ export default async function handler(request, response) {
   }
 
   try {
-    const calendarMap = await fetchCalendarMap(
-      sessionResult.session.access_token
-    );
-    const selectedCalendars = selectedCalendarIds.map((calendarId) => {
-      return (
-        calendarMap.get(calendarId) || {
-          id: calendarId,
-          name: "Google Calendar",
-          backgroundColor: "",
-        }
+    let activeSession = sessionResult.session;
+    let eventsResult;
+
+    try {
+      eventsResult = await fetchSelectedCalendarEvents({
+        accessToken: activeSession.access_token,
+        selectedCalendarIds,
+        timeMin,
+        timeMax,
+      });
+    } catch (error) {
+      if (
+        !(error instanceof GoogleCalendarRequestError) ||
+        error.statusCode !== 401
+      ) {
+        throw error;
+      }
+
+      const refreshedSession = await refreshCalendarSession(
+        activeSession,
+        response
       );
-    });
-    const eventGroups = await Promise.all(
-      selectedCalendars.map((calendar) =>
-        fetchEventsForCalendar({
-          accessToken: sessionResult.session.access_token,
-          calendar,
-          timeMin,
-          timeMax,
-        })
-      )
-    );
-    const events = eventGroups.flat();
+
+      if (!refreshedSession.ok) {
+        response.status(401).json({
+          ok: false,
+          status:
+            refreshedSession.status || "calendar_session_reconnect_required",
+          connected: false,
+          message:
+            refreshedSession.message ||
+            "Reconnect Google Calendar to load events.",
+        });
+        return;
+      }
+
+      activeSession = refreshedSession.session;
+      eventsResult = await fetchSelectedCalendarEvents({
+        accessToken: activeSession.access_token,
+        selectedCalendarIds,
+        timeMin,
+        timeMax,
+      });
+    }
+
+    const events = eventsResult.events;
 
     response.status(200).json({
       ok: true,
@@ -289,7 +363,7 @@ export default async function handler(request, response) {
           : "No Google Calendar events found for this view.",
       eventSummary: {
         count: events.length,
-        calendarCount: selectedCalendars.length,
+        calendarCount: eventsResult.selectedCalendars.length,
         timeMin,
         timeMax,
       },

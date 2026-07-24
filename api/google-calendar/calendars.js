@@ -1,4 +1,7 @@
-import { readCalendarSession } from "./_session.js";
+import {
+  getValidCalendarSession,
+  refreshCalendarSession,
+} from "./_session.js";
 
 async function readSafeJson(fetchResponse) {
   try {
@@ -33,8 +36,27 @@ function normalizeCalendar(calendar) {
   };
 }
 
+async function fetchGoogleCalendars(accessToken) {
+  const calendarsResponse = await fetch(
+    "https://www.googleapis.com/calendar/v3/users/me/calendarList",
+    {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+    }
+  );
+  const calendarsJson = await readSafeJson(calendarsResponse);
+
+  return {
+    ok: calendarsResponse.ok,
+    status: calendarsResponse.status,
+    json: calendarsJson,
+  };
+}
+
 export default async function handler(request, response) {
-  const sessionResult = readCalendarSession(request);
+  const sessionResult = await getValidCalendarSession(request, response);
 
   if (sessionResult.status === "no_calendar_session") {
     response.status(401).json({
@@ -49,41 +71,62 @@ export default async function handler(request, response) {
   if (!sessionResult.ok) {
     response.status(401).json({
       ok: false,
-      status: "calendar_session_invalid_or_expired",
+      status: sessionResult.status || "calendar_session_invalid_or_expired",
       connected: false,
-      message: "Google Calendar session is invalid or expired. Connect again.",
+      message:
+        sessionResult.message ||
+        "Google Calendar session is invalid or expired. Connect again.",
     });
     return;
   }
 
   try {
-    const calendarsResponse = await fetch(
-      "https://www.googleapis.com/calendar/v3/users/me/calendarList",
-      {
-        headers: {
-          Accept: "application/json",
-          Authorization: `Bearer ${sessionResult.session.access_token}`,
-        },
-      }
+    let activeSession = sessionResult.session;
+    let calendarsResult = await fetchGoogleCalendars(
+      activeSession.access_token
     );
-    const calendarsJson = await readSafeJson(calendarsResponse);
 
-    if (!calendarsResponse.ok) {
+    if (calendarsResult.status === 401) {
+      const refreshedSession = await refreshCalendarSession(
+        activeSession,
+        response
+      );
+
+      if (refreshedSession.ok) {
+        activeSession = refreshedSession.session;
+        calendarsResult = await fetchGoogleCalendars(
+          activeSession.access_token
+        );
+      } else {
+        response.status(401).json({
+          ok: false,
+          status:
+            refreshedSession.status || "calendar_session_reconnect_required",
+          connected: false,
+          message:
+            refreshedSession.message ||
+            "Reconnect Google Calendar to load calendars.",
+        });
+        return;
+      }
+    }
+
+    if (!calendarsResult.ok) {
       response.status(502).json({
         ok: false,
         status: "calendars_fetch_failed",
         connected: true,
         message: "Student Hub could not read Google calendars.",
         googleError: getSafeGoogleError(
-          calendarsJson,
+          calendarsResult.json,
           "Google Calendar returned an unexpected response."
         ),
       });
       return;
     }
 
-    const calendars = Array.isArray(calendarsJson?.items)
-      ? calendarsJson.items.map(normalizeCalendar)
+    const calendars = Array.isArray(calendarsResult.json?.items)
+      ? calendarsResult.json.items.map(normalizeCalendar)
       : [];
 
     response.status(200).json({
