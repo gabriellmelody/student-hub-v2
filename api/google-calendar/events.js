@@ -86,6 +86,13 @@ function normalizeCalendar(calendar) {
   };
 }
 
+function isSkippableCalendarFetchError(error) {
+  return (
+    error instanceof GoogleCalendarRequestError &&
+    [403, 404, 410].includes(error.statusCode)
+  );
+}
+
 function normalizeEvent(event, calendar) {
   const start = event?.start?.dateTime || event?.start?.date || "";
   const end = event?.end?.dateTime || event?.end?.date || start;
@@ -208,19 +215,36 @@ async function fetchSelectedCalendarEvents({
       }
     );
   });
-  const eventGroups = await Promise.all(
-    selectedCalendars.map((calendar) =>
-      fetchEventsForCalendar({
+
+  const successfulCalendars = [];
+  const eventGroups = [];
+  let skippedCalendarCount = 0;
+
+  for (const calendar of selectedCalendars) {
+    try {
+      const calendarEvents = await fetchEventsForCalendar({
         accessToken,
         calendar,
         timeMin,
         timeMax,
-      })
-    )
-  );
+      });
+
+      successfulCalendars.push(calendar);
+      eventGroups.push(calendarEvents);
+    } catch (error) {
+      if (isSkippableCalendarFetchError(error)) {
+        skippedCalendarCount += 1;
+        continue;
+      }
+
+      throw error;
+    }
+  }
 
   return {
     selectedCalendars,
+    successfulCalendars,
+    skippedCalendarCount,
     events: eventGroups.flat(),
   };
 }
@@ -353,6 +377,21 @@ export default async function handler(request, response) {
 
     const events = eventsResult.events;
 
+    if (
+      eventsResult.selectedCalendars.length > 0 &&
+      eventsResult.successfulCalendars.length === 0
+    ) {
+      response.status(502).json({
+        ok: false,
+        status: "all_calendar_event_fetches_failed",
+        connected: true,
+        message:
+          "Student Hub could not read events from the selected calendars.",
+        skippedCalendarCount: eventsResult.skippedCalendarCount,
+      });
+      return;
+    }
+
     response.status(200).json({
       ok: true,
       status: "events_read_from_session",
@@ -363,10 +402,13 @@ export default async function handler(request, response) {
           : "No Google Calendar events found for this view.",
       eventSummary: {
         count: events.length,
-        calendarCount: eventsResult.selectedCalendars.length,
+        calendarCount: eventsResult.successfulCalendars.length,
+        selectedCalendarCount: eventsResult.selectedCalendars.length,
+        skippedCalendarCount: eventsResult.skippedCalendarCount,
         timeMin,
         timeMax,
       },
+      skippedCalendarCount: eventsResult.skippedCalendarCount,
       events,
     });
   } catch (error) {
