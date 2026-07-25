@@ -689,20 +689,20 @@
 .real-classroom-modal-header h3 {
   margin: 2px 0 5px;
   color: var(--text);
-  font-size: 1rem;
+  font-size: var(--font-section-title);
 }
 
 .real-classroom-modal-header p,
 .real-classroom-modal-footer p {
   color: var(--text-secondary);
-  font-size: 0.72rem;
-  line-height: 1.45;
+  font-size: var(--font-helper);
+  line-height: var(--line-body);
 }
 
 .real-classroom-review-heading > span {
   flex-shrink: 0;
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: var(--font-meta);
   font-weight: 650;
 }
 
@@ -728,12 +728,13 @@
   appearance: none;
   min-height: 28px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-button);
   background: transparent;
   color: var(--text-muted);
   font-family: inherit;
-  font-size: 0.66rem;
+  font-size: var(--font-button-small);
   font-weight: 700;
+  line-height: var(--line-compact);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease,
     color 0.15s ease;
@@ -783,15 +784,15 @@
 }
 
 .real-classroom-tab-heading strong {
-  color: var(--text-secondary);
-  font-size: 0.76rem;
+  color: var(--text);
+  font-size: var(--font-card-title);
 }
 
 .real-classroom-tab-heading p {
   margin: 3px 0 0;
   color: var(--text-secondary);
-  font-size: 0.64rem;
-  line-height: 1.42;
+  font-size: var(--font-helper);
+  line-height: var(--line-body);
 }
 
 .real-classroom-tab-heading button {
@@ -808,7 +809,7 @@
   border-radius: 999px;
   background: var(--surface-raised);
   color: var(--text-muted);
-  font-size: 0.62rem;
+  font-size: var(--font-badge);
   font-weight: 650;
 }
 
@@ -817,12 +818,13 @@
   appearance: none;
   min-height: 26px;
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-button);
   background: var(--surface-raised);
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 0.66rem;
+  font-size: var(--font-button-small);
   font-weight: 650;
+  line-height: var(--line-compact);
   cursor: pointer;
   transition: border-color 0.15s ease, background 0.15s ease,
     color 0.15s ease;
@@ -879,16 +881,16 @@
 }
 
 .real-classroom-subject-link strong {
-  color: var(--text-secondary);
-  font-size: 0.72rem;
+  color: var(--text);
+  font-size: var(--font-card-title);
 }
 
 .real-classroom-subject-link p,
 .real-classroom-subject-link label span {
   margin: 3px 0 0;
   color: var(--text-secondary);
-  font-size: 0.62rem;
-  line-height: 1.35;
+  font-size: var(--font-helper);
+  line-height: var(--line-compact);
 }
 
 .real-classroom-subject-link label {
@@ -901,12 +903,13 @@
   appearance: none;
   min-height: 28px;
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-button);
   background: var(--surface-raised);
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 0.66rem;
+  font-size: var(--font-button-small);
   font-weight: 650;
+  line-height: var(--line-compact);
 }
 
 .real-classroom-subject-link select {
@@ -1083,27 +1086,27 @@
   gap: 12px;
   padding: 9px;
   border: 1px solid var(--accent-border);
-  border-radius: 9px;
+  border-radius: var(--radius-control);
   background: var(--accent-tint);
 }
 
 .real-classroom-import-panel strong {
-  color: var(--text-secondary);
-  font-size: 0.74rem;
+  color: var(--text);
+  font-size: var(--font-card-title);
 }
 
 .real-classroom-import-panel p {
   margin: 3px 0 0;
   color: var(--text-secondary);
-  font-size: 0.63rem;
-  line-height: 1.4;
+  font-size: var(--font-helper);
+  line-height: var(--line-body);
 }
 
 .real-classroom-import-panel small {
   display: block;
   margin-top: 4px;
   color: var(--text-muted);
-  font-size: 0.61rem;
+  font-size: var(--font-meta);
   font-weight: 700;
 }
 
@@ -1113,12 +1116,13 @@
   min-height: 28px;
   padding: 4px 9px;
   border: 1px solid var(--accent-border);
-  border-radius: 7px;
+  border-radius: var(--radius-button);
   background: var(--surface-raised);
   color: var(--accent-soft);
   font-family: inherit;
-  font-size: 0.66rem;
+  font-size: var(--font-button-small);
   font-weight: 700;
+  line-height: var(--line-compact);
   cursor: pointer;
 }
 
@@ -1147,12 +1151,13 @@
   min-height: 28px;
   padding: 4px 9px;
   border: 1px solid var(--border-soft);
-  border-radius: 7px;
+  border-radius: var(--radius-button);
   background: var(--surface-raised);
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 0.64rem;
+  font-size: var(--font-button-small);
   font-weight: 700;
+  line-height: var(--line-compact);
   cursor: pointer;
 }
 
@@ -1164,8 +1169,8 @@
 .real-classroom-selection-panel p {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 0.63rem;
-  line-height: 1.4;
+  font-size: var(--font-helper);
+  line-height: var(--line-body);
 }
 
 .real-classroom-assignment-filters {
@@ -1183,8 +1188,9 @@
   background: var(--surface-raised);
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: 0.62rem;
+  font-size: var(--font-button-small);
   font-weight: 740;
+  line-height: var(--line-compact);
   cursor: pointer;
 }
 
@@ -1601,7 +1607,7 @@
 .google-calendar-manager-footer button {
   appearance: none;
   border: 1px solid var(--border-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-button);
   background: var(--surface-subtle);
   color: var(--text-secondary);
   box-shadow: none;
@@ -1622,8 +1628,8 @@
   min-width: 0;
   min-height: var(--density-small-button-height);
   padding: var(--density-small-button-padding);
-  font-size: 0.68rem;
-  line-height: 1.2;
+  font-size: var(--font-button-small);
+  line-height: var(--line-compact);
   white-space: nowrap;
 }
 
@@ -1656,19 +1662,21 @@
 }
 
 .integration-setup-button {
-  border-color: var(--accent-border);
-  background: var(--accent-tint);
-  color: var(--accent-soft);
+  border-color: var(--border-soft);
+  background: transparent;
+  color: var(--text-secondary);
 }
 
 .integration-oauth-prototype-link {
-  border-color: var(--accent-border);
-  background: var(--surface-raised);
-  color: var(--accent-soft);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .integration-oauth-prototype-link:hover {
-  background: var(--accent-tint);
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--accent-contrast);
 }
 
 .integration-card-actions .secondary {
@@ -1677,7 +1685,7 @@
   color: var(--text-secondary);
   min-height: 26px;
   padding: 4px 8px;
-  font-size: 0.63rem;
+  font-size: var(--font-meta);
   font-weight: 680;
 }
 
@@ -1693,15 +1701,15 @@
 }
 
 .integration-preview-button {
-  border-color: var(--accent-border);
-  background: var(--accent-tint);
-  color: var(--accent-soft);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
 }
 
 .integration-preview-button:hover {
-  border-color: var(--accent-border);
-  background: var(--accent-tint-strong);
-  color: var(--accent-soft);
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--accent-contrast);
 }
 
 .google-calendar-list {
@@ -1815,19 +1823,21 @@
 .google-calendar-manager-footer button {
   min-height: var(--density-small-button-height);
   padding: var(--density-small-button-padding);
-  font-size: 0.68rem;
-  line-height: 1.2;
+  font-size: var(--font-button-small);
+  line-height: var(--line-compact);
 }
 
 .google-calendar-manager-footer button {
-  border-color: var(--accent-border);
-  background: var(--accent-tint);
-  color: var(--accent-soft);
+  min-height: var(--density-button-height);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: var(--font-button);
 }
 
 .google-calendar-manager-footer button.secondary {
-  border-color: var(--border-soft);
-  background: transparent;
+  border-color: var(--border-strong);
+  background: var(--surface-raised);
   color: var(--text-secondary);
 }
 
@@ -2484,15 +2494,15 @@
 .classroom-assignment-copy strong {
   display: block;
   overflow-wrap: anywhere;
-  font-size: 0.76rem;
-  line-height: 1.35;
+  font-size: var(--font-card-title);
+  line-height: var(--line-compact);
 }
 
 .classroom-assignment-copy p {
   margin: 2px 0 0;
-  color: var(--text-muted);
-  font-size: 0.65rem;
-  line-height: 1.4;
+  color: var(--text-secondary);
+  font-size: var(--font-helper);
+  line-height: var(--line-body);
 }
 
 .classroom-assignment-meta {
@@ -2501,7 +2511,7 @@
   justify-content: flex-end;
   gap: 7px;
   color: var(--text-secondary);
-  font-size: 0.64rem;
+  font-size: var(--font-meta);
   white-space: nowrap;
 }
 

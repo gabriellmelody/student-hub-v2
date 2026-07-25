@@ -42,12 +42,15 @@
 
 .primary-button {
   border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
   box-shadow: 0 1px 2px var(--accent-tint);
 }
 
 .secondary-button {
   border: 1px solid var(--border-strong);
-  background: transparent;
+  background: var(--surface-raised);
+  color: var(--text-control);
 }
 
 .home-widget--setup .primary-button,
@@ -73,7 +76,12 @@
 .subject-profile-actions button,
 .data-reset-row > button,
 .data-confirmation-actions button {
-  border-radius: 7px;
+  appearance: none;
+  border-radius: var(--radius-button);
+  font-family: inherit;
+  font-weight: 700;
+  line-height: var(--line-compact);
+  white-space: normal;
 }
 
 .add-task-form input,
@@ -92,8 +100,8 @@
 .section-label,
 .settings-group-label {
   color: var(--text-muted);
-  font-size: 0.68rem;
-  font-weight: 650;
+  font-size: var(--font-meta);
+  font-weight: 720;
   letter-spacing: 0.08em;
 }
 
@@ -101,8 +109,8 @@
 .settings-note p,
 .data-panel-intro > div > p:last-child {
   color: var(--text-secondary);
-  font-size: 0.76rem;
-  line-height: 1.5;
+  font-size: var(--font-helper);
+  line-height: var(--line-body);
 }
 
 .task-empty-state h3,
@@ -111,8 +119,8 @@
 .empty-plan h3 {
   margin: 0 0 5px;
   color: var(--text);
-  font-size: 0.84rem;
-  font-weight: 650;
+  font-size: var(--font-card-title);
+  font-weight: 720;
 }
 
 .task-empty-state p,
@@ -122,8 +130,8 @@
 .right-rail-empty p {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.72rem;
-  line-height: 1.5;
+  font-size: var(--font-helper);
+  line-height: var(--line-body);
 }
 
 .panel-header h3,
@@ -132,12 +140,12 @@
 .calendar-detail-header h3,
 .theme-setting h3,
 .data-panel-intro h3 {
-  font-size: 0.94rem;
-  font-weight: 650;
+  font-size: var(--font-section-title);
+  font-weight: 720;
 }
 
 .panel-header span {
-  font-size: 0.72rem;
+  font-size: var(--font-helper);
 }
 
 .data-cancel-button:hover {
@@ -239,6 +247,29 @@
 .cancel-edit-button {
   transition: background 0.16s ease, border-color 0.16s ease,
     color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.primary-button:not(:disabled):hover {
+  border-color: var(--accent-hover);
+  background: var(--accent-hover);
+  color: var(--accent-contrast);
+}
+
+.secondary-button:not(:disabled):hover,
+.small-button:not(:disabled):hover {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.small-button:disabled {
+  border-color: var(--border-soft);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  opacity: 0.72;
+  box-shadow: none;
 }
 
 .nav {

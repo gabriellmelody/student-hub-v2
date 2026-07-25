@@ -69,7 +69,7 @@
 .evening-planner-notice strong {
   margin: 0;
   color: var(--text);
-  font-size: 0.96rem;
+  font-size: var(--font-section-title);
   font-weight: 700;
 }
 
@@ -78,8 +78,8 @@
 .evening-planner-notice p {
   margin: 3px 0 0;
   color: var(--text-secondary);
-  font-size: 0.72rem;
-  line-height: 1.45;
+  font-size: var(--font-helper);
+  line-height: var(--line-body);
 }
 
 .evening-planner-header > button,
@@ -130,7 +130,7 @@
   display: block;
   margin-bottom: 5px;
   color: var(--text-muted);
-  font-size: 0.64rem;
+  font-size: var(--font-meta);
   font-weight: 700;
 }
 
@@ -139,25 +139,26 @@
   width: 100%;
   min-height: var(--density-input-height);
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   padding: var(--density-input-padding);
   background: var(--surface-input);
   color: var(--text);
   font: inherit;
-  font-size: 0.74rem;
+  font-size: var(--font-body);
 }
 
 .evening-break-toggle button,
 .evening-energy-row button {
   min-height: var(--density-input-height);
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-button);
   padding: var(--density-input-padding);
   background: var(--surface-input);
   color: var(--text-secondary);
   font: inherit;
-  font-size: 0.72rem;
+  font-size: var(--font-button-small);
   font-weight: 700;
+  line-height: var(--line-compact);
   cursor: pointer;
 }
 
@@ -194,13 +195,14 @@
   min-height: var(--density-small-button-height);
   margin-top: 8px;
   border: 1px solid var(--accent-border);
-  border-radius: 8px;
+  border-radius: var(--radius-button);
   padding: var(--density-small-button-padding);
   background: var(--surface-raised);
   color: var(--accent-soft);
   font: inherit;
-  font-size: 0.7rem;
+  font-size: var(--font-button-small);
   font-weight: 720;
+  line-height: var(--line-compact);
   cursor: pointer;
 }
 
@@ -209,7 +211,7 @@
   border: 1px solid var(--effort-high-border);
   background: var(--effort-high-bg);
   color: var(--urgent);
-  font-size: 0.72rem;
+  font-size: var(--font-helper);
   font-weight: 650;
 }
 
@@ -222,13 +224,14 @@
 .evening-planner-actions button {
   min-height: var(--density-small-button-height);
   border: 1px solid var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-button);
   padding: var(--density-small-button-padding);
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
-  font-size: 0.72rem;
+  font-size: var(--font-button);
   font-weight: 700;
+  line-height: var(--line-compact);
 }
 
 .evening-planner-actions .primary-button {

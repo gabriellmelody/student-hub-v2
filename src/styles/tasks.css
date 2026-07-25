@@ -1,13 +1,16 @@
 /* Buttons, task forms, task cards, and empty states. */
 
 .small-button {
+  appearance: none;
   background: var(--control-bg);
   border: 1px solid var(--border-strong);
   color: var(--text-control);
   min-height: var(--density-small-button-height);
-  border-radius: 8px;
+  border-radius: var(--radius-button);
   padding: var(--density-small-button-padding);
-  font-size: 0.76rem;
+  font-size: var(--font-button-small);
+  font-weight: 700;
+  line-height: var(--line-compact);
   cursor: pointer;
 }
 
@@ -35,14 +38,16 @@
 
 .primary-button,
 .secondary-button {
+  appearance: none;
   width: 100%;
   border: none;
   min-height: var(--density-button-height);
-  border-radius: 8px;
+  border-radius: var(--radius-button);
   padding: var(--density-button-padding);
-  font-size: 0.86rem;
+  font-size: var(--font-button);
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 740;
+  line-height: var(--line-compact);
 }
 
 .primary-button {
@@ -69,7 +74,8 @@
 }
 
 .secondary-button {
-  background: var(--control-bg);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
   color: var(--text-control);
 }
 

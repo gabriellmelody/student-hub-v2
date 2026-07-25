@@ -61,14 +61,15 @@
 .eyebrow {
   margin: 0 0 5px;
   color: var(--text-eyebrow);
-  font-size: 0.68rem;
+  font-size: var(--font-meta);
+  font-weight: 720;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .page-header h2 {
   margin: 0;
-  font-size: var(--density-heading-size);
+  font-size: max(var(--font-page-title), var(--density-heading-size));
   line-height: 1.15;
   letter-spacing: 0;
   font-weight: 650;
@@ -78,8 +79,8 @@
   max-width: 650px;
   margin: 7px 0 0;
   color: var(--text-soft);
-  font-size: var(--density-header-text-size);
-  line-height: 1.5;
+  font-size: max(var(--font-helper), var(--density-header-text-size));
+  line-height: var(--line-body);
 }
 
 .home-widget-grid {
