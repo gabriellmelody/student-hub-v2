@@ -8,6 +8,30 @@ import {
 } from "../utils/appUtils.js";
 import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
 
+function getCurrentMinutes() {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function parseDisplayTimeToMinutes(timeLabel) {
+  const match = String(timeLabel || "")
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+
+  if (!match) return null;
+
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const period = match[3]?.toUpperCase();
+
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+
+  if (period === "PM" && hours < 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+
+  return hours * 60 + minutes;
+}
+
 function createManualBlockDraft() {
   return {
     type: "study",
@@ -43,6 +67,7 @@ function PlanPage({
   const [draggedBlockId, setDraggedBlockId] = useState(null);
   const [dragOverBlockId, setDragOverBlockId] = useState(null);
   const [droppedBlockId, setDroppedBlockId] = useState(null);
+  const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
   const planBlockNodesRef = useRef(new Map());
   const flipFirstRectsRef = useRef(null);
   const flipAnimationFrameRef = useRef(null);
@@ -56,6 +81,14 @@ function PlanPage({
       cancelAnimationFrame(flipAnimationFrameRef.current);
       clearTimeout(dropSettleTimerRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMinutes(getCurrentMinutes());
+    }, 60000);
+
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -373,6 +406,21 @@ function PlanPage({
     reorderPlanBlock(blockId, planBlocks[nextIndex].id);
   }
 
+  function isCurrentPlanBlock(block) {
+    const startMinutes = parseDisplayTimeToMinutes(block.start);
+    const endMinutes = parseDisplayTimeToMinutes(block.end);
+
+    if (startMinutes === null || endMinutes === null) return false;
+
+    const adjustedEnd = endMinutes <= startMinutes ? endMinutes + 24 * 60 : endMinutes;
+    const adjustedNow =
+      nowMinutes < startMinutes && adjustedEnd > 24 * 60
+        ? nowMinutes + 24 * 60
+        : nowMinutes;
+
+    return adjustedNow >= startMinutes && adjustedNow < adjustedEnd;
+  }
+
   return (
     <div className="page">
       <header className="page-header">
@@ -388,6 +436,14 @@ function PlanPage({
           <div className="plan-actions">
             <button
               type="button"
+              className="small-button plan-primary-create-button"
+              onClick={openEveningPlanner}
+            >
+              {planBlocks.length > 0 ? "Regenerate plan" : "Create plan"}
+            </button>
+
+            <button
+              type="button"
               className="small-button secondary plan-add-block-button"
               aria-expanded={showAddBlockForm}
               onClick={() =>
@@ -401,7 +457,7 @@ function PlanPage({
 
             {planBlocks.length > 0 && (
               <button
-                className="small-button secondary"
+                className="small-button secondary plan-clear-button"
                 title={
                   hasLockedBlocks
                     ? "Locked blocks will remain in the plan"
@@ -412,14 +468,6 @@ function PlanPage({
                 Clear
               </button>
             )}
-
-            <button
-              type="button"
-              className="small-button plan-primary-create-button"
-              onClick={openEveningPlanner}
-            >
-              {planBlocks.length > 0 ? "Regenerate plan" : "Create plan"}
-            </button>
           </div>
         </div>
 
@@ -545,7 +593,9 @@ function PlanPage({
           </div>
         )}
 
-        {planBlocks.map((block, index) => {
+        {planBlocks.length > 0 && (
+          <div className="plan-timeline" aria-label="Today’s Plan timeline">
+            {planBlocks.map((block, index) => {
           const blockKey = getPlanBlockKey(block, index);
 
           if (block.type === "message") {
@@ -571,30 +621,86 @@ function PlanPage({
             droppedBlockId === block.id ? " plan-block-dropped" : ""
           }${openMenuBlockId === block.id ? " plan-block-menu-open" : ""}`;
           const signalBadges = getTaskSignalBadges(block);
+          const isNow = isCurrentPlanBlock(block);
+          const completedClassName = block.completed ? " plan-block-completed" : "";
+          const nowClassName = isNow ? " plan-block-now" : "";
 
           return (
             <div
-              className={
-                block.type === "break"
-                  ? `plan-block break-block${lockClassName}${dragClassName}`
-                  : `plan-block${moveClassName}${lockClassName}${dragClassName}`
-              }
               key={blockKey}
-              ref={(node) => setPlanBlockRef(blockKey, node)}
-              data-plan-block-id={block.id}
-              onDragStart={(event) => handleDragStart(event, block.id)}
-              onDragOver={(event) => handleDragOver(event, block.id)}
-              onDrop={handleDrop}
-              onDragEnd={resetDragState}
+              className={`plan-timeline-item ${
+                block.type === "break"
+                  ? "plan-timeline-item-break"
+                  : "plan-timeline-item-study"
+              }${nowClassName}${completedClassName}`}
             >
-              <div className="plan-block-header">
-                <div className="plan-time">
-                  {block.start} – {block.end}
+              <div className="plan-time plan-timeline-time">
+                <span className="plan-time-range">
+                  {block.start}–{block.end}
+                </span>
+                <span className="plan-time-badges">
+                  {isNow && <span className="plan-now-indicator">Now</span>}
                   {block.edited && <span>Adjusted</span>}
                   {block.locked && (
                     <span className="plan-lock-indicator">Locked</span>
                   )}
-                </div>
+                </span>
+              </div>
+
+              <div className="plan-timeline-rail" aria-hidden="true">
+                <span className="plan-timeline-node" />
+              </div>
+
+              <article
+                className={
+                  block.type === "break"
+                    ? `plan-block break-block${lockClassName}${dragClassName}${completedClassName}${nowClassName}`
+                    : `plan-block${moveClassName}${lockClassName}${dragClassName}${completedClassName}${nowClassName}`
+                }
+                ref={(node) => setPlanBlockRef(blockKey, node)}
+                data-plan-block-id={block.id}
+                onDragStart={(event) => handleDragStart(event, block.id)}
+                onDragOver={(event) => handleDragOver(event, block.id)}
+                onDrop={handleDrop}
+                onDragEnd={resetDragState}
+              >
+                <div className="plan-block-header">
+                  <div className="plan-block-title-group">
+                    <h3>
+                      {block.completed && (
+                        <span className="plan-complete-mark" aria-hidden="true">
+                          ✓
+                        </span>
+                      )}
+                      {block.title}
+                    </h3>
+
+                    {block.type === "study" &&
+                      (block.subject || block.effort || signalBadges.length > 0) && (
+                        <div className="plan-study-meta">
+                          {block.subject && (
+                            <p className="plan-subject">{block.subject}</p>
+                          )}
+                          {block.effort && (
+                            <span
+                              className={`effort-pill ${getEffortClass(block.effort)}`}
+                            >
+                              {getEffortLabel(block.effort)}
+                            </span>
+                          )}
+                          <TaskSourceBadge task={block} />
+                          {signalBadges.slice(0, 1).map((badge) => (
+                            <span
+                              className={`task-signal-badge task-signal-${badge.tone}`}
+                              key={`${badge.tone}-${badge.label}`}
+                            >
+                              {badge.label}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                  </div>
+
                 <div className="plan-block-header-actions">
                   <button
                     type="button"
@@ -701,29 +807,7 @@ function PlanPage({
                 </div>
               </div>
 
-              {block.type === "study" &&
-                (block.subject || block.effort || signalBadges.length > 0) && (
-                <div className="plan-study-meta">
-                  {block.subject && <p className="plan-subject">{block.subject}</p>}
-                  {block.effort && (
-                    <span className={`effort-pill ${getEffortClass(block.effort)}`}>
-                      {getEffortLabel(block.effort)} · {block.effort}/5
-                    </span>
-                  )}
-                  <TaskSourceBadge task={block} />
-                  {signalBadges.slice(0, 1).map((badge) => (
-                    <span
-                      className={`task-signal-badge task-signal-${badge.tone}`}
-                      key={`${badge.tone}-${badge.label}`}
-                    >
-                      {badge.label}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <h3>{block.title}</h3>
-              {block.tip && <p>{block.tip}</p>}
+              {block.tip && <p className="plan-block-tip">{block.tip}</p>}
 
               {editingBlockId === block.id && (
                 <form className="plan-block-editor" onSubmit={saveBlockDuration}>
@@ -766,16 +850,21 @@ function PlanPage({
                     type="button"
                     className="complete-plan-button"
                     disabled={block.locked}
+                    aria-label={`Mark ${block.title} done`}
                     title={block.locked ? "Unlock to mark this task done" : undefined}
                     onClick={() => completeTaskFromPlan(block.taskId)}
                   >
-                    Mark done
+                    <span aria-hidden="true">✓</span>
+                    <span>Mark done</span>
                   </button>
                 </div>
               )}
+              </article>
             </div>
           );
-        })}
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

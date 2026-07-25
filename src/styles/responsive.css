@@ -255,7 +255,7 @@ button {
   }
 
   .complete-plan-button {
-    flex-basis: 100%;
+    flex: 0 1 auto;
   }
 
   .theme-toggle,
