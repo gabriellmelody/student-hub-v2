@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   getDaysLeft,
   formatDateKey,
@@ -21,42 +22,74 @@ function AccountMenu({
   collapsed,
   active,
   openSettings,
+  displayName,
   theme,
   setTheme,
-  accentColor,
-  setAccentColor,
-  accentColorPresets,
+  themeColors,
 }) {
   const [open, setOpen] = useState(false);
-  const menuRef = useRef(null);
+  const [personalisationOpen, setPersonalisationOpen] = useState(false);
+  const [narrowMenu, setNarrowMenu] = useState(() =>
+    typeof window === "undefined" ? false : window.innerWidth <= 640
+  );
   const menuPanelRef = useRef(null);
+  const submenuPanelRef = useRef(null);
   const accountButtonRef = useRef(null);
+
+  function closeMenu({ restoreFocus = false } = {}) {
+    setOpen(false);
+    setPersonalisationOpen(false);
+
+    if (restoreFocus) {
+      requestAnimationFrame(() => accountButtonRef.current?.focus());
+    }
+  }
 
   useEffect(() => {
     if (!open) return undefined;
 
-    function closeMenu(event) {
+    function handleMenuClose(event) {
       if (event.key === "Escape") {
-        setOpen(false);
+        closeMenu({ restoreFocus: true });
         return;
       }
 
-      if (
-        event.type === "pointerdown" &&
-        !menuRef.current?.contains(event.target)
-      ) {
-        setOpen(false);
+      if (event.type === "pointerdown") {
+        const target = event.target;
+        const clickedInsideMenu =
+          accountButtonRef.current?.contains(target) ||
+          menuPanelRef.current?.contains(target) ||
+          submenuPanelRef.current?.contains(target);
+
+        if (!clickedInsideMenu) {
+          closeMenu();
+        }
       }
     }
 
-    document.addEventListener("pointerdown", closeMenu);
-    document.addEventListener("keydown", closeMenu);
+    document.addEventListener("pointerdown", handleMenuClose);
+    document.addEventListener("keydown", handleMenuClose);
 
     return () => {
-      document.removeEventListener("pointerdown", closeMenu);
-      document.removeEventListener("keydown", closeMenu);
+      document.removeEventListener("pointerdown", handleMenuClose);
+      document.removeEventListener("keydown", handleMenuClose);
     };
   }, [open]);
+
+  useEffect(() => {
+    if (!open) setPersonalisationOpen(false);
+  }, [open]);
+
+  useEffect(() => {
+    function updateNarrowMenu() {
+      setNarrowMenu(window.innerWidth <= 640);
+    }
+
+    updateNarrowMenu();
+    window.addEventListener("resize", updateNarrowMenu);
+
+    return () => window.removeEventListener("resize", updateNarrowMenu);
+  }, []);
 
   useLayoutEffect(() => {
     if (!open) return undefined;
@@ -64,6 +97,7 @@ function AccountMenu({
     function positionMenu() {
       const accountButton = accountButtonRef.current;
       const menuPanel = menuPanelRef.current;
+      const submenuPanel = submenuPanelRef.current;
 
       if (!accountButton || !menuPanel) return;
 
@@ -94,133 +128,226 @@ function AccountMenu({
 
       menuPanel.style.top = `${top}px`;
       menuPanel.style.left = `${left}px`;
+
+      if (submenuPanel && personalisationOpen && !narrowMenu) {
+        const submenuWidth = Math.min(248, window.innerWidth - viewportPadding * 2);
+        const submenuMaxHeight = maxHeight;
+        const submenuHeight = Math.min(submenuPanel.scrollHeight, submenuMaxHeight);
+        const menuRect = menuPanel.getBoundingClientRect();
+        const rightLeft = menuRect.right + menuGap;
+        const leftLeft = menuRect.left - submenuWidth - menuGap;
+        const fitsRight = rightLeft + submenuWidth <= window.innerWidth - viewportPadding;
+        const proposedSubmenuLeft = fitsRight ? rightLeft : leftLeft;
+        const submenuLeft = Math.min(
+          Math.max(viewportPadding, proposedSubmenuLeft),
+          window.innerWidth - submenuWidth - viewportPadding
+        );
+        const submenuTop = Math.min(
+          Math.max(viewportPadding, menuRect.top),
+          window.innerHeight - submenuHeight - viewportPadding
+        );
+
+        submenuPanel.style.width = `${submenuWidth}px`;
+        submenuPanel.style.maxHeight = `${submenuMaxHeight}px`;
+        submenuPanel.style.top = `${submenuTop}px`;
+        submenuPanel.style.left = `${submenuLeft}px`;
+      }
     }
 
-    positionMenu();
+    const frame = requestAnimationFrame(positionMenu);
     window.addEventListener("resize", positionMenu);
     window.addEventListener("scroll", positionMenu, true);
 
     return () => {
+      cancelAnimationFrame(frame);
       window.removeEventListener("resize", positionMenu);
       window.removeEventListener("scroll", positionMenu, true);
     };
-  }, [collapsed, open]);
+  }, [collapsed, open, personalisationOpen, narrowMenu]);
 
   function chooseItem(action) {
-    setOpen(false);
+    closeMenu();
     action();
   }
 
-  return (
+  function openPersonalisation() {
+    setPersonalisationOpen(true);
+  }
+
+  function closePersonalisation() {
+    setPersonalisationOpen(false);
+  }
+
+  const accountName = (displayName || "Student").trim() || "Student";
+  const accountInitials = accountName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "S";
+
+  const personalisationPanel = (
     <div
-      className={`sidebar-account ${open ? "is-open" : ""}`}
-      ref={menuRef}
+      className={`sidebar-account-submenu ${
+        narrowMenu ? "sidebar-account-submenu-inline" : ""
+      }`}
+      role="menu"
+      ref={submenuPanelRef}
     >
-      {open && (
-        <div
-          className="sidebar-account-menu"
-          role="menu"
-          ref={menuPanelRef}
-        >
-          <div className="sidebar-account-menu-heading">
-            <span className="sidebar-account-menu-avatar" aria-hidden="true">
-              S
-            </span>
-            <span className="sidebar-account-menu-copy">
-              <strong>Local workspace</strong>
-              <small>Browser saved</small>
-            </span>
-            <span className="sidebar-account-menu-indicator" aria-hidden="true">
-              ···
-            </span>
-          </div>
-          <div className="sidebar-account-personalisation">
-            <div className="sidebar-account-menu-section-title">
-              <span aria-hidden="true">◐</span>
-              <strong>Personalisation</strong>
-            </div>
-            <div
-              className="sidebar-account-theme-controls"
-              role="group"
-              aria-label="Appearance"
-            >
-              {["light", "dark"].map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  className={theme === option ? "active" : ""}
-                  aria-pressed={theme === option}
-                  onClick={() => setTheme(option)}
-                >
-                  {option === "light" ? "Light" : "Dark"}
-                </button>
-              ))}
-            </div>
-            <div
-              className="sidebar-account-accent-controls"
-              aria-label="Primary colour"
-            >
-              {accentColorPresets.map((preset) => (
-                <button
-                  key={preset.value}
-                  type="button"
-                  className={accentColor === preset.value ? "active" : ""}
-                  aria-label={`${preset.label} primary colour`}
-                  aria-pressed={accentColor === preset.value}
-                  title={preset.label}
-                  style={{ "--account-accent-color": preset.value }}
-                  onClick={() => setAccentColor(preset.value)}
-                >
-                  <span aria-hidden="true">✓</span>
-                </button>
-              ))}
-            </div>
-            <button
-              type="button"
-              className="sidebar-account-theme-link"
-              onClick={() => chooseItem(() => openSettings("appearance"))}
-            >
-              Theme colours
-            </button>
-          </div>
+      <div className="sidebar-account-submenu-heading">
+        {narrowMenu && (
           <button
             type="button"
-            role="menuitem"
-            onClick={() => chooseItem(() => openSettings("hub"))}
+            className="sidebar-account-back-button"
+            onClick={closePersonalisation}
           >
-            <span aria-hidden="true">⚙</span>
-            <span>Settings</span>
+            <span aria-hidden="true">‹</span>
+            <span>Back</span>
           </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => chooseItem(() => openSettings("integrations"))}
-          >
-            <span aria-hidden="true">⇄</span>
-            <span>Integrations</span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => chooseItem(() => openSettings("help"))}
-          >
-            <span aria-hidden="true">?</span>
-            <span>Help / FAQ</span>
-          </button>
-          <div className="sidebar-account-menu-divider" />
-          <button
-            type="button"
-            role="menuitem"
-            className="sidebar-account-menu-disabled"
-            disabled
-            title="Log out unavailable until accounts are added"
-          >
-            <span aria-hidden="true">↪</span>
-            <span>Log out</span>
-            <small>Accounts coming later</small>
-          </button>
+        )}
+        <div>
+          <strong>Personalisation</strong>
+          <small>Quick appearance settings</small>
         </div>
-      )}
+      </div>
+
+      <div className="sidebar-account-submenu-section">
+        <span className="sidebar-account-submenu-label">Appearance</span>
+        <div
+          className="sidebar-account-theme-controls"
+          role="group"
+          aria-label="Appearance"
+        >
+          {["light", "dark", "system"].map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={theme === option ? "active" : ""}
+              aria-pressed={theme === option}
+              onClick={() => setTheme(option)}
+            >
+              {option === "light"
+                ? "Light"
+                : option === "dark"
+                  ? "Dark"
+                  : "System"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="sidebar-account-theme-colours-row"
+        role="menuitem"
+        onClick={() => chooseItem(() => openSettings("appearance"))}
+      >
+        <span className="sidebar-account-theme-preview" aria-hidden="true">
+          <i style={{ "--account-theme-preview": themeColors.primary }} />
+          <i style={{ "--account-theme-preview": themeColors.secondary }} />
+          <i style={{ "--account-theme-preview": themeColors.tertiary }} />
+        </span>
+        <span>
+          <strong>Theme colours</strong>
+          <small>Open full settings</small>
+        </span>
+        <span aria-hidden="true">›</span>
+      </button>
+    </div>
+  );
+
+  const menuOverlay =
+    open && typeof document !== "undefined"
+      ? createPortal(
+          <div className="sidebar-account-overlay-layer">
+            <div
+              className="sidebar-account-menu"
+              role="menu"
+              ref={menuPanelRef}
+            >
+              {narrowMenu && personalisationOpen ? (
+                personalisationPanel
+              ) : (
+                <>
+                  <div className="sidebar-account-menu-heading">
+                    <span
+                      className="sidebar-account-menu-avatar"
+                      aria-hidden="true"
+                    >
+                      {accountInitials}
+                    </span>
+                    <span className="sidebar-account-menu-copy">
+                      <strong>{accountName}</strong>
+                      <small>Local workspace</small>
+                    </span>
+                    <span
+                      className="sidebar-account-menu-indicator"
+                      aria-hidden="true"
+                    >
+                      ···
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    aria-haspopup="menu"
+                    aria-expanded={personalisationOpen}
+                    onClick={openPersonalisation}
+                  >
+                    <span aria-hidden="true">◐</span>
+                    <span>Personalisation</span>
+                    <span aria-hidden="true">›</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => chooseItem(() => openSettings("hub"))}
+                  >
+                    <span aria-hidden="true">⚙</span>
+                    <span>Settings</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => chooseItem(() => openSettings("integrations"))}
+                  >
+                    <span aria-hidden="true">⇄</span>
+                    <span>Integrations</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => chooseItem(() => openSettings("help"))}
+                  >
+                    <span aria-hidden="true">?</span>
+                    <span>Help / FAQ</span>
+                    <span aria-hidden="true">›</span>
+                  </button>
+                  <div className="sidebar-account-menu-divider" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="sidebar-account-menu-disabled"
+                    disabled
+                    title="Log out unavailable until accounts are added"
+                  >
+                    <span aria-hidden="true">↪</span>
+                    <span>Log out</span>
+                    <small>Accounts coming later</small>
+                  </button>
+                </>
+              )}
+            </div>
+
+            {personalisationOpen && !narrowMenu && personalisationPanel}
+          </div>,
+          document.body
+        )
+      : null;
+
+  return (
+    <div className={`sidebar-account ${open ? "is-open" : ""}`}>
+      {menuOverlay}
 
       <button
         type="button"
@@ -229,14 +356,20 @@ function AccountMenu({
         aria-label={collapsed ? "Open local workspace menu" : undefined}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((currentOpen) => !currentOpen)}
+        onClick={() => {
+          if (open) {
+            closeMenu();
+          } else {
+            setOpen(true);
+          }
+        }}
       >
         <span className="sidebar-account-avatar" aria-hidden="true">
-          S
+          {accountInitials}
         </span>
         <span className="sidebar-account-copy">
-          <strong>Local workspace</strong>
-          <small>Browser saved</small>
+          <strong>{accountName}</strong>
+          <small>Local workspace</small>
         </span>
         <span className="sidebar-account-chevron" aria-hidden="true">
           {open ? "⌄" : "⌃"}

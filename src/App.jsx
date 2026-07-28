@@ -16,7 +16,6 @@ import {
   COMPLETED_HISTORY_STORAGE_KEY,
   COMPLETED_TASK_RETENTION_MS,
   DEFAULT_THEME_COLORS,
-  accentColorPresets,
   themeColorPalettes,
   STUDENT_HUB_STORAGE_KEYS,
   WIDGET_CONFIG_STORAGE_KEY,
@@ -59,6 +58,16 @@ import { createTaskFromMockAssignment } from "./utils/classroomMockUtils.js";
 
 const GOOGLE_CALENDAR_PREFERENCES_KEY =
   "studentHub.googleCalendarPreferences";
+
+function resolveThemePreference(themePreference) {
+  if (themePreference !== "system") return themePreference === "dark" ? "dark" : "light";
+
+  if (typeof window === "undefined") return "light";
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
 
 function createEmptyTaskDraft() {
   return {
@@ -200,10 +209,12 @@ function App() {
   const [rightRailEditMode, setRightRailEditMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem("student-hub-theme") === "dark"
-      ? "dark"
-      : "light";
+    const savedTheme = localStorage.getItem("student-hub-theme");
+    return savedTheme === "dark" || savedTheme === "system" ? savedTheme : "light";
   });
+  const [resolvedTheme, setResolvedTheme] = useState(() =>
+    resolveThemePreference(theme)
+  );
   const [themeColors, setThemeColorsState] = useState(loadThemeColors);
   const accentColor = themeColors.primary;
   const [layoutDensity, setLayoutDensity] = useState(() => {
@@ -416,8 +427,22 @@ function App() {
   }, [studentProfile]);
 
   useLayoutEffect(() => {
-    document.documentElement.dataset.theme = theme;
+    function applyThemePreference() {
+      const nextResolvedTheme = resolveThemePreference(theme);
+
+      document.documentElement.dataset.theme = nextResolvedTheme;
+      setResolvedTheme(nextResolvedTheme);
+    }
+
+    applyThemePreference();
     localStorage.setItem("student-hub-theme", theme);
+
+    if (theme !== "system") return undefined;
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    mediaQuery.addEventListener("change", applyThemePreference);
+
+    return () => mediaQuery.removeEventListener("change", applyThemePreference);
   }, [theme]);
 
   useLayoutEffect(() => {
@@ -478,12 +503,12 @@ function App() {
     const primaryColor = themeColors.primary;
     const secondaryColor = themeColors.secondary;
     const tertiaryColor = themeColors.tertiary;
-    const readableAccent = getReadableAccent(primaryColor, theme);
-    const hoverTarget = theme === "dark" ? "#ffffff" : "#18181b";
-    const movedSurface = theme === "dark" ? "#202024" : "#ffffff";
-    const tintAlpha = theme === "dark" ? 0.14 : 0.09;
-    const strongTintAlpha = theme === "dark" ? 0.2 : 0.14;
-    const borderAlpha = theme === "dark" ? 0.3 : 0.2;
+    const readableAccent = getReadableAccent(primaryColor, resolvedTheme);
+    const hoverTarget = resolvedTheme === "dark" ? "#ffffff" : "#18181b";
+    const movedSurface = resolvedTheme === "dark" ? "#202024" : "#ffffff";
+    const tintAlpha = resolvedTheme === "dark" ? 0.14 : 0.09;
+    const strongTintAlpha = resolvedTheme === "dark" ? 0.2 : 0.14;
+    const borderAlpha = resolvedTheme === "dark" ? 0.3 : 0.2;
 
     function setThemeRoleVariables(role, color) {
       root.style.setProperty(`--accent-${role}`, color);
@@ -493,7 +518,7 @@ function App() {
       );
       root.style.setProperty(
         `--accent-${role}-soft`,
-        getReadableAccent(color, theme)
+        getReadableAccent(color, resolvedTheme)
       );
       root.style.setProperty(
         `--accent-${role}-contrast`,
@@ -539,17 +564,17 @@ function App() {
     );
     root.style.setProperty(
       "--moved-border",
-      colorToRgba(primaryColor, theme === "dark" ? 0.72 : 0.48)
+      colorToRgba(primaryColor, resolvedTheme === "dark" ? 0.72 : 0.48)
     );
     root.style.setProperty(
       "--moved-bg",
-      mixColors(movedSurface, primaryColor, theme === "dark" ? 0.1 : 0.06)
+      mixColors(movedSurface, primaryColor, resolvedTheme === "dark" ? 0.1 : 0.06)
     );
     root.style.setProperty(
       "--moved-shadow",
-      colorToRgba(primaryColor, theme === "dark" ? 0.16 : 0.12)
+      colorToRgba(primaryColor, resolvedTheme === "dark" ? 0.16 : 0.12)
     );
-  }, [themeColors, theme]);
+  }, [themeColors, resolvedTheme]);
 
   useEffect(() => {
     const completedTimestamps = tasks
@@ -1873,24 +1898,11 @@ function App() {
           collapsed={sidebarCollapsed}
           active={activePage === "settings"}
           openSettings={openSettings}
+          displayName={studentProfile.displayName || studentProfile.name || "Student"}
           theme={theme}
           setTheme={setTheme}
-          accentColor={accentColor}
-          setAccentColor={setAccentColor}
-          accentColorPresets={accentColorPresets.slice(0, 5)}
+          themeColors={themeColors}
         />
-
-        <div className="sidebar-footer">
-          <p>
-            {completedTasks.length}/{visibleTasks.length} tasks done
-          </p>
-          <div className="mini-progress-track">
-            <div
-              className="mini-progress-fill"
-              style={{ width: `${progressPercentage}%` }}
-            />
-          </div>
-        </div>
       </aside>
 
       <section className="main-content">
