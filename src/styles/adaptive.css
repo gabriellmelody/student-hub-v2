@@ -160,6 +160,10 @@
     justify-content: space-between;
   }
 
+  .theme-colour-controls {
+    width: 100%;
+  }
+
   .theme-toggle button {
     width: 100%;
   }
@@ -448,5 +452,21 @@
 
   .accent-picker {
     justify-content: space-between;
+  }
+
+  .theme-palette-grid,
+  .theme-colour-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .theme-colour-preview {
+    justify-items: start;
+  }
+
+  .theme-colour-actions,
+  .theme-colour-actions > span {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
   }
 }

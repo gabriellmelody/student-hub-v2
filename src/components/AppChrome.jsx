@@ -158,14 +158,14 @@ function AccountMenu({
             </div>
             <div
               className="sidebar-account-accent-controls"
-              aria-label="Accent colour"
+              aria-label="Primary colour"
             >
               {accentColorPresets.map((preset) => (
                 <button
                   key={preset.value}
                   type="button"
                   className={accentColor === preset.value ? "active" : ""}
-                  aria-label={`${preset.label} accent`}
+                  aria-label={`${preset.label} primary colour`}
                   aria-pressed={accentColor === preset.value}
                   title={preset.label}
                   style={{ "--account-accent-color": preset.value }}
@@ -175,6 +175,13 @@ function AccountMenu({
                 </button>
               ))}
             </div>
+            <button
+              type="button"
+              className="sidebar-account-theme-link"
+              onClick={() => chooseItem(() => openSettings("appearance"))}
+            >
+              Theme colours
+            </button>
           </div>
           <button
             type="button"

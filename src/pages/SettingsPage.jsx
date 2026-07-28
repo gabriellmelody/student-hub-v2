@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   subjectCourseSystems,
   subjectLevels,
-  accentColorPresets,
-  getContrastText,
+  DEFAULT_THEME_COLORS,
+  getThemeColorWarnings,
   createSubjectDraft,
   findSubjectProfile,
   hasRealDueDate,
+  normalizeThemeColors,
   REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY,
@@ -460,8 +461,10 @@ function SettingsPage({
   setSubjects,
   theme,
   setTheme,
-  accentColor,
-  setAccentColor,
+  themeColors,
+  setThemeColors,
+  saveThemeColorPreferences,
+  themeColorPalettes,
   layoutDensity,
   setLayoutDensity,
   homeLayout,
@@ -490,10 +493,103 @@ function SettingsPage({
   googleCalendarCallbackStatus = null,
 }) {
   const [settingsView, setSettingsView] = useState(() => initialView || "hub");
+  const [savedThemeColorSnapshot, setSavedThemeColorSnapshot] = useState(() =>
+    normalizeThemeColors(themeColors)
+  );
+  const [themeColorDraft, setThemeColorDraft] = useState(() =>
+    normalizeThemeColors(themeColors)
+  );
+  const [themeColorDirty, setThemeColorDirty] = useState(false);
+  const themeColorDirtyRef = useRef(false);
+  const savedThemeColorRef = useRef(savedThemeColorSnapshot);
+  const setThemeColorsRef = useRef(setThemeColors);
 
   useEffect(() => {
     setSettingsView(initialView || "hub");
   }, [initialView]);
+
+  useEffect(() => {
+    themeColorDirtyRef.current = themeColorDirty;
+  }, [themeColorDirty]);
+
+  useEffect(() => {
+    savedThemeColorRef.current = savedThemeColorSnapshot;
+  }, [savedThemeColorSnapshot]);
+
+  useEffect(() => {
+    setThemeColorsRef.current = setThemeColors;
+  }, [setThemeColors]);
+
+  useEffect(() => {
+    if (themeColorDirty) return;
+
+    const normalizedThemeColors = normalizeThemeColors(themeColors);
+    setSavedThemeColorSnapshot(normalizedThemeColors);
+    setThemeColorDraft(normalizedThemeColors);
+  }, [themeColors, themeColorDirty]);
+
+  useEffect(() => {
+    if (settingsView !== "appearance" && themeColorDirty) {
+      setThemeColorsRef.current(savedThemeColorSnapshot);
+      setThemeColorDraft(savedThemeColorSnapshot);
+      setThemeColorDirty(false);
+    }
+  }, [settingsView, themeColorDirty, savedThemeColorSnapshot]);
+
+  useEffect(() => {
+    return () => {
+      if (themeColorDirtyRef.current) {
+        setThemeColorsRef.current(savedThemeColorRef.current);
+      }
+    };
+  }, []);
+
+  const themeColorWarnings = getThemeColorWarnings(themeColorDraft);
+  const themeColorHasWarnings = Object.keys(themeColorWarnings).length > 0;
+
+  function previewThemeColors(nextThemeColors) {
+    const normalizedThemeColors = normalizeThemeColors(nextThemeColors);
+
+    setThemeColorDraft(normalizedThemeColors);
+    setThemeColors(normalizedThemeColors);
+    setThemeColorDirty(true);
+  }
+
+  function chooseThemePalette(palette) {
+    previewThemeColors({
+      paletteId: palette.id,
+      primary: palette.primary,
+      secondary: palette.secondary,
+      tertiary: palette.tertiary,
+    });
+  }
+
+  function updateThemeColorRole(role, nextColor) {
+    previewThemeColors({
+      ...themeColorDraft,
+      paletteId: "custom",
+      [role]: nextColor,
+    });
+  }
+
+  function resetThemeColorDraft() {
+    previewThemeColors(DEFAULT_THEME_COLORS);
+  }
+
+  function cancelThemeColorChanges() {
+    setThemeColors(savedThemeColorSnapshot);
+    setThemeColorDraft(savedThemeColorSnapshot);
+    setThemeColorDirty(false);
+  }
+
+  function saveThemeColorChanges() {
+    const normalizedThemeColors = normalizeThemeColors(themeColorDraft);
+
+    saveThemeColorPreferences(normalizedThemeColors);
+    setSavedThemeColorSnapshot(normalizedThemeColors);
+    setThemeColorDraft(normalizedThemeColors);
+    setThemeColorDirty(false);
+  }
 
   const viewCopy = {
     hub: {
@@ -659,45 +755,105 @@ function SettingsPage({
               </div>
             </div>
 
-            <div className="theme-setting accent-setting">
+            <div className="theme-setting accent-setting theme-colour-setting">
               <div>
-                <h3>Accent colour</h3>
-                <p>Personalise highlights while keeping statuses distinct.</p>
+                <h3>Theme colours</h3>
+                <p>Choose a balanced palette, then fine-tune it if you want.</p>
               </div>
 
-              <div className="accent-controls">
+              <div className="theme-colour-controls">
                 <div
-                  className="accent-presets"
-                  aria-label="Accent colour presets"
+                  className="theme-palette-grid"
+                  aria-label="Theme colour palettes"
                 >
-                  {accentColorPresets.map((preset) => (
+                  {themeColorPalettes.map((palette) => (
                     <button
-                      key={preset.value}
+                      key={palette.id}
                       type="button"
-                      className={accentColor === preset.value ? "active" : ""}
-                      style={{
-                        "--preset-color": preset.value,
-                        "--preset-contrast": getContrastText(preset.value),
-                      }}
-                      aria-label={`${preset.label} accent`}
-                      aria-pressed={accentColor === preset.value}
-                      title={preset.label}
-                      onClick={() => setAccentColor(preset.value)}
+                      className={
+                        themeColorDraft.paletteId === palette.id ? "active" : ""
+                      }
+                      aria-pressed={themeColorDraft.paletteId === palette.id}
+                      onClick={() => chooseThemePalette(palette)}
                     >
-                      <span aria-hidden="true">✓</span>
+                      <span className="theme-palette-swatches" aria-hidden="true">
+                        <i style={{ "--swatch-color": palette.primary }} />
+                        <i style={{ "--swatch-color": palette.secondary }} />
+                        <i style={{ "--swatch-color": palette.tertiary }} />
+                      </span>
+                      <strong>{palette.label}</strong>
                     </button>
                   ))}
                 </div>
 
-                <label className="accent-picker">
-                  <span>Custom</span>
-                  <input
-                    type="color"
-                    value={accentColor}
-                    aria-label="Custom accent colour"
-                    onChange={(event) => setAccentColor(event.target.value)}
-                  />
-                </label>
+                <div className="theme-colour-advanced">
+                  <div>
+                    <strong>Advanced colours</strong>
+                    <p>Primary controls main actions. Secondary and tertiary stay subtle.</p>
+                  </div>
+
+                  {[
+                    ["primary", "Primary"],
+                    ["secondary", "Secondary"],
+                    ["tertiary", "Tertiary"],
+                  ].map(([role, label]) => (
+                    <label className="theme-colour-picker" key={role}>
+                      <span>
+                        <strong>{label}</strong>
+                        <small>{themeColorDraft[role]}</small>
+                      </span>
+                      <input
+                        type="color"
+                        value={themeColorDraft[role]}
+                        aria-label={`${label} theme colour`}
+                        onChange={(event) =>
+                          updateThemeColorRole(role, event.target.value)
+                        }
+                      />
+                    </label>
+                  ))}
+
+                  {themeColorHasWarnings && (
+                    <p className="theme-colour-warning">
+                      {Object.values(themeColorWarnings)[0]}
+                    </p>
+                  )}
+                </div>
+
+                <div className="theme-colour-preview" aria-label="Theme preview">
+                  <span>Preview</span>
+                  <button type="button">Primary action</button>
+                  <strong>Supporting highlight</strong>
+                  <small>Subtle tag</small>
+                </div>
+
+                <div className="theme-colour-actions">
+                  <button
+                    type="button"
+                    className="theme-colour-reset"
+                    onClick={resetThemeColorDraft}
+                  >
+                    Reset to Student Hub default
+                  </button>
+                  <span>
+                    <button
+                      type="button"
+                      className="theme-colour-cancel"
+                      disabled={!themeColorDirty}
+                      onClick={cancelThemeColorChanges}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="theme-colour-save"
+                      disabled={!themeColorDirty}
+                      onClick={saveThemeColorChanges}
+                    >
+                      Save colours
+                    </button>
+                  </span>
+                </div>
               </div>
             </div>
           </section>

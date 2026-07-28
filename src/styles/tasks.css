@@ -337,8 +337,8 @@
 }
 
 .task-source-badge {
-  border-color: color-mix(in srgb, var(--accent) 22%, var(--border));
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface-raised));
+  border-color: var(--accent-tertiary-border);
+  background: var(--accent-tertiary-tint);
   color: var(--text-secondary);
   font-weight: 600;
 }
@@ -350,9 +350,9 @@
 }
 
 .task-signal-assessment {
-  border-color: var(--accent-border);
-  background: var(--accent-tint);
-  color: var(--accent-soft);
+  border-color: var(--accent-secondary-border);
+  background: var(--accent-secondary-tint);
+  color: var(--accent-secondary-soft);
 }
 
 .task-signal-high {

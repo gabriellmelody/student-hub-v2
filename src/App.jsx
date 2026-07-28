@@ -15,12 +15,15 @@ import TasksPage from "./pages/TasksPage.jsx";
 import {
   COMPLETED_HISTORY_STORAGE_KEY,
   COMPLETED_TASK_RETENTION_MS,
-  DEFAULT_ACCENT_COLOR,
+  DEFAULT_THEME_COLORS,
   accentColorPresets,
+  themeColorPalettes,
   STUDENT_HUB_STORAGE_KEYS,
   WIDGET_CONFIG_STORAGE_KEY,
   TODAY_PLAN_STORAGE_KEY,
-  normalizeHexColor,
+  normalizeThemeColors,
+  loadThemeColors,
+  saveThemeColors,
   mixColors,
   getContrastText,
   getReadableAccent,
@@ -201,9 +204,8 @@ function App() {
       ? "dark"
       : "light";
   });
-  const [accentColor, setAccentColor] = useState(() => {
-    return normalizeHexColor(localStorage.getItem("student-hub-accent"));
-  });
+  const [themeColors, setThemeColorsState] = useState(loadThemeColors);
+  const accentColor = themeColors.primary;
   const [layoutDensity, setLayoutDensity] = useState(() => {
     return localStorage.getItem("student-hub-density") === "comfortable"
       ? "comfortable"
@@ -284,6 +286,29 @@ function App() {
   ] = useState(false);
   const [eveningPlanSuccess, setEveningPlanSuccess] = useState(null);
   const eveningPlanSuccessTimerRef = useRef(null);
+
+  function setThemeColors(nextThemeColors, options = {}) {
+    const normalizedThemeColors = normalizeThemeColors(nextThemeColors);
+
+    setThemeColorsState(normalizedThemeColors);
+
+    if (options.persist) saveThemeColors(normalizedThemeColors);
+  }
+
+  function saveThemeColorPreferences(nextThemeColors) {
+    setThemeColors(nextThemeColors, { persist: true });
+  }
+
+  function setAccentColor(nextAccentColor) {
+    setThemeColors(
+      {
+        ...themeColors,
+        paletteId: "custom",
+        primary: nextAccentColor,
+      },
+      { persist: true }
+    );
+  }
 
   const [newTask, setNewTask] = useState(createEmptyTaskDraft);
 
@@ -450,39 +475,81 @@ function App() {
 
   useLayoutEffect(() => {
     const root = document.documentElement;
-    const readableAccent = getReadableAccent(accentColor, theme);
+    const primaryColor = themeColors.primary;
+    const secondaryColor = themeColors.secondary;
+    const tertiaryColor = themeColors.tertiary;
+    const readableAccent = getReadableAccent(primaryColor, theme);
     const hoverTarget = theme === "dark" ? "#ffffff" : "#18181b";
     const movedSurface = theme === "dark" ? "#202024" : "#ffffff";
+    const tintAlpha = theme === "dark" ? 0.14 : 0.09;
+    const strongTintAlpha = theme === "dark" ? 0.2 : 0.14;
+    const borderAlpha = theme === "dark" ? 0.3 : 0.2;
 
-    root.style.setProperty("--accent", accentColor);
+    function setThemeRoleVariables(role, color) {
+      root.style.setProperty(`--accent-${role}`, color);
+      root.style.setProperty(
+        `--accent-${role}-hover`,
+        mixColors(color, hoverTarget, 0.12)
+      );
+      root.style.setProperty(
+        `--accent-${role}-soft`,
+        getReadableAccent(color, theme)
+      );
+      root.style.setProperty(
+        `--accent-${role}-contrast`,
+        getContrastText(color)
+      );
+      root.style.setProperty(
+        `--accent-${role}-tint`,
+        colorToRgba(color, tintAlpha)
+      );
+      root.style.setProperty(
+        `--accent-${role}-tint-strong`,
+        colorToRgba(color, strongTintAlpha)
+      );
+      root.style.setProperty(
+        `--accent-${role}-border`,
+        colorToRgba(color, borderAlpha)
+      );
+    }
+
+    setThemeRoleVariables("primary", primaryColor);
+    setThemeRoleVariables("secondary", secondaryColor);
+    setThemeRoleVariables("tertiary", tertiaryColor);
+
+    root.style.setProperty("--accent", primaryColor);
+    root.style.setProperty("--accent-color", primaryColor);
     root.style.setProperty(
       "--accent-hover",
-      mixColors(accentColor, hoverTarget, 0.12)
+      mixColors(primaryColor, hoverTarget, 0.12)
     );
     root.style.setProperty("--accent-soft", readableAccent);
-    root.style.setProperty("--accent-contrast", getContrastText(accentColor));
+    root.style.setProperty("--accent-contrast", getContrastText(primaryColor));
     root.style.setProperty(
       "--accent-tint",
-      colorToRgba(accentColor, theme === "dark" ? 0.14 : 0.09)
+      colorToRgba(primaryColor, tintAlpha)
+    );
+    root.style.setProperty(
+      "--accent-tint-strong",
+      colorToRgba(primaryColor, strongTintAlpha)
     );
     root.style.setProperty(
       "--accent-border",
-      colorToRgba(accentColor, theme === "dark" ? 0.3 : 0.2)
+      colorToRgba(primaryColor, borderAlpha)
     );
     root.style.setProperty(
       "--moved-border",
-      colorToRgba(accentColor, theme === "dark" ? 0.72 : 0.48)
+      colorToRgba(primaryColor, theme === "dark" ? 0.72 : 0.48)
     );
     root.style.setProperty(
       "--moved-bg",
-      mixColors(movedSurface, accentColor, theme === "dark" ? 0.1 : 0.06)
+      mixColors(movedSurface, primaryColor, theme === "dark" ? 0.1 : 0.06)
     );
     root.style.setProperty(
       "--moved-shadow",
-      colorToRgba(accentColor, theme === "dark" ? 0.16 : 0.12)
+      colorToRgba(primaryColor, theme === "dark" ? 0.16 : 0.12)
     );
-    localStorage.setItem("student-hub-accent", accentColor);
-  }, [accentColor, theme]);
+  }, [themeColors, theme]);
 
   useEffect(() => {
     const completedTimestamps = tasks
@@ -1663,6 +1730,7 @@ function App() {
     [
       "student-hub-theme",
       "student-hub-accent",
+      "student-hub-theme-colors",
       "student-hub-density",
       "student-hub-home-layout",
       "student-hub-right-rail",
@@ -1672,7 +1740,7 @@ function App() {
     ].forEach((storageKey) => localStorage.removeItem(storageKey));
 
     setTheme("light");
-    setAccentColor(DEFAULT_ACCENT_COLOR);
+    setThemeColors(DEFAULT_THEME_COLORS);
     setLayoutDensity("compact");
     setHomeLayout("focused");
     setRightRailVisible(true);
@@ -1694,7 +1762,7 @@ function App() {
     setShowAddTask(false);
     setNewTask(createEmptyTaskDraft());
     setTheme("light");
-    setAccentColor(DEFAULT_ACCENT_COLOR);
+    setThemeColors(DEFAULT_THEME_COLORS);
     setLayoutDensity("compact");
     setHomeLayout("focused");
     setRightRailVisible(true);
@@ -1910,8 +1978,10 @@ function App() {
             setSubjects={setSubjects}
             theme={theme}
             setTheme={setTheme}
-            accentColor={accentColor}
-            setAccentColor={setAccentColor}
+            themeColors={themeColors}
+            setThemeColors={setThemeColors}
+            saveThemeColorPreferences={saveThemeColorPreferences}
+            themeColorPalettes={themeColorPalettes}
             layoutDensity={layoutDensity}
             setLayoutDensity={setLayoutDensity}
             homeLayout={homeLayout}

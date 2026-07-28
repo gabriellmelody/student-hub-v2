@@ -482,6 +482,24 @@
   line-height: 1;
 }
 
+.sidebar-account-menu .sidebar-account-theme-link {
+  min-height: 28px;
+  justify-content: center;
+  padding: 5px 8px;
+  border: 1px solid var(--accent-secondary-border);
+  border-radius: 10px;
+  background: var(--accent-secondary-tint);
+  color: var(--accent-secondary-soft);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.sidebar-account-menu .sidebar-account-theme-link:hover {
+  background: var(--accent-secondary-tint-strong);
+  color: var(--accent-secondary-soft);
+}
+
 .sidebar-account-menu-divider {
   height: 1px;
   margin: 7px 6px;

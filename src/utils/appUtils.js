@@ -75,6 +75,13 @@ export function createDemoTasks() {
 
 export const COMPLETED_TASK_RETENTION_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_ACCENT_COLOR = "#6366f1";
+export const THEME_COLORS_STORAGE_KEY = "student-hub-theme-colors";
+export const DEFAULT_THEME_COLORS = {
+  paletteId: "student-hub",
+  primary: DEFAULT_ACCENT_COLOR,
+  secondary: "#0ea5e9",
+  tertiary: "#a855f7",
+};
 export const DEFAULT_SUBJECT_COLOR = "#2563eb";
 export const WIDGET_CONFIG_STORAGE_KEY = "student-hub-widget-config";
 export const TODAY_PLAN_STORAGE_KEY = "student-hub-today-plan";
@@ -94,6 +101,7 @@ export const STUDENT_HUB_STORAGE_KEYS = [
   "student-hub-student-profile",
   "student-hub-theme",
   "student-hub-accent",
+  THEME_COLORS_STORAGE_KEY,
   "student-hub-density",
   "student-hub-home-layout",
   "student-hub-right-rail",
@@ -143,6 +151,50 @@ export const accentColorPresets = [
   { label: "Orange", value: "#d76516" },
   { label: "Pink", value: "#d9468c" },
   { label: "Red", value: "#dc3f4f" },
+];
+export const themeColorPalettes = [
+  {
+    id: "student-hub",
+    label: "Student Hub",
+    primary: DEFAULT_THEME_COLORS.primary,
+    secondary: DEFAULT_THEME_COLORS.secondary,
+    tertiary: DEFAULT_THEME_COLORS.tertiary,
+  },
+  {
+    id: "ocean",
+    label: "Ocean",
+    primary: "#2563eb",
+    secondary: "#0891b2",
+    tertiary: "#14b8a6",
+  },
+  {
+    id: "forest",
+    label: "Forest",
+    primary: "#16865c",
+    secondary: "#65a30d",
+    tertiary: "#0f766e",
+  },
+  {
+    id: "lavender",
+    label: "Lavender",
+    primary: "#7c3aed",
+    secondary: "#db2777",
+    tertiary: "#6366f1",
+  },
+  {
+    id: "sunset",
+    label: "Sunset",
+    primary: "#d76516",
+    secondary: "#dc3f4f",
+    tertiary: "#f59e0b",
+  },
+  {
+    id: "monochrome",
+    label: "Monochrome",
+    primary: "#52525b",
+    secondary: "#71717a",
+    tertiary: "#a1a1aa",
+  },
 ];
 export const rightRailWidgetOptions = [
   { value: "clock", label: "Clock" },
@@ -282,6 +334,73 @@ export function normalizeHexColor(value) {
   return /^#[0-9a-f]{6}$/i.test(value || "")
     ? value.toLowerCase()
     : DEFAULT_ACCENT_COLOR;
+}
+
+export function normalizeThemeColors(savedThemeColors = null, legacyAccent = null) {
+  const savedPalette = themeColorPalettes.find(
+    (palette) => palette.id === savedThemeColors?.paletteId
+  );
+  const fallback = savedPalette || DEFAULT_THEME_COLORS;
+  const legacyPrimary = legacyAccent ? normalizeHexColor(legacyAccent) : null;
+
+  return {
+    paletteId:
+      savedThemeColors?.paletteId && savedThemeColors.paletteId !== fallback.id
+        ? "custom"
+        : fallback.paletteId || fallback.id || "student-hub",
+    primary: normalizeHexColor(
+      savedThemeColors?.primary || legacyPrimary || fallback.primary
+    ),
+    secondary: normalizeHexColor(savedThemeColors?.secondary || fallback.secondary),
+    tertiary: normalizeHexColor(savedThemeColors?.tertiary || fallback.tertiary),
+  };
+}
+
+export function loadThemeColors() {
+  if (typeof window === "undefined") return DEFAULT_THEME_COLORS;
+
+  try {
+    const savedThemeColors = JSON.parse(
+      window.localStorage.getItem(THEME_COLORS_STORAGE_KEY) || "null"
+    );
+
+    return normalizeThemeColors(
+      savedThemeColors,
+      window.localStorage.getItem("student-hub-accent")
+    );
+  } catch {
+    return normalizeThemeColors(
+      null,
+      window.localStorage.getItem("student-hub-accent")
+    );
+  }
+}
+
+export function saveThemeColors(themeColors) {
+  if (typeof window === "undefined") return;
+
+  const normalizedThemeColors = normalizeThemeColors(themeColors);
+
+  window.localStorage.setItem(
+    THEME_COLORS_STORAGE_KEY,
+    JSON.stringify(normalizedThemeColors)
+  );
+  window.localStorage.setItem("student-hub-accent", normalizedThemeColors.primary);
+}
+
+export function getThemeColorWarnings(themeColors) {
+  const normalizedThemeColors = normalizeThemeColors(themeColors);
+
+  return ["primary", "secondary", "tertiary"].reduce((warnings, role) => {
+    const color = normalizedThemeColors[role];
+    const contrastText = getContrastText(color);
+
+    if (getContrastRatio(color, contrastText) < 4.5) {
+      warnings[role] = "This colour may be difficult to read.";
+    }
+
+    return warnings;
+  }, {});
 }
 
 export function hexToRgb(hex) {
