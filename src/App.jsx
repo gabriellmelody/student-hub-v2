@@ -1951,6 +1951,7 @@ function App() {
             nextTask={nextTask}
             openEveningPlanner={openEveningPlanner}
             hasPlan={planBlocks.length > 0}
+            planBlocks={planBlocks}
             setActivePage={setActivePage}
             homeLayout={homeLayout}
             widgetConfig={widgetConfig}
