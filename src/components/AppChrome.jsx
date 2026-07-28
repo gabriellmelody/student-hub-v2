@@ -185,6 +185,22 @@ function AccountMenu({
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("") || "S";
+  const backgroundStrengthLabel =
+    themeColors.backgroundStrength === "medium"
+      ? "Medium"
+      : themeColors.backgroundStrength === "subtle"
+        ? "Subtle"
+        : "Off";
+  const backgroundSummary =
+    themeColors.backgroundMode === "match-theme"
+      ? `Match theme · ${backgroundStrengthLabel}`
+      : themeColors.backgroundMode === "custom"
+        ? `Custom · ${backgroundStrengthLabel}`
+        : "Neutral";
+  const backgroundPreview =
+    themeColors.backgroundMode === "match-theme"
+      ? themeColors.primary
+      : themeColors.backgroundTone || themeColors.primary;
 
   const personalisationPanel = (
     <div
@@ -250,6 +266,26 @@ function AccountMenu({
         <span>
           <strong>Theme colours</strong>
           <small>Open full settings</small>
+        </span>
+        <span aria-hidden="true">›</span>
+      </button>
+
+      <button
+        type="button"
+        className="sidebar-account-background-row"
+        role="menuitem"
+        onClick={() =>
+          chooseItem(() => openSettings("appearance", "theme-background-setting"))
+        }
+      >
+        <span
+          className="sidebar-account-background-swatch"
+          aria-hidden="true"
+          style={{ "--account-background-preview": backgroundPreview }}
+        />
+        <span>
+          <strong>Background</strong>
+          <small>{backgroundSummary}</small>
         </span>
         <span aria-hidden="true">›</span>
       </button>

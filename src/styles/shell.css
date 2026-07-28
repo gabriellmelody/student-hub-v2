@@ -515,7 +515,8 @@
   color: var(--accent-soft);
 }
 
-.sidebar-account-theme-colours-row {
+.sidebar-account-theme-colours-row,
+.sidebar-account-background-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -533,23 +534,28 @@
 }
 
 .sidebar-account-theme-colours-row:hover,
-.sidebar-account-theme-colours-row:focus-visible {
+.sidebar-account-theme-colours-row:focus-visible,
+.sidebar-account-background-row:hover,
+.sidebar-account-background-row:focus-visible {
   background: var(--accent-secondary-tint-strong);
   color: var(--text);
 }
 
-.sidebar-account-theme-colours-row > span:nth-child(2) {
+.sidebar-account-theme-colours-row > span:nth-child(2),
+.sidebar-account-background-row > span:nth-child(2) {
   display: grid;
   min-width: 0;
   gap: 2px;
 }
 
-.sidebar-account-theme-colours-row strong {
+.sidebar-account-theme-colours-row strong,
+.sidebar-account-background-row strong {
   color: var(--text);
   font-size: 0.74rem;
 }
 
-.sidebar-account-theme-colours-row small {
+.sidebar-account-theme-colours-row small,
+.sidebar-account-background-row small {
   color: var(--text-muted);
   font-size: 0.62rem;
 }
@@ -572,6 +578,19 @@
 
 .sidebar-account-theme-preview i:first-child {
   margin-left: 0;
+}
+
+.sidebar-account-background-swatch {
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--surface-raised);
+  border-radius: 50%;
+  background: color-mix(
+    in srgb,
+    var(--account-background-preview) 28%,
+    var(--surface-raised)
+  );
+  box-shadow: 0 0 0 1px var(--border-soft);
 }
 
 .sidebar-account-menu-divider {

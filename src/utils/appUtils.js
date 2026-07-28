@@ -81,7 +81,20 @@ export const DEFAULT_THEME_COLORS = {
   primary: DEFAULT_ACCENT_COLOR,
   secondary: "#0ea5e9",
   tertiary: "#a855f7",
+  backgroundMode: "neutral",
+  backgroundTone: DEFAULT_ACCENT_COLOR,
+  backgroundStrength: "off",
 };
+export const themeBackgroundModes = [
+  { value: "neutral", label: "Neutral" },
+  { value: "match-theme", label: "Match theme" },
+  { value: "custom", label: "Custom tone" },
+];
+export const themeBackgroundStrengths = [
+  { value: "off", label: "Off" },
+  { value: "subtle", label: "Subtle" },
+  { value: "medium", label: "Medium" },
+];
 export const DEFAULT_SUBJECT_COLOR = "#2563eb";
 export const WIDGET_CONFIG_STORAGE_KEY = "student-hub-widget-config";
 export const TODAY_PLAN_STORAGE_KEY = "student-hub-today-plan";
@@ -342,6 +355,18 @@ export function normalizeThemeColors(savedThemeColors = null, legacyAccent = nul
   );
   const fallback = savedPalette || DEFAULT_THEME_COLORS;
   const legacyPrimary = legacyAccent ? normalizeHexColor(legacyAccent) : null;
+  const savedBackgroundMode = savedThemeColors?.backgroundMode;
+  const backgroundMode = ["neutral", "match-theme", "custom"].includes(
+    savedBackgroundMode
+  )
+    ? savedBackgroundMode
+    : DEFAULT_THEME_COLORS.backgroundMode;
+  const savedBackgroundStrength = savedThemeColors?.backgroundStrength;
+  const backgroundStrength = ["off", "subtle", "medium"].includes(
+    savedBackgroundStrength
+  )
+    ? savedBackgroundStrength
+    : DEFAULT_THEME_COLORS.backgroundStrength;
 
   return {
     paletteId:
@@ -353,6 +378,11 @@ export function normalizeThemeColors(savedThemeColors = null, legacyAccent = nul
     ),
     secondary: normalizeHexColor(savedThemeColors?.secondary || fallback.secondary),
     tertiary: normalizeHexColor(savedThemeColors?.tertiary || fallback.tertiary),
+    backgroundMode,
+    backgroundTone: normalizeHexColor(
+      savedThemeColors?.backgroundTone || DEFAULT_THEME_COLORS.backgroundTone
+    ),
+    backgroundStrength,
   };
 }
 
@@ -476,6 +506,152 @@ export function getReadableAccent(accentColor, theme) {
 export function colorToRgba(color, alpha) {
   const { red, green, blue } = hexToRgb(color);
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+const neutralBackgroundTheme = {
+  dark: {
+    canvas: "#0d0d0f",
+    sidebar: "#111113",
+    surface: "#18181b",
+    elevated: "#202024",
+    subtle: "#151518",
+    input: "#09090b",
+    hover: "#24242a",
+    control: "#27272a",
+    controlHover: "#323238",
+    border: "#232326",
+    borderRaised: "#2b2b30",
+    borderStrong: "#3f3f46",
+    borderHover: "#52525b",
+    indicatorBorder: "#34343b",
+    borderSoft: "rgba(255, 255, 255, 0.075)",
+  },
+  light: {
+    canvas: "#f7f7f5",
+    sidebar: "#f1f1ef",
+    surface: "#ffffff",
+    elevated: "#fafaf9",
+    subtle: "#f5f5f3",
+    input: "#ffffff",
+    hover: "#f4f4f1",
+    control: "#f0f0ed",
+    controlHover: "#e8e8e4",
+    border: "#e7e7e3",
+    borderRaised: "#e9e9e5",
+    borderStrong: "#d5d5cf",
+    borderHover: "#c4c4bd",
+    indicatorBorder: "#deded9",
+    borderSoft: "rgba(41, 41, 39, 0.075)",
+  },
+};
+
+export function deriveThemeBackground(themeColors, resolvedTheme = "light") {
+  const normalizedThemeColors = normalizeThemeColors(themeColors);
+  const appearance = resolvedTheme === "dark" ? "dark" : "light";
+  const neutralTheme = neutralBackgroundTheme[appearance];
+  const strength = normalizedThemeColors.backgroundStrength;
+
+  if (normalizedThemeColors.backgroundMode === "neutral" || strength === "off") {
+    return {
+      ...neutralTheme,
+      mode: normalizedThemeColors.backgroundMode,
+      strength,
+      tone:
+        normalizedThemeColors.backgroundMode === "match-theme"
+          ? normalizedThemeColors.primary
+          : normalizedThemeColors.backgroundTone,
+    };
+  }
+
+  const tone =
+    normalizedThemeColors.backgroundMode === "match-theme"
+      ? normalizedThemeColors.primary
+      : normalizedThemeColors.backgroundTone;
+  const medium = strength === "medium";
+
+  if (appearance === "dark") {
+    return {
+      mode: normalizedThemeColors.backgroundMode,
+      strength,
+      tone,
+      canvas: mixColors(neutralTheme.canvas, tone, medium ? 0.13 : 0.08),
+      sidebar: mixColors(neutralTheme.sidebar, tone, medium ? 0.14 : 0.09),
+      surface: mixColors(neutralTheme.surface, tone, medium ? 0.11 : 0.07),
+      elevated: mixColors(neutralTheme.elevated, tone, medium ? 0.12 : 0.08),
+      subtle: mixColors(neutralTheme.subtle, tone, medium ? 0.1 : 0.06),
+      input: mixColors(neutralTheme.input, tone, medium ? 0.08 : 0.05),
+      hover: mixColors(neutralTheme.hover, tone, medium ? 0.16 : 0.1),
+      control: mixColors(neutralTheme.control, tone, medium ? 0.13 : 0.08),
+      controlHover: mixColors(
+        neutralTheme.controlHover,
+        tone,
+        medium ? 0.15 : 0.1
+      ),
+      border: mixColors(neutralTheme.border, tone, medium ? 0.18 : 0.11),
+      borderRaised: mixColors(
+        neutralTheme.borderRaised,
+        tone,
+        medium ? 0.19 : 0.12
+      ),
+      borderStrong: mixColors(
+        neutralTheme.borderStrong,
+        tone,
+        medium ? 0.2 : 0.13
+      ),
+      borderHover: mixColors(
+        neutralTheme.borderHover,
+        tone,
+        medium ? 0.2 : 0.14
+      ),
+      indicatorBorder: mixColors(
+        neutralTheme.indicatorBorder,
+        tone,
+        medium ? 0.18 : 0.12
+      ),
+      borderSoft: colorToRgba(tone, medium ? 0.18 : 0.12),
+    };
+  }
+
+  return {
+    mode: normalizedThemeColors.backgroundMode,
+    strength,
+    tone,
+    canvas: mixColors(neutralTheme.canvas, tone, medium ? 0.09 : 0.05),
+    sidebar: mixColors(neutralTheme.sidebar, tone, medium ? 0.1 : 0.06),
+    surface: mixColors(neutralTheme.surface, tone, medium ? 0.035 : 0.018),
+    elevated: mixColors(neutralTheme.elevated, tone, medium ? 0.05 : 0.03),
+    subtle: mixColors(neutralTheme.subtle, tone, medium ? 0.08 : 0.05),
+    input: mixColors(neutralTheme.input, tone, medium ? 0.025 : 0.012),
+    hover: mixColors(neutralTheme.hover, tone, medium ? 0.1 : 0.06),
+    control: mixColors(neutralTheme.control, tone, medium ? 0.09 : 0.05),
+    controlHover: mixColors(
+      neutralTheme.controlHover,
+      tone,
+      medium ? 0.11 : 0.07
+    ),
+    border: mixColors(neutralTheme.border, tone, medium ? 0.16 : 0.1),
+    borderRaised: mixColors(
+      neutralTheme.borderRaised,
+      tone,
+      medium ? 0.15 : 0.09
+    ),
+    borderStrong: mixColors(
+      neutralTheme.borderStrong,
+      tone,
+      medium ? 0.16 : 0.1
+    ),
+    borderHover: mixColors(
+      neutralTheme.borderHover,
+      tone,
+      medium ? 0.14 : 0.09
+    ),
+    indicatorBorder: mixColors(
+      neutralTheme.indicatorBorder,
+      tone,
+      medium ? 0.14 : 0.09
+    ),
+    borderSoft: colorToRgba(tone, medium ? 0.12 : 0.08),
+  };
 }
 
 export function normalizeTask(task, fallbackSource = "manual") {

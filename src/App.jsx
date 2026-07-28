@@ -23,6 +23,7 @@ import {
   normalizeThemeColors,
   loadThemeColors,
   saveThemeColors,
+  deriveThemeBackground,
   mixColors,
   getContrastText,
   getReadableAccent,
@@ -393,9 +394,18 @@ function App() {
     setRightRailEditMode(true);
   }
 
-  function openSettings(view = "hub") {
+  function openSettings(view = "hub", sectionId = "") {
     setSettingsView(view);
     setActivePage("settings");
+
+    if (sectionId) {
+      window.setTimeout(() => {
+        document.getElementById(sectionId)?.scrollIntoView({
+          block: "center",
+          behavior: "smooth",
+        });
+      }, 0);
+    }
   }
 
   function updateRightRailVisibility(nextVisible) {
@@ -503,12 +513,34 @@ function App() {
     const primaryColor = themeColors.primary;
     const secondaryColor = themeColors.secondary;
     const tertiaryColor = themeColors.tertiary;
+    const backgroundTheme = deriveThemeBackground(themeColors, resolvedTheme);
     const readableAccent = getReadableAccent(primaryColor, resolvedTheme);
     const hoverTarget = resolvedTheme === "dark" ? "#ffffff" : "#18181b";
     const movedSurface = resolvedTheme === "dark" ? "#202024" : "#ffffff";
     const tintAlpha = resolvedTheme === "dark" ? 0.14 : 0.09;
     const strongTintAlpha = resolvedTheme === "dark" ? 0.2 : 0.14;
     const borderAlpha = resolvedTheme === "dark" ? 0.3 : 0.2;
+
+    root.style.setProperty("--background-canvas", backgroundTheme.canvas);
+    root.style.setProperty("--background-surface", backgroundTheme.surface);
+    root.style.setProperty("--background-elevated", backgroundTheme.elevated);
+    root.style.setProperty("--background-border", backgroundTheme.border);
+    root.style.setProperty("--background-hover", backgroundTheme.hover);
+    root.style.setProperty("--app-bg", backgroundTheme.canvas);
+    root.style.setProperty("--sidebar-bg", backgroundTheme.sidebar);
+    root.style.setProperty("--surface", backgroundTheme.surface);
+    root.style.setProperty("--surface-raised", backgroundTheme.elevated);
+    root.style.setProperty("--surface-subtle", backgroundTheme.subtle);
+    root.style.setProperty("--surface-input", backgroundTheme.input);
+    root.style.setProperty("--surface-hover", backgroundTheme.hover);
+    root.style.setProperty("--control-bg", backgroundTheme.control);
+    root.style.setProperty("--control-hover", backgroundTheme.controlHover);
+    root.style.setProperty("--border", backgroundTheme.border);
+    root.style.setProperty("--border-raised", backgroundTheme.borderRaised);
+    root.style.setProperty("--border-strong", backgroundTheme.borderStrong);
+    root.style.setProperty("--border-hover", backgroundTheme.borderHover);
+    root.style.setProperty("--indicator-border", backgroundTheme.indicatorBorder);
+    root.style.setProperty("--border-soft", backgroundTheme.borderSoft);
 
     function setThemeRoleVariables(role, color) {
       root.style.setProperty(`--accent-${role}`, color);

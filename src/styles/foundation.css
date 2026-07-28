@@ -8,6 +8,11 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --app-bg: #0d0d0f;
+  --background-canvas: #0d0d0f;
+  --background-surface: #18181b;
+  --background-elevated: #202024;
+  --background-border: #232326;
+  --background-hover: #24242a;
   --sidebar-bg: #111113;
   --surface: #18181b;
   --surface-raised: #202024;
@@ -93,6 +98,11 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --app-bg: #f7f7f5;
+  --background-canvas: #f7f7f5;
+  --background-surface: #ffffff;
+  --background-elevated: #fafaf9;
+  --background-border: #e7e7e3;
+  --background-hover: #f4f4f1;
   --sidebar-bg: #f1f1ef;
   --surface: #ffffff;
   --surface-raised: #fafaf9;

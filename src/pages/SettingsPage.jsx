@@ -3,6 +3,8 @@ import {
   subjectCourseSystems,
   subjectLevels,
   DEFAULT_THEME_COLORS,
+  themeBackgroundModes,
+  themeBackgroundStrengths,
   getThemeColorWarnings,
   createSubjectDraft,
   findSubjectProfile,
@@ -561,6 +563,18 @@ function SettingsPage({
   );
   const selectedThemePaletteId = matchingThemePalette?.id || "custom";
   const hasCustomThemePalette = selectedThemePaletteId === "custom";
+  const selectedBackgroundMode =
+    themeBackgroundModes.find(
+      (mode) => mode.value === themeColorDraft.backgroundMode
+    ) || themeBackgroundModes[0];
+  const selectedBackgroundStrength =
+    themeBackgroundStrengths.find(
+      (strength) => strength.value === themeColorDraft.backgroundStrength
+    ) || themeBackgroundStrengths[0];
+  const backgroundTonePreview =
+    themeColorDraft.backgroundMode === "match-theme"
+      ? themeColorDraft.primary
+      : themeColorDraft.backgroundTone;
 
   function previewThemeColors(nextThemeColors) {
     const normalizedThemeColors = normalizeThemeColors(nextThemeColors);
@@ -572,6 +586,7 @@ function SettingsPage({
 
   function chooseThemePalette(palette) {
     previewThemeColors({
+      ...themeColorDraft,
       paletteId: palette.id,
       primary: palette.primary,
       secondary: palette.secondary,
@@ -584,6 +599,26 @@ function SettingsPage({
       ...themeColorDraft,
       paletteId: "custom",
       [role]: nextColor,
+    });
+  }
+
+  function updateThemeBackgroundField(field, nextValue) {
+    previewThemeColors({
+      ...themeColorDraft,
+      [field]: nextValue,
+    });
+  }
+
+  function updateThemeBackgroundMode(nextMode) {
+    previewThemeColors({
+      ...themeColorDraft,
+      backgroundMode: nextMode,
+      backgroundStrength:
+        nextMode === "neutral"
+          ? "off"
+          : themeColorDraft.backgroundStrength === "off"
+            ? "subtle"
+            : themeColorDraft.backgroundStrength,
     });
   }
 
@@ -905,11 +940,120 @@ function SettingsPage({
                   )}
                 </div>
 
+                <div
+                  className="theme-background-setting"
+                  id="theme-background-setting"
+                >
+                  <div className="theme-background-heading">
+                    <span>
+                      <strong>Background</strong>
+                      <small>
+                        {selectedBackgroundMode.label}
+                        {themeColorDraft.backgroundMode !== "neutral"
+                          ? ` · ${selectedBackgroundStrength.label}`
+                          : ""}
+                      </small>
+                    </span>
+                    <span
+                      className="theme-background-current-swatch"
+                      aria-hidden="true"
+                      style={{ "--background-tone-preview": backgroundTonePreview }}
+                    />
+                  </div>
+
+                  <div
+                    className="theme-background-options"
+                    role="group"
+                    aria-label="Background mode"
+                  >
+                    {themeBackgroundModes.map((mode) => {
+                      const isSelected =
+                        themeColorDraft.backgroundMode === mode.value;
+
+                      return (
+                        <button
+                          key={mode.value}
+                          type="button"
+                          className={isSelected ? "active" : ""}
+                          aria-pressed={isSelected}
+                          onClick={() => updateThemeBackgroundMode(mode.value)}
+                        >
+                          <span aria-hidden="true">
+                            {isSelected ? "✓" : ""}
+                          </span>
+                          <strong>{mode.label}</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {themeColorDraft.backgroundMode === "custom" && (
+                    <label className="theme-background-tone-picker">
+                      <span>
+                        <strong>Custom tone</strong>
+                        <small>{themeColorDraft.backgroundTone}</small>
+                      </span>
+                      <input
+                        type="color"
+                        value={themeColorDraft.backgroundTone}
+                        aria-label="Custom background tone"
+                        onChange={(event) =>
+                          updateThemeBackgroundField(
+                            "backgroundTone",
+                            event.target.value
+                          )
+                        }
+                      />
+                    </label>
+                  )}
+
+                  {themeColorDraft.backgroundMode !== "neutral" && (
+                    <div
+                      className="theme-background-strength"
+                      role="group"
+                      aria-label="Tint strength"
+                    >
+                      <span>Tint strength</span>
+                      <div>
+                        {themeBackgroundStrengths.map((strength) => {
+                          const isSelected =
+                            themeColorDraft.backgroundStrength ===
+                            strength.value;
+
+                          return (
+                            <button
+                              key={strength.value}
+                              type="button"
+                              className={isSelected ? "active" : ""}
+                              aria-pressed={isSelected}
+                              onClick={() =>
+                                updateThemeBackgroundField(
+                                  "backgroundStrength",
+                                  strength.value
+                                )
+                              }
+                            >
+                              <span aria-hidden="true">
+                                {isSelected ? "✓" : ""}
+                              </span>
+                              {strength.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="theme-colour-preview" aria-label="Theme preview">
                   <span>Preview</span>
+                  <div className="theme-colour-preview-card">
+                    <strong>Card surface</strong>
+                    <small>Elevated note</small>
+                  </div>
                   <button type="button">Primary action</button>
-                  <strong>Supporting highlight</strong>
-                  <small>Subtle tag</small>
+                  <strong>Secondary</strong>
+                  <small>Tertiary</small>
                 </div>
 
                 <div className="theme-colour-actions">
@@ -935,7 +1079,7 @@ function SettingsPage({
                       disabled={!themeColorDirty}
                       onClick={saveThemeColorChanges}
                     >
-                      Save colours
+                      Save theme
                     </button>
                   </span>
                 </div>
