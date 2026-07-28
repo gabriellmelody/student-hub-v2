@@ -679,23 +679,16 @@ function HomePage({
 
       {homeEditMode && (
         <section className="home-edit-bar" aria-label="Home edit mode">
-          <div className="home-edit-primary-actions">
+          <div className="home-edit-left-actions">
             <button
               type="button"
-              className="primary-button"
+              className="secondary-button"
               onClick={() => setShowAddWidget(true)}
             >
               Add Widgets
             </button>
-            <button
-              type="button"
-              className="quiet-button"
-              onClick={resetHomeLayout}
-            >
-              Reset Home
-            </button>
+            <span>Editing Home</span>
           </div>
-          <p className="home-edit-status">Editing Home · drag to reorder.</p>
           <div className="home-edit-actions">
             <button
               type="button"
@@ -968,6 +961,15 @@ function HomeWidgetControls({
     <div className="home-widget-edit-controls">
       <button
         type="button"
+        className="home-widget-remove-button"
+        aria-label={`Remove ${widget.label} from Home`}
+        title={`Remove ${widget.label}`}
+        onClick={() => onRemove(widget.id)}
+      >
+        <span aria-hidden="true">−</span>
+      </button>
+      <button
+        type="button"
         className="home-widget-drag-handle"
         draggable
         aria-label={`Move ${widget.label}. Use drag or arrow keys.`}
@@ -977,14 +979,6 @@ function HomeWidgetControls({
         onKeyDown={(event) => onDragHandleKeyDown(event, widget.id)}
       >
         <span aria-hidden="true">⠿</span>
-      </button>
-      <button
-        type="button"
-        className="home-widget-hide-button"
-        aria-label={`Remove ${widget.label} from Home`}
-        onClick={() => onRemove(widget.id)}
-      >
-        Remove
       </button>
     </div>
   );

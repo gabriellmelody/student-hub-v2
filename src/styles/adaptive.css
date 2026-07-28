@@ -200,10 +200,6 @@
     padding: var(--density-panel-header-gap) 2px 0;
   }
 
-  .home-widget.home-widget--editing {
-    padding-top: var(--density-mobile-panel-padding);
-  }
-
   .home-widget.home-widget--summary.home-widget--editing {
     padding: var(--density-mobile-panel-padding)
       var(--density-mobile-panel-padding)
@@ -211,23 +207,37 @@
   }
 
   .home-widget-edit-controls {
-    position: static;
+    position: absolute;
+    inset: 0;
     max-width: none;
-    margin-bottom: 9px;
   }
 
   .home-edit-bar {
-    align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .home-edit-status {
-    text-align: left;
-  }
-
-  .home-edit-primary-actions,
+  .home-edit-left-actions,
   .home-edit-actions {
     justify-content: space-between;
+  }
+
+  .home-edit-left-actions > span {
+    order: -1;
+    width: 100%;
+  }
+
+  .home-widget-remove-button {
+    top: -8px;
+    left: -8px;
+    width: 32px;
+    height: 32px;
+  }
+
+  .home-widget-drag-handle {
+    top: 8px;
+    left: 32px;
+    width: 30px;
+    height: 30px;
   }
 
   .home-widget-drawer {
