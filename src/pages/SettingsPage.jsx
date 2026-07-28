@@ -500,6 +500,7 @@ function SettingsPage({
     normalizeThemeColors(themeColors)
   );
   const [themeColorDirty, setThemeColorDirty] = useState(false);
+  const [themeAdvancedOpen, setThemeAdvancedOpen] = useState(false);
   const themeColorDirtyRef = useRef(false);
   const savedThemeColorRef = useRef(savedThemeColorSnapshot);
   const setThemeColorsRef = useRef(setThemeColors);
@@ -537,6 +538,12 @@ function SettingsPage({
   }, [settingsView, themeColorDirty, savedThemeColorSnapshot]);
 
   useEffect(() => {
+    if (settingsView === "appearance") {
+      setThemeAdvancedOpen(false);
+    }
+  }, [settingsView]);
+
+  useEffect(() => {
     return () => {
       if (themeColorDirtyRef.current) {
         setThemeColorsRef.current(savedThemeColorRef.current);
@@ -546,6 +553,14 @@ function SettingsPage({
 
   const themeColorWarnings = getThemeColorWarnings(themeColorDraft);
   const themeColorHasWarnings = Object.keys(themeColorWarnings).length > 0;
+  const matchingThemePalette = themeColorPalettes.find((palette) =>
+    ["primary", "secondary", "tertiary"].every(
+      (role) =>
+        palette[role].toLowerCase() === themeColorDraft[role].toLowerCase()
+    )
+  );
+  const selectedThemePaletteId = matchingThemePalette?.id || "custom";
+  const hasCustomThemePalette = selectedThemePaletteId === "custom";
 
   function previewThemeColors(nextThemeColors) {
     const normalizedThemeColors = normalizeThemeColors(nextThemeColors);
@@ -741,7 +756,7 @@ function SettingsPage({
               </div>
 
               <div className="theme-toggle" role="group" aria-label="Theme">
-                {["light", "dark"].map((option) => (
+                {["light", "dark", "system"].map((option) => (
                   <button
                     key={option}
                     type="button"
@@ -749,7 +764,11 @@ function SettingsPage({
                     aria-pressed={theme === option}
                     onClick={() => setTheme(option)}
                   >
-                    {option === "light" ? "Light" : "Dark"}
+                    {option === "light"
+                      ? "Light"
+                      : option === "dark"
+                        ? "Dark"
+                        : "System"}
                   </button>
                 ))}
               </div>
@@ -758,7 +777,7 @@ function SettingsPage({
             <div className="theme-setting accent-setting theme-colour-setting">
               <div>
                 <h3>Theme colours</h3>
-                <p>Choose a balanced palette, then fine-tune it if you want.</p>
+                <p>Palettes customise the three colour roles together.</p>
               </div>
 
               <div className="theme-colour-controls">
@@ -766,57 +785,123 @@ function SettingsPage({
                   className="theme-palette-grid"
                   aria-label="Theme colour palettes"
                 >
-                  {themeColorPalettes.map((palette) => (
-                    <button
-                      key={palette.id}
-                      type="button"
-                      className={
-                        themeColorDraft.paletteId === palette.id ? "active" : ""
-                      }
-                      aria-pressed={themeColorDraft.paletteId === palette.id}
-                      onClick={() => chooseThemePalette(palette)}
-                    >
-                      <span className="theme-palette-swatches" aria-hidden="true">
-                        <i style={{ "--swatch-color": palette.primary }} />
-                        <i style={{ "--swatch-color": palette.secondary }} />
-                        <i style={{ "--swatch-color": palette.tertiary }} />
-                      </span>
-                      <strong>{palette.label}</strong>
-                    </button>
-                  ))}
+                  {themeColorPalettes.map((palette) => {
+                    const isSelected = selectedThemePaletteId === palette.id;
+
+                    return (
+                      <button
+                        key={palette.id}
+                        type="button"
+                        className={isSelected ? "active" : ""}
+                        aria-pressed={isSelected}
+                        aria-label={`${palette.label} palette${
+                          isSelected ? ", selected" : ""
+                        }`}
+                        onClick={() => chooseThemePalette(palette)}
+                      >
+                        <span
+                          className="theme-palette-swatches"
+                          aria-hidden="true"
+                        >
+                          <i style={{ "--swatch-color": palette.primary }} />
+                          <i style={{ "--swatch-color": palette.secondary }} />
+                          <i style={{ "--swatch-color": palette.tertiary }} />
+                        </span>
+                        <span className="theme-palette-name">
+                          <strong>{palette.label}</strong>
+                          {isSelected && <small>Selected</small>}
+                        </span>
+                        <span
+                          className="theme-palette-check"
+                          aria-hidden="true"
+                        >
+                          {isSelected ? "✓" : ""}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div className="theme-colour-advanced">
-                  <div>
-                    <strong>Advanced colours</strong>
-                    <p>Primary controls main actions. Secondary and tertiary stay subtle.</p>
-                  </div>
-
-                  {[
-                    ["primary", "Primary"],
-                    ["secondary", "Secondary"],
-                    ["tertiary", "Tertiary"],
-                  ].map(([role, label]) => (
-                    <label className="theme-colour-picker" key={role}>
-                      <span>
-                        <strong>{label}</strong>
-                        <small>{themeColorDraft[role]}</small>
-                      </span>
-                      <input
-                        type="color"
-                        value={themeColorDraft[role]}
-                        aria-label={`${label} theme colour`}
-                        onChange={(event) =>
-                          updateThemeColorRole(role, event.target.value)
-                        }
+                {hasCustomThemePalette && (
+                  <div
+                    className="theme-palette-custom-state active"
+                    role="status"
+                    aria-label="Custom palette selected"
+                  >
+                    <span
+                      className="theme-palette-swatches"
+                      aria-hidden="true"
+                    >
+                      <i style={{ "--swatch-color": themeColorDraft.primary }} />
+                      <i
+                        style={{ "--swatch-color": themeColorDraft.secondary }}
                       />
-                    </label>
-                  ))}
+                      <i style={{ "--swatch-color": themeColorDraft.tertiary }} />
+                    </span>
+                    <span>
+                      <strong>Custom</strong>
+                      <small>Selected</small>
+                    </span>
+                    <span aria-hidden="true">✓</span>
+                  </div>
+                )}
+
+                <div className="theme-colour-advanced">
+                  <button
+                    type="button"
+                    className="theme-colour-advanced-toggle"
+                    aria-expanded={themeAdvancedOpen}
+                    aria-controls="advanced-theme-colours"
+                    onClick={() =>
+                      setThemeAdvancedOpen((currentOpen) => !currentOpen)
+                    }
+                  >
+                    <span>
+                      <strong>Advanced colours</strong>
+                      <small>Edit Primary, Secondary, and Tertiary individually.</small>
+                    </span>
+                    <span
+                      className={`theme-colour-advanced-chevron ${
+                        themeAdvancedOpen ? "open" : ""
+                      }`}
+                      aria-hidden="true"
+                    >
+                      ⌄
+                    </span>
+                  </button>
 
                   {themeColorHasWarnings && (
                     <p className="theme-colour-warning">
                       {Object.values(themeColorWarnings)[0]}
                     </p>
+                  )}
+
+                  {themeAdvancedOpen && (
+                    <div
+                      id="advanced-theme-colours"
+                      className="theme-colour-advanced-body"
+                    >
+                      {[
+                        ["primary", "Primary"],
+                        ["secondary", "Secondary"],
+                        ["tertiary", "Tertiary"],
+                      ].map(([role, label]) => (
+                        <label className="theme-colour-picker" key={role}>
+                          <span>
+                            <strong>{label}</strong>
+                            <small>{themeColorDraft[role]}</small>
+                          </span>
+                          <input
+                            type="color"
+                            value={themeColorDraft[role]}
+                            aria-label={`${label} theme colour`}
+                            onChange={(event) =>
+                              updateThemeColorRole(role, event.target.value)
+                            }
+                          />
+                        </label>
+                      ))}
+                    </div>
                   )}
                 </div>
 
