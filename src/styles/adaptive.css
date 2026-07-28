@@ -221,12 +221,32 @@
     flex-direction: column;
   }
 
-  .home-edit-actions {
-    justify-content: flex-end;
+  .home-edit-status {
+    text-align: left;
   }
 
-  .home-add-widget-list {
-    grid-template-columns: 1fr;
+  .home-edit-primary-actions,
+  .home-edit-actions {
+    justify-content: space-between;
+  }
+
+  .home-widget-drawer {
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
+    width: auto;
+    max-height: min(82dvh, 620px);
+    border-radius: 20px;
+  }
+
+  .home-add-widget-card {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .home-add-widget-card > button {
+    grid-column: 1 / -1;
+    justify-self: end;
   }
 
   .settings-hub-grid {

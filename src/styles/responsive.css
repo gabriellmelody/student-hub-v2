@@ -43,6 +43,12 @@
     animation: none;
   }
 
+  .home-widget-drawer,
+  .home-save-toast,
+  .home-save-check {
+    animation: none;
+  }
+
   .right-rail-widget--editing,
   .right-rail-drag-handle {
     transition: none;

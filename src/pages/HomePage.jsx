@@ -9,9 +9,37 @@ import {
   getEffortLabel,
   getEffortClass,
   getTaskSignalBadges,
+  getDefaultWidgetConfig,
   getWidgetsForArea,
 } from "../utils/appUtils.js";
 import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
+
+const HOME_WIDGET_CATALOG = [
+  {
+    type: "nextFocus",
+    title: "Tasks",
+    description: "Your next task and a shortcut to To-do.",
+    icon: "✓",
+  },
+  {
+    type: "todayPlan",
+    title: "Today’s Plan",
+    description: "Create or return to your study plan.",
+    icon: "▤",
+  },
+  {
+    type: "schoolCalendar",
+    title: "Calendar",
+    description: "Upcoming due dates and schedule preview.",
+    icon: "▦",
+  },
+  {
+    type: "progress",
+    title: "Progress",
+    description: "Active, completed, and no-deadline task counts.",
+    icon: "◌",
+  },
+];
 
 function HomePage({
   tasks,
@@ -32,6 +60,8 @@ function HomePage({
   setHomeEditMode,
 }) {
   const [showAddWidget, setShowAddWidget] = useState(false);
+  const [draftWidgetConfig, setDraftWidgetConfig] = useState(null);
+  const [homeSaved, setHomeSaved] = useState(false);
   const [draggedWidgetId, setDraggedWidgetId] = useState(null);
   const [dragOverWidgetId, setDragOverWidgetId] = useState(null);
   const [droppedWidgetId, setDroppedWidgetId] = useState(null);
@@ -41,19 +71,59 @@ function HomePage({
   const activeDragIdRef = useRef(null);
   const lastDragOverIdRef = useRef(null);
   const dropSettleTimerRef = useRef(null);
-  const homeWidgets = getWidgetsForArea(widgetConfig, "home");
-  const hiddenHomeWidgets = getWidgetsForArea(
-    widgetConfig,
+  const homeSavedTimerRef = useRef(null);
+  const activeWidgetConfig =
+    homeEditMode && draftWidgetConfig ? draftWidgetConfig : widgetConfig;
+  const homeWidgets = getWidgetsForArea(activeWidgetConfig, "home");
+  const allHomeWidgets = getWidgetsForArea(
+    activeWidgetConfig,
     "home",
     false
-  ).filter((widget) => !widget.visible);
+  );
 
   useEffect(() => {
     return () => {
       cancelAnimationFrame(flipAnimationFrameRef.current);
       clearTimeout(dropSettleTimerRef.current);
+      clearTimeout(homeSavedTimerRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (homeEditMode) {
+      setDraftWidgetConfig(widgetConfig);
+      setShowAddWidget(false);
+      setHomeSaved(false);
+      return;
+    }
+
+    setDraftWidgetConfig(null);
+    setShowAddWidget(false);
+    resetDragState();
+  }, [homeEditMode, widgetConfig]);
+
+  useEffect(() => {
+    if (!showAddWidget) return undefined;
+
+    function closeDrawer(event) {
+      if (event.key === "Escape") setShowAddWidget(false);
+    }
+
+    document.addEventListener("keydown", closeDrawer);
+
+    return () => document.removeEventListener("keydown", closeDrawer);
+  }, [showAddWidget]);
+
+  useEffect(() => {
+    if (!homeSaved) return undefined;
+
+    clearTimeout(homeSavedTimerRef.current);
+    homeSavedTimerRef.current = setTimeout(() => {
+      setHomeSaved(false);
+    }, 2400);
+
+    return () => clearTimeout(homeSavedTimerRef.current);
+  }, [homeSaved]);
 
   useLayoutEffect(() => {
     const firstRects = flipFirstRectsRef.current;
@@ -103,7 +173,7 @@ function HomePage({
     }, 280);
 
     return () => clearTimeout(cleanupTimer);
-  }, [widgetConfig]);
+  }, [activeWidgetConfig]);
 
   function setWidgetNode(widgetId, node) {
     if (node) {
@@ -132,7 +202,7 @@ function HomePage({
       return;
     }
 
-    setWidgetConfig((currentConfig) => {
+    updateActiveWidgetConfig((currentConfig) => {
       const orderedHomeWidgets = getWidgetsForArea(
         currentConfig,
         "home",
@@ -321,26 +391,77 @@ function HomePage({
   }
 
   function updateWidget(widgetId, updates) {
-    setWidgetConfig((currentConfig) =>
+    updateActiveWidgetConfig((currentConfig) =>
       currentConfig.map((widget) =>
         widget.id === widgetId ? { ...widget, ...updates } : widget
       )
     );
   }
 
-  function finishEditing() {
+  function updateActiveWidgetConfig(updater) {
+    if (homeEditMode) {
+      setDraftWidgetConfig((currentDraft) => {
+        const currentConfig = currentDraft || widgetConfig;
+        return typeof updater === "function" ? updater(currentConfig) : updater;
+      });
+      return;
+    }
+
+    setWidgetConfig(updater);
+  }
+
+  function addWidget(widgetId) {
+    updateActiveWidgetConfig((currentConfig) => {
+      const visibleHomeWidgets = getWidgetsForArea(currentConfig, "home");
+      const nextOrder =
+        visibleHomeWidgets.length > 0
+          ? Math.max(...visibleHomeWidgets.map((widget) => widget.order)) + 1
+          : 0;
+
+      return currentConfig.map((widget) =>
+        widget.id === widgetId
+          ? { ...widget, visible: true, order: nextOrder }
+          : widget
+      );
+    });
+  }
+
+  function removeWidget(widgetId) {
+    updateWidget(widgetId, { visible: false });
+  }
+
+  function resetHomeLayout() {
+    const defaultHomeWidgets = getDefaultWidgetConfig(homeLayout).filter(
+      (widget) => widget.area === "home"
+    );
+
+    updateActiveWidgetConfig((currentConfig) => [
+      ...currentConfig.filter((widget) => widget.area !== "home"),
+      ...defaultHomeWidgets,
+    ]);
+  }
+
+  function saveHomeLayout() {
+    if (draftWidgetConfig) setWidgetConfig(draftWidgetConfig);
+
     setShowAddWidget(false);
+    setHomeEditMode(false);
+    setHomeSaved(true);
+  }
+
+  function cancelHomeEditing() {
+    setShowAddWidget(false);
+    setDraftWidgetConfig(null);
     setHomeEditMode(false);
   }
 
-  function renderWidgetControls(widget, supportsSize = false) {
+  function renderWidgetControls(widget) {
     if (!homeEditMode) return null;
 
     return (
       <HomeWidgetControls
         widget={widget}
-        supportsSize={supportsSize}
-        onUpdate={updateWidget}
+        onRemove={removeWidget}
         onDragStart={handleWidgetDragStart}
         onDragEnd={resetDragState}
         onDragHandleKeyDown={handleDragHandleKeyDown}
@@ -448,7 +569,7 @@ function HomePage({
           setActivePage={setActivePage}
           editMode={homeEditMode}
           widget={widget}
-          onUpdateWidget={updateWidget}
+          onRemoveWidget={removeWidget}
           dragClassName={getWidgetDragClass(widget.id)}
           dragProps={getWidgetDragProps(widget.id)}
           onDragStart={handleWidgetDragStart}
@@ -467,7 +588,7 @@ function HomePage({
           key={widget.id}
           {...getWidgetDragProps(widget.id)}
         >
-          {renderWidgetControls(widget, true)}
+          {renderWidgetControls(widget)}
           <div className="home-widget-header">
             <h3>Overview</h3>
             <span>{progressPercentage}% complete</span>
@@ -502,7 +623,7 @@ function HomePage({
           key={widget.id}
           {...getWidgetDragProps(widget.id)}
         >
-          {renderWidgetControls(widget, true)}
+          {renderWidgetControls(widget)}
           <div className="home-widget-header progress-header">
             <h3>Progress</h3>
             <span>{progressPercentage}%</span>
@@ -542,25 +663,51 @@ function HomePage({
         <p>See what matters and plan when you’re ready.</p>
       </header>
 
+      {!homeEditMode && (
+        <div className="home-page-actions">
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setHomeEditMode(true)}
+          >
+            Edit Home
+          </button>
+        </div>
+      )}
+
+      {homeSaved && <HomeSavedToast onClose={() => setHomeSaved(false)} />}
+
       {homeEditMode && (
         <section className="home-edit-bar" aria-label="Home edit mode">
-          <div>
-            <strong>Editing Home Page</strong>
-            <p>Drag to reorder, then hide or resize your blocks.</p>
+          <div className="home-edit-primary-actions">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => setShowAddWidget(true)}
+            >
+              Add Widgets
+            </button>
+            <button
+              type="button"
+              className="quiet-button"
+              onClick={resetHomeLayout}
+            >
+              Reset Home
+            </button>
           </div>
+          <p className="home-edit-status">Editing Home · drag to reorder.</p>
           <div className="home-edit-actions">
             <button
               type="button"
               className="secondary-button"
-              disabled={hiddenHomeWidgets.length === 0}
-              onClick={() => setShowAddWidget((currentValue) => !currentValue)}
+              onClick={cancelHomeEditing}
             >
-              Add widget
+              Cancel
             </button>
             <button
               type="button"
               className="primary-button"
-              onClick={finishEditing}
+              onClick={saveHomeLayout}
             >
               Done
             </button>
@@ -568,39 +715,68 @@ function HomePage({
         </section>
       )}
 
-      {homeEditMode && showAddWidget && hiddenHomeWidgets.length > 0 && (
-        <section className="home-add-widget-panel" aria-label="Add Home widget">
-          <div className="home-add-widget-heading">
-            <div>
-              <strong>Add a widget</strong>
-              <p>Restore a hidden block to its saved position.</p>
+      {homeEditMode && showAddWidget && (
+        <>
+          <div
+            className="home-widget-drawer-backdrop"
+            aria-hidden="true"
+            onClick={() => setShowAddWidget(false)}
+          />
+          <aside className="home-widget-drawer" aria-label="Add Home widgets">
+            <div className="home-add-widget-heading">
+              <div>
+                <strong>Add Widgets</strong>
+                <p>Choose what appears on Home.</p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close Add Widgets drawer"
+                onClick={() => setShowAddWidget(false)}
+              >
+                ×
+              </button>
+            </div>
+            <div className="home-add-widget-list">
+              {HOME_WIDGET_CATALOG.map((catalogWidget) => {
+                const widget = allHomeWidgets.find(
+                  (homeWidget) => homeWidget.type === catalogWidget.type
+                );
+                const isVisible = widget?.visible === true;
+
+                if (!widget) return null;
+
+                return (
+                  <article className="home-add-widget-card" key={widget.id}>
+                    <span className="home-add-widget-icon" aria-hidden="true">
+                      {catalogWidget.icon}
+                    </span>
+                    <span>
+                      <strong>{catalogWidget.title}</strong>
+                      <small>{catalogWidget.description}</small>
+                      <em>{isVisible ? "On Home" : "Available"}</em>
+                    </span>
+                    <button
+                      type="button"
+                      className={isVisible ? "secondary-button" : "primary-button"}
+                      onClick={() =>
+                        isVisible ? removeWidget(widget.id) : addWidget(widget.id)
+                      }
+                    >
+                      {isVisible ? "Remove" : "Add"}
+                    </button>
+                  </article>
+                );
+              })}
             </div>
             <button
               type="button"
-              aria-label="Close add widget panel"
-              onClick={() => setShowAddWidget(false)}
+              className="home-reset-drawer-action"
+              onClick={resetHomeLayout}
             >
-              ×
+              Reset Home
             </button>
-          </div>
-          <div className="home-add-widget-list">
-            {hiddenHomeWidgets.map((widget) => (
-              <button
-                type="button"
-                key={widget.id}
-                onClick={() => updateWidget(widget.id, { visible: true })}
-              >
-                <span>
-                  <strong>{widget.label}</strong>
-                  <small>
-                    {widget.size === "expanded" ? "Expanded" : "Compact"}
-                  </small>
-                </span>
-                <span aria-hidden="true">+</span>
-              </button>
-            ))}
-          </div>
-        </section>
+          </aside>
+        </>
       )}
 
       <section
@@ -621,7 +797,7 @@ function HomePage({
                 <h3>No Home widgets selected.</h3>
                 <p>
                   {homeEditMode
-                    ? "Add a widget to bring blocks back."
+                    ? "Add widgets to build your Home."
                     : "Edit Home to bring widgets back."}
                 </p>
               </div>
@@ -640,7 +816,7 @@ function HomeCalendarWidget({
   setActivePage,
   editMode,
   widget,
-  onUpdateWidget,
+  onRemoveWidget,
   dragClassName,
   dragProps,
   onDragStart,
@@ -678,8 +854,7 @@ function HomeCalendarWidget({
       {editMode && (
         <HomeWidgetControls
           widget={widget}
-          supportsSize
-          onUpdate={onUpdateWidget}
+          onRemove={onRemoveWidget}
           onDragStart={onDragStart}
           onDragEnd={onDragEnd}
           onDragHandleKeyDown={onDragHandleKeyDown}
@@ -784,8 +959,7 @@ function HomeCalendarWidget({
 
 function HomeWidgetControls({
   widget,
-  supportsSize,
-  onUpdate,
+  onRemove,
   onDragStart,
   onDragEnd,
   onDragHandleKeyDown,
@@ -804,32 +978,31 @@ function HomeWidgetControls({
       >
         <span aria-hidden="true">⠿</span>
       </button>
-      {supportsSize && (
-        <div
-          className="home-widget-size-toggle"
-          role="group"
-          aria-label={`${widget.label} size`}
-        >
-          {["compact", "expanded"].map((size) => (
-            <button
-              type="button"
-              key={size}
-              className={widget.size === size ? "active" : ""}
-              aria-pressed={widget.size === size}
-              onClick={() => onUpdate(widget.id, { size })}
-            >
-              {size === "compact" ? "Compact" : "Expanded"}
-            </button>
-          ))}
-        </div>
-      )}
       <button
         type="button"
         className="home-widget-hide-button"
-        onClick={() => onUpdate(widget.id, { visible: false })}
+        aria-label={`Remove ${widget.label} from Home`}
+        onClick={() => onRemove(widget.id)}
       >
-        Hide
+        Remove
       </button>
+    </div>
+  );
+}
+
+function HomeSavedToast({ onClose }) {
+  return (
+    <div className="home-save-toast" role="status" aria-live="polite">
+      <button type="button" aria-label="Dismiss Home saved message" onClick={onClose}>
+        ×
+      </button>
+      <div className="home-save-check" aria-hidden="true">
+        <span>✓</span>
+      </div>
+      <div>
+        <strong>Home saved</strong>
+        <p>Your widget layout is saved on this device.</p>
+      </div>
     </div>
   );
 }
