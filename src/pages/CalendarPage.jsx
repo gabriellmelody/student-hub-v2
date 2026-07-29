@@ -275,6 +275,27 @@ function getCalendarDeadlineSummaryLabel(events) {
   return formatDueCount(events.length, { compact: true });
 }
 
+function getCalendarMobileDeadlineSummaryLabel(events) {
+  const assessmentCount = events.filter(isAssessmentCalendarEvent).length;
+
+  if (assessmentCount === 1 && events.length === 1) return "1 test";
+  if (assessmentCount > 0) return `${events.length} + test`;
+
+  return `${events.length} due`;
+}
+
+function formatSelectedTaskCount(count) {
+  if (count === 0) return "No tasks due";
+  if (count === 1) return "1 due";
+  return `${count} due`;
+}
+
+function formatSelectedEventCount(count) {
+  if (count === 0) return "No events";
+  if (count === 1) return "1 event";
+  return `${count} events`;
+}
+
 function getCalendarDeadlineSummaryStyle(events, colourMode) {
   if (colourMode === "subject") {
     const subjectEvent = events.find((event) => event.subjectColour);
@@ -743,23 +764,41 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                   <span className="calendar-day-number">{day.date.getDate()}</span>
 
                   {visibleEventBars.length > 0 && (
-                    <span className="calendar-google-events" aria-hidden="true">
-                      {visibleEventBars.map((event) => (
-                        <span
-                          className="calendar-google-event-bar"
-                          key={`${event.calendarId}-${event.id}-${day.dateKey}`}
-                          style={getGoogleCalendarEventStyle(event)}
-                          title={`${event.title} · ${event.calendarName}`}
-                        >
-                          <span>{event.title}</span>
-                        </span>
-                      ))}
-                      {hiddenEventCount > 0 && (
-                        <small className="calendar-google-event-overflow">
-                          +{hiddenEventCount} more
-                        </small>
-                      )}
-                    </span>
+                    <>
+                      <span className="calendar-google-events" aria-hidden="true">
+                        {visibleEventBars.map((event) => (
+                          <span
+                            className="calendar-google-event-bar"
+                            key={`${event.calendarId}-${event.id}-${day.dateKey}`}
+                            style={getGoogleCalendarEventStyle(event)}
+                            title={`${event.title} · ${event.calendarName}`}
+                          >
+                            <span>{event.title}</span>
+                          </span>
+                        ))}
+                        {hiddenEventCount > 0 && (
+                          <small className="calendar-google-event-overflow">
+                            +{hiddenEventCount} more
+                          </small>
+                        )}
+                      </span>
+
+                      <span className="calendar-google-event-mobile-summary" aria-hidden="true">
+                        {visibleEventBars.map((event) => (
+                          <i
+                            key={`${event.calendarId}-${event.id}-${day.dateKey}-dot`}
+                            style={getGoogleCalendarEventStyle(event)}
+                          />
+                        ))}
+                        {hiddenEventCount > 0 ? (
+                          <small>+{hiddenEventCount}</small>
+                        ) : dayGoogleCalendarEvents.length > 1 ? (
+                          <small>{dayGoogleCalendarEvents.length}</small>
+                        ) : (
+                          <small>Event</small>
+                        )}
+                      </span>
+                    </>
                   )}
 
                   {activeDayEvents.length > 0 && (
@@ -787,8 +826,11 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                             aria-hidden="true"
                           />
                         )}
-                        <span>
+                        <span className="calendar-deadline-label-desktop">
                           {getCalendarDeadlineSummaryLabel(activeDayEvents)}
+                        </span>
+                        <span className="calendar-deadline-label-mobile">
+                          {getCalendarMobileDeadlineSummaryLabel(activeDayEvents)}
                         </span>
                       </span>
                     </span>
@@ -812,11 +854,8 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               </h3>
             </div>
             <div className="calendar-detail-actions">
-              <span>{formatDueCount(selectedEvents.length, { compact: true })}</span>
-              <span>
-                {selectedScheduleEvents.length} event
-                {selectedScheduleEvents.length === 1 ? "" : "s"}
-              </span>
+              <span>{formatSelectedTaskCount(selectedEvents.length)}</span>
+              <span>{formatSelectedEventCount(selectedScheduleEvents.length)}</span>
               <button type="button" onClick={openCalendarTaskForm}>
                 + Add task
               </button>

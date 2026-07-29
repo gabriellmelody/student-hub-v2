@@ -202,6 +202,10 @@
   overflow: hidden;
 }
 
+.calendar-google-event-mobile-summary {
+  display: none;
+}
+
 .calendar-google-event-bar {
   min-width: 0;
   display: flex;
@@ -250,10 +254,15 @@
   white-space: nowrap;
 }
 
-.calendar-deadline-summary > span:last-child {
+.calendar-deadline-label-desktop,
+.calendar-deadline-label-mobile {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.calendar-deadline-label-mobile {
+  display: none;
 }
 
 .calendar-deadline-summary.has-assessment {
@@ -665,37 +674,296 @@
 }
 
 @media (max-width: 700px) {
+  .calendar-page {
+    gap: 12px;
+  }
+
   .calendar-page-header {
     align-items: stretch;
     flex-direction: column;
+    gap: 10px;
+    margin-bottom: 0;
+  }
+
+  .calendar-page-header h2 {
+    font-size: 1.36rem;
+  }
+
+  .calendar-page-header p:not(.eyebrow) {
+    margin-top: 5px;
+    font-size: 0.82rem;
+    line-height: 1.4;
   }
 
   .calendar-colour-toggle {
     width: 100%;
+    gap: 5px;
+    padding: 7px;
+    border-radius: 14px;
   }
 
   .calendar-colour-toggle > div {
     width: 100%;
+    gap: 5px;
   }
 
   .calendar-colour-toggle button {
     flex: 1;
+    min-height: 40px;
+    padding: 7px 9px;
   }
 
-  .calendar-google-event-bar span {
+  .calendar-layout {
+    gap: 12px;
+  }
+
+  .calendar-month-panel,
+  .calendar-detail-panel {
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .calendar-page .calendar-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .calendar-toolbar h3 {
+    font-size: 1rem;
+  }
+
+  .calendar-navigation {
+    display: grid;
+    grid-template-columns: 42px minmax(74px, 1fr) 42px;
+    gap: 5px;
+  }
+
+  .calendar-page .calendar-navigation {
+    width: auto;
+  }
+
+  .calendar-navigation button {
+    min-width: 0;
+    min-height: 42px;
+    padding: 7px 8px;
+  }
+
+  .calendar-weekdays {
+    font-size: 0.58rem;
+  }
+
+  .calendar-weekdays span {
+    padding: 4px 1px;
+  }
+
+  .calendar-grid {
+    border-radius: 12px;
+  }
+
+  .calendar-day {
+    min-height: 72px;
+    gap: 3px;
+    padding: 5px 4px;
+  }
+
+  .calendar-day-number {
+    width: 20px;
+    height: 20px;
+    font-size: 0.64rem;
+  }
+
+  .calendar-google-events {
+    display: none;
+  }
+
+  .calendar-google-event-mobile-summary {
+    min-width: 0;
+    display: inline-flex;
+    width: fit-content;
     max-width: 100%;
+    align-items: center;
+    gap: 3px;
+    min-height: 15px;
+    overflow: hidden;
+  }
+
+  .calendar-google-event-mobile-summary i {
+    width: 6px;
+    height: 6px;
+    flex: 0 0 auto;
+    border-radius: 999px;
+    background: var(--calendar-event-color, var(--accent-soft));
+    box-shadow: 0 0 0 2px
+      color-mix(in srgb, var(--calendar-event-color, var(--accent-soft)) 12%, transparent);
+  }
+
+  .calendar-google-event-mobile-summary small {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 0.52rem;
+    font-weight: 800;
+    line-height: 1;
+    text-overflow: clip;
+    white-space: nowrap;
   }
 
   .calendar-task-dots {
-    margin-top: 1px;
+    min-width: 0;
+    margin-top: 0;
+  }
+
+  .calendar-deadline-summary {
+    max-width: 100%;
+    min-height: 18px;
+    gap: 3px;
+    padding: 2px 5px;
+    font-size: 0.5rem;
+    line-height: 1.1;
+  }
+
+  .calendar-deadline-label-desktop {
+    display: none;
+  }
+
+  .calendar-deadline-label-mobile {
+    display: inline;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+  }
+
+  .calendar-deadline-assessment-mark {
+    width: 5px;
+    height: 5px;
+  }
+
+  .calendar-detail-panel {
+    position: static;
+  }
+
+  .calendar-detail-header {
+    gap: 9px;
+    margin-bottom: 12px;
+    padding-bottom: 11px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .calendar-detail-header h3 {
+    font-size: 1.04rem;
+    line-height: 1.2;
+  }
+
+  .calendar-detail-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .calendar-detail-actions > span {
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+    font-size: 0.64rem;
+    text-align: center;
+  }
+
+  .calendar-detail-actions button {
+    grid-column: 1 / -1;
+    min-height: 42px;
+    justify-content: center;
+  }
+
+  .calendar-detail-section {
+    gap: 8px;
+    margin-top: 13px;
+  }
+
+  .calendar-detail-section-heading h4 {
+    font-size: 1rem;
+  }
+
+  .calendar-detail-section-heading button {
+    min-height: 38px;
+    padding: 7px 10px;
+  }
+
+  .calendar-task-list,
+  .calendar-google-event-list {
+    gap: 8px;
+  }
+
+  .calendar-task-item {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 7px;
+    border-radius: 13px;
+    padding: 10px;
+  }
+
+  .calendar-task-item small,
+  .calendar-task-item strong {
+    white-space: normal;
+  }
+
+  .calendar-task-item strong {
+    display: -webkit-box;
+    font-size: 0.9rem;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .calendar-task-status {
+    width: fit-content;
+    max-width: 100%;
+    white-space: normal;
   }
 
   .calendar-google-event-item {
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
+    gap: 6px;
+    border-radius: 13px;
+    padding: 10px;
+  }
+
+  .calendar-google-event-item strong {
+    display: -webkit-box;
+    font-size: 0.9rem;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    white-space: normal;
   }
 
   .calendar-google-event-time {
     width: fit-content;
+  }
+
+  .calendar-google-event-item small {
+    white-space: normal;
+  }
+
+  .calendar-empty-state,
+  .calendar-empty-state-compact {
+    padding: 12px;
+    border-radius: 13px;
+  }
+
+  .calendar-empty-state h3 {
+    margin-bottom: 4px;
+  }
+
+  .calendar-open-tasks {
+    min-height: 42px;
+    margin-top: 13px;
   }
 }
