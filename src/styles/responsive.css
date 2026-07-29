@@ -45,7 +45,15 @@
 
   .home-widget-drawer,
   .home-save-toast,
-  .home-save-check {
+  .home-save-check,
+  .home-intro-active .home-hero-dashboard,
+  .home-intro-active .home-next-zone,
+  .home-intro-active .home-plan-zone,
+  .home-intro-active .home-progress-track-arc,
+  .home-intro-active .home-progress-value-arc,
+  .home-intro-active .home-progress-center,
+  .home-intro-active .home-week-strip-panel,
+  .home-intro-active .home-coming-up {
     animation: none;
   }
 

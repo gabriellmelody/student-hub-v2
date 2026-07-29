@@ -105,6 +105,373 @@
   font-weight: 650;
 }
 
+.quick-links-settings {
+  width: min(900px, 100%);
+}
+
+.quick-links-panel {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.quick-links-panel-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: var(--density-panel-padding);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-subtle);
+}
+
+.quick-links-panel-intro h3,
+.quick-links-section-heading h4 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 680;
+}
+
+.quick-links-panel-intro p,
+.quick-links-section-heading p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.quick-links-panel-intro > span {
+  flex-shrink: 0;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+  font-size: 0.65rem;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.quick-links-message,
+.quick-links-error {
+  margin: var(--density-setting-padding) var(--density-panel-padding) 0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+}
+
+.quick-links-error {
+  border: 1px solid var(--effort-high-border);
+  background: var(--effort-high-bg);
+  color: var(--urgent);
+}
+
+.quick-links-section {
+  display: grid;
+  gap: 12px;
+  padding: var(--density-panel-padding);
+  border-top: 1px solid var(--border);
+}
+
+.quick-links-panel-intro + .quick-links-section,
+.quick-links-message + .quick-links-section {
+  border-top: 0;
+}
+
+.quick-links-pinned-list,
+.quick-links-custom-list {
+  display: grid;
+  gap: 8px;
+}
+
+.quick-link-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px;
+  background: var(--surface);
+}
+
+.quick-link-icon-picker-wrap {
+  position: relative;
+}
+
+.quick-link-icon-button,
+.quick-link-row-icon {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+}
+
+.quick-link-icon-button {
+  padding: 0;
+  cursor: pointer;
+}
+
+.quick-link-icon-button:hover,
+.quick-link-icon-button:focus-visible {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+
+.quick-link-icon-button svg,
+.quick-link-row-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.quick-link-icon-picker {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(300px, calc(100vw - 48px));
+  display: grid;
+  gap: 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  padding: 10px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-modal);
+}
+
+.quick-link-preset-card:nth-child(even) .quick-link-icon-picker {
+  right: 0;
+  left: auto;
+}
+
+.quick-link-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.quick-link-icon-grid button {
+  min-width: 0;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-height: 52px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 4px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.57rem;
+  line-height: 1.1;
+  cursor: pointer;
+}
+
+.quick-link-icon-grid button svg {
+  width: 17px;
+  height: 17px;
+}
+
+.quick-link-icon-grid button span {
+  overflow: hidden;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-link-icon-grid button:hover,
+.quick-link-icon-grid button:focus-visible,
+.quick-link-icon-grid button.active {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+
+.quick-link-icon-grid button.active {
+  box-shadow: 0 0 0 2px var(--accent-tint);
+}
+
+.quick-link-icon-default {
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.quick-link-icon-default:hover,
+.quick-link-icon-default:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.quick-link-label-field {
+  min-width: 0;
+}
+
+.quick-link-label-field input,
+.quick-link-powerschool-field input,
+.quick-links-custom-form input {
+  width: 100%;
+  min-height: var(--density-input-height);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  padding: var(--density-input-padding);
+  background: var(--surface-input);
+  color: var(--text);
+}
+
+.quick-link-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.quick-link-a11y {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.quick-links-empty {
+  margin: 0;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+}
+
+.quick-links-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quick-link-preset-card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  padding: 11px;
+  background: var(--surface);
+}
+
+.quick-link-preset-title {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+}
+
+.quick-link-preset-title strong,
+.quick-link-custom-copy strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 680;
+}
+
+.quick-link-preset-title small,
+.quick-link-custom-copy small {
+  display: block;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-link-powerschool-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+}
+
+.quick-link-pin-button,
+.quick-links-ai-choice button.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.quick-links-ai-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.quick-links-ai-choice button {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.quick-links-ai-choice button:not(.active):hover,
+.quick-links-ai-choice button:not(.active):focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.quick-links-custom-form {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1.4fr) auto;
+  align-items: end;
+  gap: 9px;
+}
+
+.quick-links-custom-form label,
+.quick-link-custom-icon-field {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.quick-link-custom-icon-control {
+  min-height: var(--density-input-height);
+  display: flex;
+  align-items: center;
+}
+
+.quick-links-custom-form label span,
+.quick-link-custom-icon-field > span {
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 720;
+}
+
+.quick-links-custom-form .primary-button {
+  width: auto;
+  min-width: 112px;
+}
+
+.quick-link-custom-copy {
+  min-width: 0;
+}
+
 .help-settings {
   width: min(820px, 100%);
 }
@@ -4015,6 +4382,34 @@
 }
 
 @media (max-width: 720px) {
+  .quick-links-panel-intro,
+  .quick-link-row,
+  .quick-links-custom-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quick-links-panel-intro {
+    display: grid;
+  }
+
+  .quick-links-preset-grid,
+  .quick-link-powerschool-field {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quick-link-preset-card:nth-child(even) .quick-link-icon-picker {
+    right: auto;
+    left: 0;
+  }
+
+  .quick-link-row-actions {
+    justify-content: flex-start;
+  }
+
+  .quick-links-custom-form .primary-button {
+    width: 100%;
+  }
+
   .real-classroom-modal-header,
   .real-classroom-connection-status,
   .real-classroom-tab-heading {

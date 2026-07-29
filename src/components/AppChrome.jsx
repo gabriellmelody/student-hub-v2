@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import QuickLinkIcon from "./QuickLinkIcon.jsx";
 import {
   getDaysLeft,
   formatDateKey,
   getUrgencyLabel,
   getUrgencyClass,
+  getPinnedQuickLinks,
   getWidgetsForArea,
   sortTasksForDisplay,
 } from "../utils/appUtils.js";
@@ -15,6 +17,51 @@ function NavButton({ label, icon, active, onClick }) {
       <span className="nav-icon">{icon}</span>
       <span className="nav-label">{label}</span>
     </button>
+  );
+}
+
+function QuickLinksNav({ collapsed, quickLinksPreferences, openSettings }) {
+  const pinnedLinks = getPinnedQuickLinks(quickLinksPreferences);
+
+  if (pinnedLinks.length === 0) return null;
+
+  return (
+    <section className="sidebar-quick-links" aria-label="Quick links">
+      {!collapsed && <p className="sidebar-quick-links-heading">Quick links</p>}
+
+      <div className="sidebar-quick-links-list">
+        {pinnedLinks.map((link) => (
+          <a
+            key={link.id}
+            className="sidebar-quick-link"
+            href={link.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`${link.label} opens in a new tab`}
+            aria-label={`${link.label}, external link`}
+          >
+            <span className="sidebar-quick-link-icon" aria-hidden="true">
+              <QuickLinkIcon iconId={link.iconId} />
+            </span>
+            <span className="sidebar-quick-link-label">{link.label}</span>
+            <span className="sidebar-quick-link-external" aria-hidden="true">
+              ↗
+            </span>
+          </a>
+        ))}
+      </div>
+
+      {!collapsed && (
+        <button
+          type="button"
+          className="sidebar-quick-links-manage"
+          onClick={() => openSettings("quickLinks")}
+        >
+          <span aria-hidden="true">⚙</span>
+          <span>Manage links</span>
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -1028,4 +1075,4 @@ function RightRail({
   );
 }
 
-export { AccountMenu, NavButton, RightRail };
+export { AccountMenu, NavButton, QuickLinksNav, RightRail };

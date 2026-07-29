@@ -98,6 +98,73 @@ export const themeBackgroundStrengths = [
 export const DEFAULT_SUBJECT_COLOR = "#2563eb";
 export const WIDGET_CONFIG_STORAGE_KEY = "student-hub-widget-config";
 export const TODAY_PLAN_STORAGE_KEY = "student-hub-today-plan";
+export const QUICK_LINKS_STORAGE_KEY = "student-hub-quick-links";
+export const QUICK_LINK_PIN_LIMIT = 5;
+export const quickLinkIconCatalog = [
+  { id: "globe", label: "Globe" },
+  { id: "link", label: "Link" },
+  { id: "school", label: "School" },
+  { id: "book", label: "Book" },
+  { id: "calendar", label: "Calendar" },
+  { id: "sparkles", label: "AI / Sparkles" },
+  { id: "chat", label: "Chat" },
+  { id: "chart", label: "Grades / Chart" },
+  { id: "folder", label: "Folder" },
+  { id: "document", label: "Document" },
+  { id: "video", label: "Video" },
+  { id: "mail", label: "Email" },
+  { id: "calculator", label: "Calculator" },
+  { id: "code", label: "Code" },
+  { id: "sports", label: "Sports" },
+];
+export const quickLinkPresets = [
+  {
+    id: "google-classroom",
+    label: "Google Classroom",
+    url: "https://classroom.google.com/",
+    iconId: "school",
+    type: "preset",
+  },
+  {
+    id: "google-calendar",
+    label: "Google Calendar",
+    url: "https://calendar.google.com/",
+    iconId: "calendar",
+    type: "preset",
+  },
+  {
+    id: "chatgpt",
+    label: "ChatGPT",
+    url: "https://chatgpt.com/",
+    iconId: "sparkles",
+    type: "preset",
+    aiAssistant: true,
+  },
+  {
+    id: "gemini",
+    label: "Gemini",
+    url: "https://gemini.google.com/",
+    iconId: "sparkles",
+    type: "preset",
+    aiAssistant: true,
+  },
+  {
+    id: "claude",
+    label: "Claude",
+    url: "https://claude.ai/",
+    iconId: "chat",
+    type: "preset",
+    aiAssistant: true,
+  },
+  {
+    id: "powerschool",
+    label: "PowerSchool",
+    url: "",
+    iconId: "chart",
+    type: "preset",
+    customizableUrl: true,
+  },
+];
 export const MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY =
   "student-hub-mock-classroom-course-links";
 export const MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY =
@@ -122,12 +189,211 @@ export const STUDENT_HUB_STORAGE_KEYS = [
   "student-hub-right-rail-widgets",
   WIDGET_CONFIG_STORAGE_KEY,
   TODAY_PLAN_STORAGE_KEY,
+  QUICK_LINKS_STORAGE_KEY,
   MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY,
   REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   "student-hub-hours",
   "student-hub-start-time",
 ];
+
+function normalizeQuickLinkLabel(value, fallback = "School link") {
+  const label = typeof value === "string" ? value.trim() : "";
+  return (label || fallback).slice(0, 42);
+}
+
+function normalizeQuickLinkIconId(value, fallback = "globe") {
+  const iconId = typeof value === "string" ? value.trim() : "";
+
+  return quickLinkIconCatalog.some((icon) => icon.id === iconId)
+    ? iconId
+    : fallback;
+}
+
+export function normalizeQuickLinkUrl(value) {
+  const trimmedValue = typeof value === "string" ? value.trim() : "";
+
+  if (!trimmedValue) {
+    return { ok: false, url: "", error: "Enter a website address." };
+  }
+
+  const withProtocol = /^[a-z][a-z0-9+.-]*:/i.test(trimmedValue)
+    ? trimmedValue
+    : `https://${trimmedValue}`;
+
+  try {
+    const url = new URL(withProtocol);
+
+    if (!["http:", "https:"].includes(url.protocol)) {
+      return {
+        ok: false,
+        url: "",
+        error: "Use an http or https website address.",
+      };
+    }
+
+    if (!url.hostname) {
+      return { ok: false, url: "", error: "Enter a valid website address." };
+    }
+
+    return { ok: true, url: url.href, error: "" };
+  } catch {
+    return { ok: false, url: "", error: "Enter a valid website address." };
+  }
+}
+
+function createPresetQuickLink(preset, pinned = false, pinnedOrder = null) {
+  return {
+    id: preset.id,
+    presetId: preset.id,
+    label: preset.label,
+    url: preset.url,
+    iconId: normalizeQuickLinkIconId(preset.iconId),
+    defaultIconId: normalizeQuickLinkIconId(preset.iconId),
+    type: "preset",
+    pinned,
+    pinnedOrder,
+  };
+}
+
+function getDefaultQuickLinksPreferences() {
+  const defaultPinnedIds = ["google-classroom", "google-calendar", "chatgpt"];
+
+  return {
+    version: 1,
+    aiAssistantPreference: "chatgpt",
+    links: quickLinkPresets.map((preset) =>
+      createPresetQuickLink(
+        preset,
+        defaultPinnedIds.includes(preset.id),
+        defaultPinnedIds.indexOf(preset.id) >= 0
+          ? defaultPinnedIds.indexOf(preset.id)
+          : null
+      )
+    ),
+  };
+}
+
+export function normalizeQuickLinksPreferences(preferences) {
+  const defaults = getDefaultQuickLinksPreferences();
+
+  if (!preferences || typeof preferences !== "object") return defaults;
+
+  const savedLinks = Array.isArray(preferences.links) ? preferences.links : [];
+  const savedById = new Map(
+    savedLinks
+      .filter((link) => link && typeof link === "object" && link.id)
+      .map((link) => [String(link.id), link])
+  );
+  const presetLinks = quickLinkPresets.map((preset) => {
+    const saved = savedById.get(preset.id);
+    const normalizedUrl = preset.customizableUrl
+      ? normalizeQuickLinkUrl(saved?.url || preset.url)
+      : { ok: true, url: preset.url };
+
+    return {
+      ...createPresetQuickLink(preset),
+      label: normalizeQuickLinkLabel(saved?.label, preset.label),
+      url: normalizedUrl.ok ? normalizedUrl.url : "",
+      iconId: normalizeQuickLinkIconId(saved?.iconId, preset.iconId),
+      defaultIconId: normalizeQuickLinkIconId(preset.iconId),
+      pinned: saved?.pinned === true,
+      pinnedOrder: Number.isFinite(Number(saved?.pinnedOrder))
+        ? Number(saved.pinnedOrder)
+        : null,
+    };
+  });
+  const presetIds = new Set(quickLinkPresets.map((preset) => preset.id));
+  const customLinks = savedLinks
+    .filter(
+      (link) =>
+        link &&
+        typeof link === "object" &&
+        !presetIds.has(String(link.id)) &&
+        link.type === "custom"
+    )
+    .map((link) => {
+      const normalizedUrl = normalizeQuickLinkUrl(link.url);
+
+      if (!normalizedUrl.ok) return null;
+
+      return {
+        id: String(link.id),
+        label: normalizeQuickLinkLabel(link.label, "Custom link"),
+        url: normalizedUrl.url,
+        iconId: normalizeQuickLinkIconId(link.iconId, "globe"),
+        defaultIconId: "globe",
+        type: "custom",
+        pinned: link.pinned === true,
+        pinnedOrder: Number.isFinite(Number(link.pinnedOrder))
+          ? Number(link.pinnedOrder)
+          : null,
+      };
+    })
+    .filter(Boolean);
+  const allLinks = [...presetLinks, ...customLinks];
+  const orderedPinnedIds = allLinks
+    .filter((link) => link.pinned && link.url)
+    .sort((left, right) => {
+      const leftOrder = Number.isFinite(Number(left.pinnedOrder))
+        ? Number(left.pinnedOrder)
+        : Number.MAX_SAFE_INTEGER;
+      const rightOrder = Number.isFinite(Number(right.pinnedOrder))
+        ? Number(right.pinnedOrder)
+        : Number.MAX_SAFE_INTEGER;
+
+      return leftOrder - rightOrder || left.label.localeCompare(right.label);
+    })
+    .slice(0, QUICK_LINK_PIN_LIMIT)
+    .map((link) => link.id);
+
+  return {
+    version: 1,
+    aiAssistantPreference:
+      ["chatgpt", "gemini", "claude"].includes(
+        preferences.aiAssistantPreference
+      )
+        ? preferences.aiAssistantPreference
+        : "chatgpt",
+    links: allLinks.map((link) => {
+      const pinnedOrder = orderedPinnedIds.indexOf(link.id);
+
+      return {
+        ...link,
+        pinned: pinnedOrder >= 0,
+        pinnedOrder: pinnedOrder >= 0 ? pinnedOrder : null,
+      };
+    }),
+  };
+}
+
+export function loadQuickLinksPreferences() {
+  if (typeof window === "undefined") return getDefaultQuickLinksPreferences();
+
+  try {
+    return normalizeQuickLinksPreferences(
+      JSON.parse(window.localStorage.getItem(QUICK_LINKS_STORAGE_KEY) || "null")
+    );
+  } catch {
+    return getDefaultQuickLinksPreferences();
+  }
+}
+
+export function saveQuickLinksPreferences(preferences) {
+  if (typeof window === "undefined") return;
+
+  window.localStorage.setItem(
+    QUICK_LINKS_STORAGE_KEY,
+    JSON.stringify(normalizeQuickLinksPreferences(preferences))
+  );
+}
+
+export function getPinnedQuickLinks(preferences) {
+  return normalizeQuickLinksPreferences(preferences).links
+    .filter((link) => link.pinned && link.url)
+    .sort((left, right) => left.pinnedOrder - right.pinnedOrder)
+    .slice(0, QUICK_LINK_PIN_LIMIT);
+}
 export const subjectCourseSystems = ["IB", "AP", "GCSE", "A-level", "Other"];
 export const subjectLevels = ["HL", "SL", "AP", "Standard", "Higher", "Other"];
 export const taskTypeOptions = [

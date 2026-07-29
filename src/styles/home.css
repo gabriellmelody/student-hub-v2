@@ -8,44 +8,20 @@
 }
 
 .settings-page.settings-view-hub {
-  animation-name: settings-hub-enter;
+  animation-name: page-enter;
 }
 
 .settings-page.settings-view-appearance,
 .settings-page.settings-view-subjects,
 .settings-page.settings-view-data,
 .settings-page.settings-view-help {
-  animation-name: settings-appearance-enter;
+  animation-name: page-enter;
 }
 
 @keyframes page-enter {
   from {
     opacity: 0;
-    transform: translateY(6px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes settings-hub-enter {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes settings-appearance-enter {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
+    transform: translateY(7px);
   }
 
   to {
@@ -1204,6 +1180,124 @@
   box-shadow: var(--shadow-card);
 }
 
+.home-intro-active .home-hero-dashboard {
+  animation: home-hero-surface-enter 180ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.home-intro-active .home-next-zone {
+  animation: home-zone-enter-left 420ms cubic-bezier(0.22, 1, 0.36, 1) 80ms
+    both;
+}
+
+.home-intro-active .home-plan-zone {
+  animation: home-zone-enter-right 420ms cubic-bezier(0.22, 1, 0.36, 1) 80ms
+    both;
+}
+
+.home-intro-active .home-progress-track-arc {
+  animation: home-track-reveal 520ms ease-out 120ms both;
+}
+
+.home-intro-active .home-progress-value-arc {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: home-arc-draw 580ms cubic-bezier(0.22, 1, 0.36, 1) 120ms both;
+}
+
+.home-intro-active .home-progress-center {
+  animation: home-progress-copy-enter 360ms cubic-bezier(0.22, 1, 0.36, 1)
+    300ms both;
+}
+
+.home-intro-active .home-week-strip-panel {
+  animation: home-lower-section-enter 360ms cubic-bezier(0.22, 1, 0.36, 1)
+    450ms both;
+}
+
+.home-intro-active .home-coming-up {
+  animation: home-lower-section-enter 360ms cubic-bezier(0.22, 1, 0.36, 1)
+    560ms both;
+}
+
+@keyframes home-hero-surface-enter {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes home-zone-enter-left {
+  from {
+    opacity: 0;
+    transform: translateX(-16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes home-zone-enter-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes home-track-reveal {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes home-arc-draw {
+  from {
+    stroke-dashoffset: 100;
+  }
+
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes home-progress-copy-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes home-lower-section-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .home-section-heading {
   display: flex;
   align-items: center;
@@ -1409,6 +1503,20 @@
 }
 
 @media (max-width: 640px) {
+  .home-intro-active .home-next-zone,
+  .home-intro-active .home-plan-zone,
+  .home-intro-active .home-progress-center,
+  .home-intro-active .home-week-strip-panel,
+  .home-intro-active .home-coming-up {
+    animation-duration: 260ms;
+    animation-delay: 80ms;
+  }
+
+  .home-intro-active .home-progress-value-arc {
+    animation-duration: 420ms;
+    animation-delay: 80ms;
+  }
+
   .home-hero-dashboard {
     border-radius: 22px;
     padding: 16px;

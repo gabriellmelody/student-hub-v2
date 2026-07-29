@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   getDaysLeft,
   formatDateKey,
@@ -12,6 +13,7 @@ import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const HOME_INTRO_SESSION_KEY = "studentHubHomeIntroPlayed";
 
 function HomePage({
   tasks,
@@ -21,6 +23,7 @@ function HomePage({
   planBlocks = [],
   setActivePage,
 }) {
+  const [playHomeIntro] = useState(shouldPlayHomeIntro);
   const today = getStartOfDay(new Date());
   const todayKey = formatDateKey(today);
   const weekStart = getMonday(today);
@@ -95,7 +98,11 @@ function HomePage({
   };
 
   return (
-    <div className="page home-fixed-dashboard">
+    <div
+      className={`page home-fixed-dashboard ${
+        playHomeIntro ? "home-intro-active" : ""
+      }`}
+    >
       <header className="page-header">
         <h2>Your school day</h2>
       </header>
@@ -295,6 +302,21 @@ function HomePage({
   );
 }
 
+function shouldPlayHomeIntro() {
+  if (typeof window === "undefined") return false;
+
+  try {
+    if (window.sessionStorage.getItem(HOME_INTRO_SESSION_KEY) === "true") {
+      return false;
+    }
+
+    window.sessionStorage.setItem(HOME_INTRO_SESSION_KEY, "true");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function WeeklyProgressArc({
   completed,
   left,
@@ -333,8 +355,18 @@ function WeeklyProgressArc({
         role="img"
         aria-hidden="true"
       >
-        <path className="home-progress-track-arc" d={trackPath} />
-        {progressPath && <path className="home-progress-value-arc" d={progressPath} />}
+        <path
+          className="home-progress-track-arc"
+          d={trackPath}
+          pathLength="100"
+        />
+        {progressPath && (
+          <path
+            className="home-progress-value-arc"
+            d={progressPath}
+            pathLength="100"
+          />
+        )}
       </svg>
       <div className="home-progress-center">
         {total === 0 ? (

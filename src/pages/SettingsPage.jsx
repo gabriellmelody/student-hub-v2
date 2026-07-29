@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import QuickLinkIcon from "../components/QuickLinkIcon.jsx";
 import {
   subjectCourseSystems,
   subjectLevels,
@@ -14,6 +15,11 @@ import {
   MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY,
   normalizeSubjectName,
+  QUICK_LINK_PIN_LIMIT,
+  quickLinkIconCatalog,
+  normalizeQuickLinksPreferences,
+  normalizeQuickLinkUrl,
+  quickLinkPresets,
 } from "../utils/appUtils.js";
 import {
   helpCategories,
@@ -490,6 +496,8 @@ function SettingsPage({
   archiveNoDueDateClassroomTasks,
   restoreArchivedClassroomTasks,
   updateMockClassroomCourseSubject,
+  quickLinksPreferences,
+  setQuickLinksPreferences,
   initialView = "hub",
   classroomCallbackStatus = null,
   googleCalendarCallbackStatus = null,
@@ -672,6 +680,11 @@ function SettingsPage({
       title: "Integrations",
       description: "Manage future school connections and local previews.",
     },
+    quickLinks: {
+      eyebrow: "Settings / Quick links",
+      title: "Quick links",
+      description: "Pin a few school websites in the sidebar.",
+    },
   };
   const currentViewCopy = viewCopy[settingsView];
 
@@ -744,6 +757,20 @@ function SettingsPage({
             <span>
               <strong>Help / FAQ</strong>
               <small>Guidance, local data, and common questions</small>
+            </span>
+            <span className="settings-hub-arrow" aria-hidden="true">
+              →
+            </span>
+          </button>
+
+          <button
+            type="button"
+            className="settings-hub-card"
+            onClick={() => setSettingsView("quickLinks")}
+          >
+            <span>
+              <strong>Quick links</strong>
+              <small>Pin school websites in the sidebar</small>
             </span>
             <span className="settings-hub-arrow" aria-hidden="true">
               →
@@ -1226,6 +1253,11 @@ function SettingsPage({
           updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
           classroomCallbackStatus={classroomCallbackStatus}
           googleCalendarCallbackStatus={googleCalendarCallbackStatus}
+        />
+      ) : settingsView === "quickLinks" ? (
+        <QuickLinksSettings
+          quickLinksPreferences={quickLinksPreferences}
+          setQuickLinksPreferences={setQuickLinksPreferences}
         />
       ) : (
         <HelpSettings />
@@ -4392,6 +4424,582 @@ function MockClassroomPreview({
             )}
           </div>
         </div>
+      </section>
+    </div>
+  );
+}
+
+function QuickLinksSettings({
+  quickLinksPreferences,
+  setQuickLinksPreferences,
+}) {
+  const preferences = normalizeQuickLinksPreferences(quickLinksPreferences);
+  const [customDraft, setCustomDraft] = useState({
+    label: "",
+    url: "",
+    iconId: "globe",
+  });
+  const [customError, setCustomError] = useState("");
+  const [openIconPicker, setOpenIconPicker] = useState(null);
+  const [powerSchoolDraft, setPowerSchoolDraft] = useState(
+    preferences.links.find((link) => link.id === "powerschool")?.url || ""
+  );
+  const [message, setMessage] = useState("");
+  const iconPickerRef = useRef(null);
+  const pinnedLinks = preferences.links
+    .filter((link) => link.pinned)
+    .sort((left, right) => left.pinnedOrder - right.pinnedOrder);
+  const presetLinks = preferences.links.filter((link) => link.type === "preset");
+  const customLinks = preferences.links.filter((link) => link.type === "custom");
+  const aiPresetIds = quickLinkPresets
+    .filter((preset) => preset.aiAssistant)
+    .map((preset) => preset.id);
+
+  useEffect(() => {
+    setPowerSchoolDraft(
+      preferences.links.find((link) => link.id === "powerschool")?.url || ""
+    );
+  }, [quickLinksPreferences]);
+
+  useEffect(() => {
+    if (!openIconPicker) return undefined;
+
+    function closeIconPicker(event) {
+      if (event.key === "Escape") {
+        setOpenIconPicker(null);
+        return;
+      }
+
+      if (
+        event.type === "pointerdown" &&
+        !iconPickerRef.current?.contains(event.target) &&
+        !event.target.closest?.(".quick-link-icon-picker-wrap")
+      ) {
+        setOpenIconPicker(null);
+      }
+    }
+
+    document.addEventListener("pointerdown", closeIconPicker);
+    document.addEventListener("keydown", closeIconPicker);
+
+    return () => {
+      document.removeEventListener("pointerdown", closeIconPicker);
+      document.removeEventListener("keydown", closeIconPicker);
+    };
+  }, [openIconPicker]);
+
+  function updatePreferences(updater) {
+    setQuickLinksPreferences((currentPreferences) =>
+      normalizeQuickLinksPreferences(
+        updater(normalizeQuickLinksPreferences(currentPreferences))
+      )
+    );
+  }
+
+  function updateLink(linkId, updates) {
+    updatePreferences((currentPreferences) => ({
+      ...currentPreferences,
+      links: currentPreferences.links.map((link) =>
+        link.id === linkId ? { ...link, ...updates } : link
+      ),
+    }));
+  }
+
+  function updateLinkIcon(linkId, iconId) {
+    if (linkId === "__custom-draft") {
+      setCustomDraft((currentDraft) => ({ ...currentDraft, iconId }));
+      setOpenIconPicker(null);
+      return;
+    }
+
+    updateLink(linkId, { iconId });
+    setOpenIconPicker(null);
+  }
+
+  function pinLink(linkId) {
+    const link = preferences.links.find((nextLink) => nextLink.id === linkId);
+
+    if (!link?.url) {
+      setMessage("Add a website address before pinning this link.");
+      return;
+    }
+
+    if (!link.pinned && pinnedLinks.length >= QUICK_LINK_PIN_LIMIT) {
+      setMessage(`You can pin up to ${QUICK_LINK_PIN_LIMIT} quick links.`);
+      return;
+    }
+
+    updatePreferences((currentPreferences) => {
+      const currentPinned = currentPreferences.links
+        .filter((nextLink) => nextLink.pinned)
+        .sort((left, right) => left.pinnedOrder - right.pinnedOrder);
+
+      return {
+        ...currentPreferences,
+        links: currentPreferences.links.map((nextLink) =>
+          nextLink.id === linkId
+            ? {
+                ...nextLink,
+                pinned: true,
+                pinnedOrder: currentPinned.length,
+              }
+            : nextLink
+        ),
+      };
+    });
+    setMessage("");
+  }
+
+  function unpinLink(linkId) {
+    updatePreferences((currentPreferences) => {
+      const nextLinks = currentPreferences.links.map((link) =>
+        link.id === linkId ? { ...link, pinned: false, pinnedOrder: null } : link
+      );
+      const pinnedIds = nextLinks
+        .filter((link) => link.pinned)
+        .sort((left, right) => left.pinnedOrder - right.pinnedOrder)
+        .map((link) => link.id);
+
+      return {
+        ...currentPreferences,
+        links: nextLinks.map((link) => {
+          const pinnedOrder = pinnedIds.indexOf(link.id);
+          return pinnedOrder >= 0 ? { ...link, pinnedOrder } : link;
+        }),
+      };
+    });
+    setMessage("");
+  }
+
+  function movePinnedLink(linkId, direction) {
+    const currentIndex = pinnedLinks.findIndex((link) => link.id === linkId);
+    const nextIndex = currentIndex + direction;
+
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= pinnedLinks.length) {
+      return;
+    }
+
+    const nextPinnedIds = pinnedLinks.map((link) => link.id);
+    const [movedId] = nextPinnedIds.splice(currentIndex, 1);
+    nextPinnedIds.splice(nextIndex, 0, movedId);
+
+    updatePreferences((currentPreferences) => ({
+      ...currentPreferences,
+      links: currentPreferences.links.map((link) => {
+        const pinnedOrder = nextPinnedIds.indexOf(link.id);
+        return pinnedOrder >= 0 ? { ...link, pinnedOrder } : link;
+      }),
+    }));
+  }
+
+  function chooseAiAssistant(nextAssistantId) {
+    const selectedLink = preferences.links.find(
+      (link) => link.id === nextAssistantId
+    );
+    const currentlyPinnedAi = pinnedLinks.find((link) =>
+      aiPresetIds.includes(link.id)
+    );
+    const canPinSelected =
+      selectedLink?.pinned ||
+      Boolean(currentlyPinnedAi) ||
+      pinnedLinks.length < QUICK_LINK_PIN_LIMIT;
+
+    updatePreferences((currentPreferences) => ({
+      ...currentPreferences,
+      aiAssistantPreference: nextAssistantId,
+      links: currentPreferences.links.map((link) => {
+        if (!aiPresetIds.includes(link.id)) return link;
+
+        if (link.id === nextAssistantId && canPinSelected) {
+          return {
+            ...link,
+            pinned: true,
+            pinnedOrder: currentlyPinnedAi?.pinnedOrder ?? pinnedLinks.length,
+          };
+        }
+
+        return { ...link, pinned: false, pinnedOrder: null };
+      }),
+    }));
+
+    setMessage(
+      canPinSelected
+        ? ""
+        : "Saved your AI shortcut preference. Unpin another link to show it in the sidebar."
+    );
+  }
+
+  function savePowerSchoolUrl() {
+    const normalizedUrl = normalizeQuickLinkUrl(powerSchoolDraft);
+
+    if (!normalizedUrl.ok) {
+      setMessage(normalizedUrl.error);
+      return;
+    }
+
+    updateLink("powerschool", { url: normalizedUrl.url });
+    setMessage("PowerSchool URL saved.");
+  }
+
+  function addCustomLink(event) {
+    event.preventDefault();
+    const label = customDraft.label.trim();
+    const normalizedUrl = normalizeQuickLinkUrl(customDraft.url);
+
+    if (!label) {
+      setCustomError("Enter a name.");
+      return;
+    }
+
+    if (!normalizedUrl.ok) {
+      setCustomError(normalizedUrl.error);
+      return;
+    }
+
+    if (
+      preferences.links.some(
+        (link) => link.url.toLowerCase() === normalizedUrl.url.toLowerCase()
+      )
+    ) {
+      setCustomError("That link is already listed.");
+      return;
+    }
+
+    updatePreferences((currentPreferences) => ({
+      ...currentPreferences,
+      links: [
+        ...currentPreferences.links,
+        {
+          id: `custom-${Date.now()}`,
+          label,
+          url: normalizedUrl.url,
+          iconId: customDraft.iconId || "globe",
+          defaultIconId: "globe",
+          type: "custom",
+          pinned: false,
+          pinnedOrder: null,
+        },
+      ],
+    }));
+    setCustomDraft({ label: "", url: "", iconId: "globe" });
+    setCustomError("");
+    setMessage("Custom link added.");
+  }
+
+  function removeCustomLink(linkId) {
+    updatePreferences((currentPreferences) => ({
+      ...currentPreferences,
+      links: currentPreferences.links.filter((link) => link.id !== linkId),
+    }));
+    setMessage("");
+  }
+
+  function renderIconPicker(link, pickerId) {
+    const defaultIconId = link.defaultIconId || "globe";
+
+    return (
+      <div className="quick-link-icon-picker-wrap">
+        <button
+          type="button"
+          className="quick-link-icon-button"
+          aria-label={`Choose icon for ${link.label}`}
+          aria-haspopup="menu"
+          aria-expanded={openIconPicker === pickerId}
+          onClick={() =>
+            setOpenIconPicker((currentPicker) =>
+              currentPicker === pickerId ? null : pickerId
+            )
+          }
+        >
+          <QuickLinkIcon iconId={link.iconId} />
+        </button>
+
+        {openIconPicker === pickerId && (
+          <div
+            className="quick-link-icon-picker"
+            ref={iconPickerRef}
+            role="menu"
+            aria-label={`Icon choices for ${link.label}`}
+          >
+            <div className="quick-link-icon-grid">
+              {quickLinkIconCatalog.map((icon) => (
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={link.iconId === icon.id}
+                  className={link.iconId === icon.id ? "active" : ""}
+                  key={icon.id}
+                  title={icon.label}
+                  onClick={() => updateLinkIcon(link.id, icon.id)}
+                >
+                  <QuickLinkIcon iconId={icon.id} />
+                  <span>{icon.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {link.type === "preset" && (
+              <button
+                type="button"
+                className="quick-link-icon-default"
+                onClick={() => updateLinkIcon(link.id, defaultIconId)}
+              >
+                Restore default icon
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="quick-links-settings">
+      <section className="panel quick-links-panel">
+        <div className="quick-links-panel-intro">
+          <div>
+            <h3>Sidebar shortcuts</h3>
+            <p>
+              Pin up to {QUICK_LINK_PIN_LIMIT} school websites. Links open in a
+              new tab.
+            </p>
+          </div>
+          <span>{pinnedLinks.length}/{QUICK_LINK_PIN_LIMIT} pinned</span>
+        </div>
+
+        {message && <p className="quick-links-message">{message}</p>}
+
+        <section className="quick-links-section">
+          <div className="quick-links-section-heading">
+            <h4>Pinned links</h4>
+            <p>These appear in the sidebar in this order.</p>
+          </div>
+
+          {pinnedLinks.length > 0 ? (
+            <div className="quick-links-pinned-list">
+              {pinnedLinks.map((link, index) => (
+                <div className="quick-link-row" key={link.id}>
+                  {renderIconPicker(link, `pinned-${link.id}`)}
+                  <label className="quick-link-label-field">
+                    <span className="quick-link-a11y">Display name</span>
+                    <input
+                      value={link.label}
+                      onChange={(event) =>
+                        updateLink(link.id, { label: event.target.value })
+                      }
+                    />
+                  </label>
+                  <div className="quick-link-row-actions">
+                    <button
+                      type="button"
+                      className="small-button secondary"
+                      disabled={index === 0}
+                      onClick={() => movePinnedLink(link.id, -1)}
+                    >
+                      Up
+                    </button>
+                    <button
+                      type="button"
+                      className="small-button secondary"
+                      disabled={index === pinnedLinks.length - 1}
+                      onClick={() => movePinnedLink(link.id, 1)}
+                    >
+                      Down
+                    </button>
+                    <button
+                      type="button"
+                      className="small-button secondary"
+                      onClick={() => unpinLink(link.id)}
+                    >
+                      Unpin
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="quick-links-empty">No quick links pinned yet.</p>
+          )}
+        </section>
+
+        <section className="quick-links-section">
+          <div className="quick-links-section-heading">
+            <h4>Available links</h4>
+            <p>Pick the school tools you use most.</p>
+          </div>
+
+          <div className="quick-links-preset-grid">
+            {presetLinks.map((link) => {
+              const isPowerSchool = link.id === "powerschool";
+              const canPin = Boolean(link.url);
+
+              return (
+                <div className="quick-link-preset-card" key={link.id}>
+                  <div className="quick-link-preset-title">
+                    {renderIconPicker(link, `preset-${link.id}`)}
+                    <div>
+                      <strong>{link.label}</strong>
+                      <small>
+                        {link.pinned ? "Pinned" : canPin ? "Available" : "Add URL"}
+                      </small>
+                    </div>
+                  </div>
+
+                  {isPowerSchool && (
+                    <div className="quick-link-powerschool-field">
+                      <input
+                        type="url"
+                        value={powerSchoolDraft}
+                        placeholder="https://your-school.powerschool.com"
+                        onChange={(event) =>
+                          setPowerSchoolDraft(event.target.value)
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="small-button secondary"
+                        onClick={savePowerSchoolUrl}
+                      >
+                        Save URL
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    className={
+                      link.pinned
+                        ? "small-button secondary"
+                        : "small-button quick-link-pin-button"
+                    }
+                    disabled={!link.pinned && !canPin}
+                    onClick={() =>
+                      link.pinned ? unpinLink(link.id) : pinLink(link.id)
+                    }
+                  >
+                    {link.pinned ? "Unpin" : "Pin"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="quick-links-section">
+          <div className="quick-links-section-heading">
+            <h4>AI shortcut</h4>
+            <p>This opens an external assistant. It is not Student Hub AI.</p>
+          </div>
+          <div
+            className="quick-links-ai-choice"
+            role="group"
+            aria-label="AI assistant shortcut"
+          >
+            {quickLinkPresets
+              .filter((preset) => preset.aiAssistant)
+              .map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  className={
+                    preferences.aiAssistantPreference === preset.id
+                      ? "active"
+                      : ""
+                  }
+                  aria-pressed={preferences.aiAssistantPreference === preset.id}
+                  onClick={() => chooseAiAssistant(preset.id)}
+                >
+                  {preset.label}
+                </button>
+              ))}
+          </div>
+        </section>
+
+        <section className="quick-links-section">
+          <div className="quick-links-section-heading">
+            <h4>Custom website</h4>
+            <p>Add one school site without turning this into a bookmarks page.</p>
+          </div>
+
+          <form className="quick-links-custom-form" onSubmit={addCustomLink}>
+            <div className="quick-link-custom-icon-field">
+              <span>Icon</span>
+              <div className="quick-link-custom-icon-control">
+                {renderIconPicker(
+                  {
+                    id: "__custom-draft",
+                    label: customDraft.label || "Custom website",
+                    iconId: customDraft.iconId || "globe",
+                    defaultIconId: "globe",
+                    type: "custom",
+                  },
+                  "custom-draft"
+                )}
+              </div>
+            </div>
+            <label>
+              <span>Name</span>
+              <input
+                value={customDraft.label}
+                onChange={(event) =>
+                  setCustomDraft({ ...customDraft, label: event.target.value })
+                }
+                placeholder="Library"
+              />
+            </label>
+            <label>
+              <span>Website address</span>
+              <input
+                value={customDraft.url}
+                onChange={(event) =>
+                  setCustomDraft({ ...customDraft, url: event.target.value })
+                }
+                placeholder="library.school.edu"
+              />
+            </label>
+            <button className="primary-button" type="submit">
+              Add website
+            </button>
+          </form>
+
+          {customError && (
+            <p className="quick-links-error" role="alert">
+              {customError}
+            </p>
+          )}
+
+          {customLinks.length > 0 && (
+            <div className="quick-links-custom-list">
+              {customLinks.map((link) => (
+                <div className="quick-link-row" key={link.id}>
+                  {renderIconPicker(link, `custom-${link.id}`)}
+                  <span className="quick-link-custom-copy">
+                    <strong>{link.label}</strong>
+                    <small>{link.url}</small>
+                  </span>
+                  <div className="quick-link-row-actions">
+                    <button
+                      type="button"
+                      className="small-button secondary"
+                      onClick={() =>
+                        link.pinned ? unpinLink(link.id) : pinLink(link.id)
+                      }
+                    >
+                      {link.pinned ? "Unpin" : "Pin"}
+                    </button>
+                    <button
+                      type="button"
+                      className="small-button secondary"
+                      onClick={() => removeCustomLink(link.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </section>
     </div>
   );

@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import SubjectField from "./SubjectField.jsx";
 import TaskClassificationFields from "./TaskClassificationFields.jsx";
 import TaskSourceBadge from "./TaskSourceBadge.jsx";
 import {
   findSubjectProfile,
   getDaysLeft,
-  getUrgencyLabel,
   getUrgencyClass,
   getEffortLabel,
   getEffortClass,
@@ -33,21 +33,29 @@ function TaskCard({
   onDelete,
   onUpdate,
   completed = false,
+  openMenuTaskId = null,
+  setOpenMenuTaskId,
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [menuPosition, setMenuPosition] = useState(null);
   const [draftTask, setDraftTask] = useState(() => createTaskDraft(task));
+  const optionsRef = useRef(null);
+  const menuRef = useRef(null);
+  const optionsButtonRef = useRef(null);
+  const showOptions = openMenuTaskId === task.id;
 
   function startEdit() {
     setDraftTask(createTaskDraft(task));
     setIsEditing(true);
+    setOpenMenuTaskId?.(null);
   }
 
   const daysLeft = getDaysLeft(task.dueDate);
   const urgencyClass = getUrgencyClass(daysLeft);
-  const urgencyLabel = getUrgencyLabel(daysLeft);
   const effortClass = getEffortClass(task.effort);
   const effortLabel = getEffortLabel(task.effort);
   const signalBadges = getTaskSignalBadges(task);
+  const dueLabel = completed ? "Completed" : getTaskDueLabel(daysLeft);
   const subjectProfile = findSubjectProfile(subjects, task.subject);
   const subjectStyle = subjectProfile
     ? { "--subject-color": subjectProfile.colour }
@@ -69,6 +77,66 @@ function TaskCard({
 
     setIsEditing(false);
   }
+
+  function confirmDelete() {
+    setOpenMenuTaskId?.(null);
+
+    if (window.confirm(`Delete “${task.title}”?`)) {
+      onDelete(task.id);
+    }
+  }
+
+  function updateMenuPosition() {
+    const button = optionsButtonRef.current;
+    if (!button) return;
+
+    const rect = button.getBoundingClientRect();
+    const menuWidth = 144;
+    const menuHeight = 88;
+    const safeGap = 8;
+    const left = Math.min(
+      Math.max(safeGap, rect.right - menuWidth),
+      window.innerWidth - menuWidth - safeGap
+    );
+    const preferredTop = rect.bottom + 6;
+    const top =
+      preferredTop + menuHeight > window.innerHeight - safeGap
+        ? Math.max(safeGap, rect.top - menuHeight - 6)
+        : preferredTop;
+
+    setMenuPosition({ left, top });
+  }
+
+  useEffect(() => {
+    if (!showOptions) return undefined;
+
+    updateMenuPosition();
+
+    function closeOptions(event) {
+      if (
+        !optionsRef.current?.contains(event.target) &&
+        !menuRef.current?.contains(event.target)
+      ) {
+        setOpenMenuTaskId?.(null);
+      }
+    }
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") setOpenMenuTaskId?.(null);
+    }
+
+    document.addEventListener("mousedown", closeOptions);
+    document.addEventListener("keydown", closeOnEscape);
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+
+    return () => {
+      document.removeEventListener("mousedown", closeOptions);
+      document.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [showOptions, setOpenMenuTaskId]);
 
   if (isEditing) {
     return (
@@ -154,22 +222,28 @@ function TaskCard({
         }`}
         style={subjectStyle}
       >
-      <button className="task-main" onClick={() => onToggle(task.id)}>
-        <span className={`check-circle ${completed ? "checked" : ""}`}>
+      <div className="task-row">
+        <button
+          className={`check-circle ${completed ? "checked" : ""}`}
+          type="button"
+          aria-label={`${completed ? "Mark incomplete" : "Mark complete"}: ${
+            task.title
+          }`}
+          onClick={() => onToggle(task.id)}
+        >
           {completed ? "✓" : ""}
-        </span>
+        </button>
 
         <div className="task-content">
+          <h3>{task.title}</h3>
+
           <div className="task-topline">
             <span className="task-subject-label">{task.subject}</span>
-            <span className={`urgency ${urgencyClass}`}>{urgencyLabel}</span>
           </div>
-
-          <h3>{task.title}</h3>
 
           <div className="task-meta">
             <span className={`effort-pill ${effortClass}`}>
-              {effortLabel} · {task.effort}/5
+              {effortLabel}
             </span>
             <TaskSourceBadge task={task} />
             {signalBadges.map((badge) => (
@@ -182,27 +256,67 @@ function TaskCard({
             ))}
           </div>
         </div>
-      </button>
 
-      <div className="task-actions">
-        <button
-          className="edit-button"
-          onClick={startEdit}
-          aria-label={`Edit ${task.title}`}
-        >
-          Edit
-        </button>
+        <div className="task-row-end">
+          <span className={`task-due-pill urgency ${completed ? "neutral" : urgencyClass}`}>
+            {dueLabel}
+          </span>
 
-        <button
-          className="delete-button"
-          onClick={() => onDelete(task.id)}
-          aria-label={`Delete ${task.title}`}
-        >
-          ×
-        </button>
+          <div className="task-options" ref={optionsRef}>
+            <button
+              ref={optionsButtonRef}
+              className="task-options-button"
+              type="button"
+              aria-label={`Task options for ${task.title}`}
+              aria-haspopup="menu"
+              aria-expanded={showOptions}
+              onClick={(event) => {
+                event.stopPropagation();
+                updateMenuPosition();
+                setOpenMenuTaskId?.(showOptions ? null : task.id);
+              }}
+            >
+              ⋯
+            </button>
+
+            {showOptions &&
+              createPortal(
+                <div
+                  className="task-options-menu"
+                  ref={menuRef}
+                  role="menu"
+                  style={menuPosition || { visibility: "hidden" }}
+                >
+                  <button type="button" role="menuitem" onClick={startEdit}>
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="danger"
+                    onClick={confirmDelete}
+                  >
+                    Delete
+                  </button>
+                </div>,
+                document.body
+              )}
+          </div>
+        </div>
       </div>
     </div>
   );
+}
+
+function getTaskDueLabel(daysLeft) {
+  if (daysLeft === null) return "No deadline";
+  if (daysLeft < 0) {
+    const overdueDays = Math.abs(daysLeft);
+    return `${overdueDays} day${overdueDays === 1 ? "" : "s"} overdue`;
+  }
+  if (daysLeft === 0) return "Due today";
+  if (daysLeft === 1) return "Due tomorrow";
+  return `${daysLeft} days left`;
 }
 
 export default TaskCard;

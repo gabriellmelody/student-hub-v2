@@ -187,6 +187,117 @@
   width: auto;
 }
 
+.sidebar-quick-links {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 11px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.sidebar-quick-links-heading {
+  margin: 0 0 1px;
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 760;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sidebar-quick-links-list {
+  display: grid;
+  gap: 3px;
+}
+
+.sidebar-quick-link {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+
+.sidebar-quick-link:hover,
+.sidebar-quick-link:focus-visible {
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--surface) 68%, transparent);
+  color: var(--text);
+}
+
+.sidebar-quick-link-icon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-raised) 58%, transparent);
+  color: var(--text-muted);
+}
+
+.sidebar-quick-link-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.sidebar-quick-link-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-quick-link-external {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+}
+
+.sidebar-quick-links-manage {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 7px;
+  padding: 4px 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.66rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.sidebar-quick-links-manage:hover,
+.sidebar-quick-links-manage:focus-visible {
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  color: var(--text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sidebar.collapsed .sidebar-quick-links {
+  justify-items: center;
+  padding-top: 9px;
+}
+
+.sidebar.collapsed .sidebar-quick-link {
+  width: 34px;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  padding: 5px;
+}
+
+.sidebar.collapsed .sidebar-quick-link-label,
+.sidebar.collapsed .sidebar-quick-link-external {
+  display: none;
+}
+
 .sidebar-account {
   position: relative;
   z-index: 12;

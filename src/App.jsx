@@ -3,6 +3,7 @@ import "./App.css";
 import {
   AccountMenu,
   NavButton,
+  QuickLinksNav,
   RightRail,
 } from "./components/AppChrome.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
@@ -45,6 +46,8 @@ import {
   isSavedPlanForToday,
   restoreSavedPlanBlocks,
   saveTodayPlanSnapshot,
+  loadQuickLinksPreferences,
+  saveQuickLinksPreferences,
   getDefaultEveningPlannerDraft,
   buildEveningPlan,
   timeToMinutes,
@@ -239,6 +242,9 @@ function App() {
   );
   const [subjects, setSubjects] = useState(loadSubjects);
   const [studentProfile, setStudentProfile] = useState(loadStudentProfile);
+  const [quickLinksPreferences, setQuickLinksPreferences] = useState(
+    loadQuickLinksPreferences
+  );
 
   const [tasks, setTasks] = useState(loadTasks);
   const [completedTaskHistory, setCompletedTaskHistory] = useState(() =>
@@ -435,6 +441,10 @@ function App() {
       JSON.stringify(studentProfile)
     );
   }, [studentProfile]);
+
+  useEffect(() => {
+    saveQuickLinksPreferences(quickLinksPreferences);
+  }, [quickLinksPreferences]);
 
   useLayoutEffect(() => {
     function applyThemePreference() {
@@ -1831,6 +1841,7 @@ function App() {
     setHomeEditMode(false);
     setRightRailEditMode(false);
     setActivePage("home");
+    setQuickLinksPreferences(loadQuickLinksPreferences());
     setStudentProfile({
       schoolSystem: "",
       onboardingCompleted: false,
@@ -1924,6 +1935,12 @@ function App() {
             active={activePage === "subjects"}
             onClick={() => setActivePage("subjects")}
           />
+
+          <QuickLinksNav
+            collapsed={sidebarCollapsed}
+            quickLinksPreferences={quickLinksPreferences}
+            openSettings={openSettings}
+          />
         </nav>
 
         <AccountMenu
@@ -1965,6 +1982,7 @@ function App() {
           <TasksPage
             subjects={subjects}
             activeTasks={activeTasks}
+            backlogTasks={backlogTasks}
             visibleBacklog={visibleBacklog}
             hiddenBacklogCount={hiddenBacklogCount}
             noDeadlineTasks={noDeadlineTasks}
@@ -2050,6 +2068,8 @@ function App() {
             archiveNoDueDateClassroomTasks={archiveNoDueDateClassroomTasks}
             restoreArchivedClassroomTasks={restoreArchivedClassroomTasks}
             updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
+            quickLinksPreferences={quickLinksPreferences}
+            setQuickLinksPreferences={setQuickLinksPreferences}
             initialView={settingsView}
             classroomCallbackStatus={initialNavigation.classroomCallbackStatus}
             googleCalendarCallbackStatus={
