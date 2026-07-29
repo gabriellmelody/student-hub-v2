@@ -24,6 +24,15 @@
   min-width: 0;
 }
 
+.settings-page > .page-header h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: max(var(--font-page-title), var(--density-heading-size));
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
 .settings-provider-header {
   display: grid;
   gap: 10px;
@@ -47,8 +56,8 @@
   justify-content: space-between;
   gap: 18px;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: var(--density-panel-padding);
+  border-radius: var(--radius-card);
+  padding: 15px 16px;
   background: var(--surface);
   color: var(--text);
   text-align: left;
@@ -75,15 +84,16 @@
 }
 
 .settings-hub-card strong {
-  font-size: 0.94rem;
-  font-weight: 650;
+  font-size: 0.9rem;
+  font-weight: 720;
 }
 
 .settings-hub-card small {
-  margin-top: 5px;
+  max-width: 32ch;
+  margin-top: 4px;
   color: var(--text-secondary);
-  font-size: 0.76rem;
-  line-height: 1.4;
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .settings-hub-arrow {
@@ -802,7 +812,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
+  gap: 18px;
   padding: var(--density-panel-padding);
   border-bottom: 1px solid var(--border);
   background: var(--surface-subtle);
@@ -819,7 +829,7 @@
   margin: 4px 0 0;
   color: var(--text-muted);
   font-size: 0.74rem;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 .integration-control-intro > span {
@@ -897,7 +907,7 @@
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   min-height: 36px;
 }
 
@@ -916,7 +926,9 @@
 
 .integration-card-heading h3 {
   overflow-wrap: break-word;
-  font-size: 0.8rem;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 760;
 }
 
 .integration-card-heading p {
@@ -932,7 +944,7 @@
   padding: 3px 6px;
   color: var(--text-muted);
   font-size: 0.6rem;
-  font-weight: 650;
+  font-weight: 760;
   white-space: nowrap;
 }
 
@@ -965,11 +977,11 @@
 }
 
 .integration-description {
-  margin-top: 11px !important;
-  min-height: 42px;
+  margin-top: 12px !important;
+  min-height: 36px;
   color: var(--text-secondary);
-  font-size: 0.7rem;
-  line-height: 1.48;
+  font-size: 0.71rem;
+  line-height: 1.42;
 }
 
 .integration-helper,
@@ -1148,10 +1160,12 @@
   gap: 16px;
 }
 
-.real-classroom-manager-header h2 {
+.real-classroom-manager-header h1 {
   margin: 2px 0 5px;
   color: var(--text);
-  font-size: var(--font-section-title);
+  font-size: max(var(--font-page-title), var(--density-heading-size));
+  font-weight: 650;
+  line-height: 1.15;
 }
 
 .real-classroom-manager-header p {
@@ -1258,7 +1272,7 @@
   margin: 3px 0 0;
   color: var(--text-secondary);
   font-size: var(--font-helper);
-  line-height: var(--line-body);
+  line-height: 1.38;
 }
 
 .real-classroom-tab-heading button {
@@ -2292,10 +2306,12 @@
   gap: 16px;
 }
 
-.google-calendar-manager-header h2 {
+.google-calendar-manager-header h1 {
   margin: 2px 0 5px;
   color: var(--text);
-  font-size: 1rem;
+  font-size: max(var(--font-page-title), var(--density-heading-size));
+  font-weight: 650;
+  line-height: 1.15;
 }
 
 .google-calendar-manager-header p {
@@ -2340,23 +2356,6 @@
   color: var(--text-muted);
   font-size: 0.62rem;
   font-weight: 650;
-}
-
-.google-calendar-setting-explainer {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: 0.65rem;
-  line-height: 1.4;
-}
-
-.google-calendar-setting-explainer span {
-  min-width: min(260px, 100%);
-}
-
-.google-calendar-setting-explainer strong {
-  color: var(--text-secondary);
 }
 
 .google-calendar-manager-actions button:not(:disabled):hover {

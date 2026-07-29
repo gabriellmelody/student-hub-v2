@@ -41,6 +41,48 @@ function createManualBlockDraft() {
   };
 }
 
+function getPlanBlockStartMinutes(block) {
+  const startMinutes = parseDisplayTimeToMinutes(block.start);
+
+  if (startMinutes === null) return Number.POSITIVE_INFINITY;
+
+  return startMinutes;
+}
+
+function getNextPlanBlockKey(planBlocks, nowMinutes) {
+  const activeBlocks = planBlocks
+    .map((block, index) => ({ block, index }))
+    .filter(({ block }) => block.type !== "message" && !block.completed);
+
+  if (activeBlocks.length === 0) return null;
+
+  const currentBlock = activeBlocks.find(({ block }) => {
+    const startMinutes = parseDisplayTimeToMinutes(block.start);
+    const endMinutes = parseDisplayTimeToMinutes(block.end);
+
+    if (startMinutes === null || endMinutes === null) return false;
+
+    const adjustedEnd = endMinutes <= startMinutes ? endMinutes + 24 * 60 : endMinutes;
+    const adjustedNow =
+      nowMinutes < startMinutes && adjustedEnd > 24 * 60
+        ? nowMinutes + 24 * 60
+        : nowMinutes;
+
+    return adjustedNow >= startMinutes && adjustedNow < adjustedEnd;
+  });
+
+  if (currentBlock) {
+    return getPlanBlockKey(currentBlock.block, currentBlock.index);
+  }
+
+  const upcomingBlock = activeBlocks.find(
+    ({ block }) => getPlanBlockStartMinutes(block) >= nowMinutes
+  );
+  const fallbackBlock = upcomingBlock || activeBlocks[0];
+
+  return getPlanBlockKey(fallbackBlock.block, fallbackBlock.index);
+}
+
 function PlanPage({
   planBlocks,
   clearPlan,
@@ -75,6 +117,7 @@ function PlanPage({
   const lastDragOverIdRef = useRef(null);
   const dropSettleTimerRef = useRef(null);
   const openMenuRef = useRef(null);
+  const nextPlanBlockKey = getNextPlanBlockKey(planBlocks, nowMinutes);
 
   useEffect(() => {
     return () => {
@@ -422,16 +465,25 @@ function PlanPage({
   }
 
   return (
-    <div className="page">
-      <header className="page-header">
+    <div className="page plan-page">
+      <header className="page-header plan-page-header">
         <p className="eyebrow">Today’s Plan</p>
-        <h2>Build today’s plan</h2>
-        <p>Generate a schedule, then adjust it to fit your day.</p>
+        <h1>Today’s Plan</h1>
+        <p>Follow the next block, then adjust anything that changes.</p>
       </header>
 
-      <div className="panel">
+      <div className="panel plan-panel">
         <div className="panel-header">
-          <h3>Plan</h3>
+          <div>
+            <h3>Study timeline</h3>
+            <span>
+              {planBlocks.length > 0
+                ? `${planBlocks.length} block${
+                    planBlocks.length === 1 ? "" : "s"
+                  } scheduled`
+                : "Build a realistic study flow"}
+            </span>
+          </div>
 
           <div className="plan-actions">
             <button
@@ -622,8 +674,10 @@ function PlanPage({
           }${openMenuBlockId === block.id ? " plan-block-menu-open" : ""}`;
           const signalBadges = getTaskSignalBadges(block);
           const isNow = isCurrentPlanBlock(block);
+          const isNext = blockKey === nextPlanBlockKey;
           const completedClassName = block.completed ? " plan-block-completed" : "";
           const nowClassName = isNow ? " plan-block-now" : "";
+          const nextClassName = isNext ? " plan-block-next" : "";
 
           return (
             <div
@@ -632,7 +686,7 @@ function PlanPage({
                 block.type === "break"
                   ? "plan-timeline-item-break"
                   : "plan-timeline-item-study"
-              }${nowClassName}${completedClassName}`}
+              }${nowClassName}${completedClassName}${nextClassName}`}
             >
               <div className="plan-time plan-timeline-time">
                 <span className="plan-time-range">
@@ -640,6 +694,9 @@ function PlanPage({
                 </span>
                 <span className="plan-time-badges">
                   {isNow && <span className="plan-now-indicator">Now</span>}
+                  {!isNow && isNext && (
+                    <span className="plan-next-indicator">Next</span>
+                  )}
                   {block.edited && <span>Adjusted</span>}
                   {block.locked && (
                     <span className="plan-lock-indicator">Locked</span>
@@ -654,8 +711,8 @@ function PlanPage({
               <article
                 className={
                   block.type === "break"
-                    ? `plan-block break-block${lockClassName}${dragClassName}${completedClassName}${nowClassName}`
-                    : `plan-block${moveClassName}${lockClassName}${dragClassName}${completedClassName}${nowClassName}`
+                    ? `plan-block break-block${lockClassName}${dragClassName}${completedClassName}${nowClassName}${nextClassName}`
+                    : `plan-block${moveClassName}${lockClassName}${dragClassName}${completedClassName}${nowClassName}${nextClassName}`
                 }
                 ref={(node) => setPlanBlockRef(blockKey, node)}
                 data-plan-block-id={block.id}

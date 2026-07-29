@@ -55,6 +55,9 @@ function TaskCard({
   const effortClass = getEffortClass(task.effort);
   const effortLabel = getEffortLabel(task.effort);
   const signalBadges = getTaskSignalBadges(task);
+  const hasAssessmentSignal = signalBadges.some(
+    (badge) => badge.tone === "assessment" || badge.tone === "urgent"
+  );
   const dueLabel = completed ? "Completed" : getTaskDueLabel(daysLeft);
   const subjectProfile = findSubjectProfile(subjects, task.subject);
   const subjectStyle = subjectProfile
@@ -217,8 +220,10 @@ function TaskCard({
 
   return (
       <div
-        className={`task-card ${completed ? "completed" : ""} ${
-          subjectProfile ? "has-subject-colour" : ""
+        className={`task-card task-card-${urgencyClass} ${
+          completed ? "completed" : ""
+        } ${subjectProfile ? "has-subject-colour" : ""}${
+          hasAssessmentSignal ? " task-card-assessment" : ""
         }`}
         style={subjectStyle}
       >

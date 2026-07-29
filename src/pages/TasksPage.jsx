@@ -96,42 +96,47 @@ function TasksPage({
   return (
     <div className="page tasks-page">
       <header className="page-header tasks-page-header">
-        <div>
-          <h2>Your tasks</h2>
+        <div className="tasks-header-copy">
+          <p className="eyebrow">To-do</p>
+          <h1>To-do list</h1>
+          <p>Manage school work by priority, due date, effort, or subject.</p>
           <p className="task-live-counts">
             {formatCount(activeCount, "active")} ·{" "}
             {formatCount(overdueCount, "overdue")}
             {dueTodayCount > 0 && <> · {formatCount(dueTodayCount, "due today")}</>}
           </p>
         </div>
-        <button
-          className="primary-button task-add-trigger"
-          type="button"
-          onClick={() => setShowAddTask(true)}
-        >
-          + Add task
-        </button>
+
+        <div className="tasks-header-actions">
+          <button
+            className="primary-button task-add-trigger"
+            type="button"
+            onClick={() => setShowAddTask(true)}
+          >
+            + Add task
+          </button>
+
+          <div className="task-sort-row" aria-label="Organise tasks">
+            {taskSortOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={
+                  taskSortMode === option.value
+                    ? "small-button sort-button active"
+                    : "small-button sort-button"
+                }
+                aria-pressed={taskSortMode === option.value}
+                onClick={() => setTaskSortMode(option.value)}
+              >
+                {option.value === "smart" ? "Priority" : option.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </header>
 
       <div className="panel tasks-panel">
-        <div className="task-sort-row" aria-label="Organise tasks">
-          {taskSortOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={
-                taskSortMode === option.value
-                  ? "small-button sort-button active"
-                  : "small-button sort-button"
-              }
-              aria-pressed={taskSortMode === option.value}
-              onClick={() => setTaskSortMode(option.value)}
-            >
-              {option.value === "smart" ? "Priority" : option.label}
-            </button>
-          ))}
-        </div>
-
         {!hasActiveTasks && (
           <div className="task-empty-state">
             <h3>You’re caught up.</h3>

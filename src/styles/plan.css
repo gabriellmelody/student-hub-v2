@@ -7,6 +7,33 @@
   gap: var(--density-task-gap);
 }
 
+.plan-page {
+  display: grid;
+  gap: var(--density-home-gap);
+}
+
+.plan-page-header {
+  margin-bottom: 0;
+}
+
+.plan-page-header h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: max(var(--font-page-title), var(--density-heading-size));
+  font-weight: 650;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+
+.plan-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.plan-panel .panel-header {
+  margin-bottom: 0;
+}
+
 .plan-actions button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
@@ -18,12 +45,14 @@
 
 .plan-clear-button {
   color: var(--urgent);
+  border-color: color-mix(in srgb, var(--urgent) 24%, var(--border-strong));
 }
 
 .plan-primary-create-button {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-contrast);
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .plan-primary-create-button:hover {
@@ -479,19 +508,20 @@
 .plan-timeline {
   display: grid;
   gap: 0;
-  margin-top: var(--density-section-gap);
+  margin-top: 0;
 }
 
 .plan-timeline-item {
   position: relative;
   display: grid;
-  grid-template-columns: 112px 22px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: minmax(128px, max-content) 20px minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 0;
   min-width: 0;
 }
 
 .plan-timeline-item:not(:last-child) {
-  padding-bottom: 12px;
+  padding-bottom: 10px;
 }
 
 .plan-timeline-time {
@@ -522,7 +552,8 @@
 
 .plan-time-badges > span,
 .plan-lock-indicator,
-.plan-now-indicator {
+.plan-now-indicator,
+.plan-next-indicator {
   display: inline-flex;
   align-items: center;
   min-height: 18px;
@@ -542,6 +573,12 @@
   border-color: var(--accent-border);
   background: var(--accent-tint);
   color: var(--accent-soft);
+}
+
+.plan-next-indicator {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  color: var(--text-secondary);
 }
 
 .plan-timeline-rail {
@@ -592,6 +629,13 @@
   box-shadow: 0 0 0 4px var(--accent-tint);
 }
 
+.plan-timeline-item.plan-block-next:not(.plan-block-now)
+  .plan-timeline-node {
+  border-color: var(--accent-soft);
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface-raised));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
 .plan-timeline-item.plan-block-completed .plan-timeline-node {
   border-color: var(--safe);
   background: var(--safe);
@@ -615,7 +659,7 @@
   align-items: center;
   gap: 3px;
   flex-shrink: 0;
-  opacity: 0.58;
+  opacity: 0.5;
   transition: opacity 0.16s ease;
 }
 
@@ -733,7 +777,7 @@
   background: var(--surface-raised);
   border: 1px solid var(--border-raised);
   border-radius: var(--radius-control);
-  padding: 11px 12px;
+  padding: 10px 11px;
   margin-bottom: 0;
   box-shadow: var(--shadow-sm);
 }
@@ -766,9 +810,15 @@
   box-shadow: 0 10px 28px color-mix(in srgb, var(--accent-tint) 70%, transparent);
 }
 
+.plan-block.plan-block-next:not(.plan-block-now) {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border-raised));
+  background: color-mix(in srgb, var(--surface-raised) 94%, var(--accent-tint));
+}
+
 .plan-block.plan-block-completed {
-  opacity: 0.72;
+  opacity: 0.66;
   background: var(--surface-subtle);
+  box-shadow: none;
 }
 
 .plan-block.plan-block-moved {
@@ -827,14 +877,15 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   margin-bottom: 0;
 }
 
 .plan-subject {
   margin: 0;
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
+  font-weight: 760;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
@@ -846,10 +897,15 @@
   min-width: 0;
   margin: 0;
   color: var(--text);
-  font-size: max(var(--density-plan-title-size), var(--font-card-title));
+  font-size: max(var(--density-plan-title-size), 0.9rem);
   font-weight: 720;
   line-height: var(--line-compact);
   overflow-wrap: anywhere;
+}
+
+.plan-block.plan-block-next:not(.plan-block-completed) h3,
+.plan-block.plan-block-now:not(.plan-block-completed) h3 {
+  font-weight: 790;
 }
 
 .plan-complete-mark {
@@ -867,10 +923,10 @@
 
 .plan-block p,
 .plan-block-tip {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   color: var(--text-secondary);
   font-size: var(--density-plan-text-size);
-  line-height: 1.4;
+  line-height: 1.35;
 }
 
 .break-block .plan-block-tip {
@@ -960,7 +1016,7 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: var(--density-plan-control-gap);
-  margin-top: 8px;
+  margin-top: 7px;
 }
 
 .complete-plan-button {
@@ -972,7 +1028,7 @@
   color: var(--text-secondary);
   min-height: var(--density-plan-button-height);
   border-radius: 999px;
-  padding: 4px 9px;
+  padding: 3px 8px;
   font-size: var(--font-button-small);
   font-weight: 720;
   line-height: var(--line-compact);
@@ -982,8 +1038,8 @@
 .complete-plan-button > span:first-child {
   display: grid;
   place-items: center;
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
   border: 1px solid var(--border-hover);
   border-radius: 999px;
   color: var(--accent-soft);
@@ -1060,6 +1116,11 @@
 }
 
 @media (max-width: 600px) {
+  .plan-panel .panel-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .stale-plan-notice {
     align-items: stretch;
     flex-direction: column;

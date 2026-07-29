@@ -1,7 +1,7 @@
 export const integrationStatusLabels = {
-  "not-linked": "Not linked",
-  linked: "Linked",
-  "linked-sample": "Linked · Sample",
+  "not-linked": "Not connected",
+  linked: "Connected",
+  "linked-sample": "Connected · Sample",
   "coming-soon": "Coming soon",
   "planned-later": "Planned later",
   beta: "Beta",
@@ -13,7 +13,7 @@ export const integrationCatalog = [
     name: "Sample Classroom",
     provider: "Google",
     description:
-      "Use local sample data to test Classroom-style courses and assignments.",
+      "Try a local Classroom demo without connecting Google.",
     status: "not-linked",
     enabled: true,
     canLink: true,
@@ -26,7 +26,7 @@ export const integrationCatalog = [
     name: "Google Classroom",
     provider: "Google",
     description:
-      "Connect Google Classroom to bring school assignments into Student Hub.",
+      "Import assignments and link classes to Student Hub Subjects.",
     status: "beta",
     enabled: false,
     canLink: false,
@@ -39,7 +39,7 @@ export const integrationCatalog = [
     name: "Google Calendar",
     provider: "Google",
     description:
-      "Connect read-only access to list your calendars before events are added later.",
+      "Show events and protect busy time when building study plans.",
     status: "not-linked",
     enabled: false,
     canLink: false,
@@ -52,7 +52,7 @@ export const integrationCatalog = [
     name: "AI Planner",
     provider: "Student Hub",
     description:
-      "Suggest what to study using local tasks, subjects, and grade goals.",
+      "Suggest study steps from tasks and subjects later.",
     status: "coming-soon",
     enabled: false,
     canLink: false,

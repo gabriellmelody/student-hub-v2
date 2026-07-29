@@ -658,7 +658,7 @@ function SettingsPage({
     hub: {
       eyebrow: "Settings",
       title: "Settings",
-      description: "Manage your workspace preferences and future connections.",
+      description: "Manage how Student Hub looks, stores data, and connects to school tools.",
     },
     appearance: {
       eyebrow: "Settings / Appearance",
@@ -683,7 +683,7 @@ function SettingsPage({
     integrations: {
       eyebrow: "Settings / Integrations",
       title: "Integrations",
-      description: "Manage future school connections and local previews.",
+      description: "Connect school tools and choose what Student Hub can use.",
     },
     quickLinks: {
       eyebrow: "Settings / Quick links",
@@ -706,7 +706,7 @@ function SettingsPage({
           </button>
         )}
         <p className="eyebrow">{currentViewCopy.eyebrow}</p>
-        <h2>{currentViewCopy.title}</h2>
+        <h1>{currentViewCopy.title}</h1>
         <p>{currentViewCopy.description}</p>
       </header>
 
@@ -719,7 +719,7 @@ function SettingsPage({
           >
             <span>
               <strong>Appearance</strong>
-              <small>Theme, colour, density, and workspace layout</small>
+              <small>Theme, colours, density, and layout</small>
             </span>
             <span className="settings-hub-arrow" aria-hidden="true">
               →
@@ -733,7 +733,7 @@ function SettingsPage({
           >
             <span>
               <strong>Subjects</strong>
-              <small>Courses, levels, grade goals, and colours</small>
+              <small>Courses, grade goals, and colours</small>
             </span>
             <span className="settings-hub-arrow" aria-hidden="true">
               →
@@ -747,7 +747,7 @@ function SettingsPage({
           >
             <span>
               <strong>Data & reset</strong>
-              <small>Local data, workspace resets, and onboarding</small>
+              <small>Local data, resets, and onboarding</small>
             </span>
             <span className="settings-hub-arrow" aria-hidden="true">
               →
@@ -761,7 +761,7 @@ function SettingsPage({
           >
             <span>
               <strong>Help / FAQ</strong>
-              <small>Guidance, local data, and common questions</small>
+              <small>Short answers and current feature status</small>
             </span>
             <span className="settings-hub-arrow" aria-hidden="true">
               →
@@ -789,7 +789,7 @@ function SettingsPage({
           >
             <span>
               <strong>Integrations</strong>
-              <small>Future school connections and local previews</small>
+              <small>Classroom, Calendar, and future tools</small>
             </span>
             <span className="settings-hub-meta">
               <span className="settings-preview-status">Preview</span>
@@ -2825,7 +2825,7 @@ function IntegrationsSettings({
           <div>
             <p className="settings-group-label">Connections</p>
             <h3>School tools in one place</h3>
-            <p>Manage Classroom and future school tools.</p>
+            <p>Connect tools, review what they can use, and keep control of what appears in Student Hub.</p>
           </div>
           <span>Local workspace</span>
         </div>
@@ -3005,6 +3005,10 @@ function IntegrationCard({
     ? isLinkedSample
       ? "linked-sample"
       : "not-linked"
+    : isRealClassroom
+      ? realClassroomSession.connected
+        ? "linked"
+        : "not-linked"
     : isGoogleCalendar
       ? googleCalendarSession.connected
         ? "linked"
@@ -3034,27 +3038,17 @@ function IntegrationCard({
 
       <p className="integration-description">
         {isRealClassroom && realClassroomSession.connected
-          ? "Classroom is connected. Manage classes, preview assignments, and import selected work."
+          ? "Manage classes, preview assignments, and import selected work."
           : isGoogleCalendar && googleCalendarSession.connected
-            ? "Google Calendar is connected. Load calendars to review what Student Hub can use later."
+            ? "Manage calendars, visible events, and busy time."
           : integration.description}
       </p>
       {isClassroom && (
         <p className="integration-helper">
           {isLinkedSample
-            ? "Connected to Sample Classroom. Local demo connection; no Google account connected."
-            : "Sample Classroom uses local data only. Real Google Classroom comes later."}
+            ? "Local demo connection. No Google account connected."
+            : "Local sample data only."}
         </p>
-      )}
-      {isRealClassroom && (
-        <div className="integration-helper integration-real-classroom-note">
-          <p>Manage classes, preview work, and import only what you select.</p>
-        </div>
-      )}
-      {isGoogleCalendar && (
-        <div className="integration-helper integration-real-classroom-note">
-          <p>Choose which calendars show as schedule events in Student Hub.</p>
-        </div>
       )}
       {isRealClassroom && (
         <RealClassroomCompactStatus
@@ -3158,7 +3152,7 @@ function IntegrationCard({
                   ? "Loading classes..."
                   : realClassroomCourses.courses.length > 0
                     ? "Manage Classroom"
-                    : "Manage Classroom"}
+                    : "Load classes"}
               </button>
               <a
                 className="integration-oauth-prototype-link secondary"
@@ -3204,7 +3198,7 @@ function IntegrationCard({
                 href="/api/google-calendar/connect"
               >
                 {googleCalendarSession.connected
-                  ? "Reconnect Calendar"
+                  ? "Reconnect"
                   : "Connect Google Calendar"}
               </a>
             </>
@@ -3315,16 +3309,18 @@ function RealClassroomCourseSummary({ courseState, selections }) {
     <div className="real-classroom-course-summary-card" aria-live="polite">
       <strong>
         {courseState.loading
-          ? "Loading courses"
+          ? "Loading classes"
           : courseState.error
-            ? "Courses not loaded"
-            : `${courses.length} courses loaded`}
+            ? "Classes not loaded"
+            : `${courses.length} ${courses.length === 1 ? "class" : "classes"} loaded`}
       </strong>
       <p>
         {courseState.loading
-          ? "Reading active Classroom courses..."
+          ? "Reading active Classroom classes..."
           : courseState.error ||
-            `${includedCount} included · ${ignoredCount} ignored · ${needsReviewCount} need review`}
+            `${includedCount} included · ${ignoredCount} ignored · ${needsReviewCount} ${
+              needsReviewCount === 1 ? "needs" : "need"
+            } review`}
       </p>
       {courseState.lastCheckedAt && (
         <small>Last loaded {formatConnectionTime(courseState.lastCheckedAt)}</small>
@@ -3469,31 +3465,23 @@ function GoogleCalendarManagerPage({
             <p className="settings-group-label">
               Settings / Integrations / Google Calendar
             </p>
-            <h2 id="google-calendar-manager-title">Manage calendars</h2>
+            <h1 id="google-calendar-manager-title">Manage calendars</h1>
             <p id="google-calendar-manager-description">
-              Choose what appears in Student Hub and what blocks study time.
-              Nothing is changed in Google.
+              Choose which calendars appear in Student Hub and which events block study time. Nothing is changed in Google.
             </p>
           </div>
         </header>
 
         <div className="google-calendar-manager-summary">
-          <span>{calendars.length} calendars</span>
+          <span>
+            {calendars.length} calendar{calendars.length === 1 ? "" : "s"}
+          </span>
           {duplicateRiskCount > 0 && (
             <span>{duplicateRiskCount} Classroom assignment calendars</span>
           )}
           {calendarState.lastCheckedAt && (
             <small>Loaded {formatConnectionTime(calendarState.lastCheckedAt)}</small>
           )}
-        </div>
-
-        <div className="google-calendar-setting-explainer">
-          <span>
-            <strong>Show in Student Hub</strong> controls event visibility.
-          </span>
-          <span>
-            <strong>Block study time</strong> tells the planner when you are unavailable.
-          </span>
         </div>
 
         <div className="google-calendar-manager-actions">
@@ -3693,11 +3681,11 @@ function RealClassroomCourseReviewPage({
             <p className="settings-group-label">
               Settings / Integrations / Google Classroom
             </p>
-            <h2 id="real-classroom-review-title">
+            <h1 id="real-classroom-review-title">
               Manage Classroom
-            </h2>
+            </h1>
             <p id="real-classroom-review-description">
-              Choose classes, link Subjects, and import selected work.
+              Choose classes, link Subjects, preview assignments, and import selected work.
             </p>
           </div>
         </header>
@@ -3887,7 +3875,7 @@ function RealClassroomCourseReviewPage({
                                 : "Needs subject link"}
                           </strong>
                           <p>
-                            Assignments from this class will use this Subject.
+                            Imported assignments will use this Subject.
                           </p>
                         </div>
                         <label>
