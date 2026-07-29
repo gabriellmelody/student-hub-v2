@@ -700,6 +700,99 @@
   width: min(1120px, 100%);
 }
 
+.integration-auto-save-status {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  z-index: 1250;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(320px, calc(100vw - 36px));
+  padding: 9px 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-soft);
+  font-size: var(--font-button-small);
+  font-weight: 760;
+  line-height: var(--line-compact);
+  pointer-events: auto;
+}
+
+.integration-auto-save-status.saving {
+  border-color: color-mix(in srgb, #38bdf8 32%, var(--border-soft));
+}
+
+.integration-auto-save-status.saved {
+  border-color: var(--effort-low-border);
+  background: color-mix(in srgb, var(--surface-raised) 82%, #16a34a 18%);
+}
+
+.integration-auto-save-status.error {
+  border-color: color-mix(in srgb, var(--urgent) 42%, var(--border-soft));
+  background: color-mix(in srgb, var(--surface-raised) 85%, var(--urgent) 15%);
+  color: var(--text-primary);
+}
+
+.integration-auto-save-icon {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-muted) 12%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 900;
+}
+
+.integration-auto-save-status.saving .integration-auto-save-icon {
+  border: 2px solid color-mix(in srgb, #38bdf8 24%, var(--border-soft));
+  border-top-color: #38bdf8;
+  background: transparent;
+  animation: integration-save-spin 760ms linear infinite;
+}
+
+.integration-auto-save-status.saved .integration-auto-save-icon {
+  background: #16a34a;
+  color: #fff;
+}
+
+.integration-auto-save-status.error .integration-auto-save-icon {
+  background: var(--urgent);
+  color: #fff;
+}
+
+.integration-auto-save-status button {
+  appearance: none;
+  display: inline-grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+}
+
+.integration-auto-save-status button:hover,
+.integration-auto-save-status button:focus-visible {
+  border-color: var(--border-strong);
+  background: var(--surface-subtle);
+}
+
+@keyframes integration-save-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .integration-control-panel {
   padding: 0;
   overflow: hidden;
@@ -1427,6 +1520,35 @@
   background: var(--effort-medium-bg);
 }
 
+.real-classroom-preview-warning-action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.real-classroom-preview-warning-action button {
+  appearance: none;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-button);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-button-small);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.real-classroom-preview-warning-action button:hover,
+.real-classroom-preview-warning-action button:focus-visible {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+
 .real-classroom-preview-error {
   padding: 7px 8px;
   border: 1px solid var(--effort-high-border);
@@ -1582,9 +1704,18 @@
   background: var(--surface-subtle);
 }
 
+.real-classroom-assignment-row.is-selected {
+  border: 1px solid var(--accent-border);
+  background: var(--accent-tint);
+}
+
 .real-classroom-assignment-row.is-imported {
   border: 1px solid var(--effort-low-border);
   background: var(--effort-low-bg);
+}
+
+.real-classroom-assignment-row.needs-subject:not(.is-imported) {
+  border: 1px solid var(--effort-medium-border);
 }
 
 .real-classroom-assignment-row.has-no-due-date {
@@ -1608,6 +1739,11 @@
   height: 14px;
   margin: 0;
   accent-color: var(--accent);
+}
+
+.real-classroom-assignment-select input:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .real-classroom-assignment-row em {
@@ -2204,20 +2340,6 @@
   color: var(--text-muted);
   font-size: 0.62rem;
   font-weight: 650;
-}
-
-.google-calendar-save-status {
-  border-radius: 999px;
-  padding: 3px 7px;
-  background: var(--surface-subtle);
-}
-
-.google-calendar-save-status.saving {
-  color: var(--accent-soft);
-}
-
-.google-calendar-save-status.error {
-  color: var(--urgent);
 }
 
 .google-calendar-setting-explainer {

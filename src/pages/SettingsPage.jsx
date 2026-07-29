@@ -78,6 +78,10 @@ function getRealClassroomCourseId(course) {
   return course?.classroomCourseId || course?.externalId || "";
 }
 
+function formatCountLabel(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function normalizeClassroomMatchText(value) {
   return normalizeSubjectName(value).replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -433,7 +437,7 @@ function getClassroomAssignmentSyncStatus({
   const isUnlinked = !linkedCourseIds.has(assignment.classroomCourseId);
   const badges = [];
 
-  if (isUnlinked) badges.push({ label: "Unlinked subject", tone: "warning" });
+  if (isUnlinked) badges.push({ label: "Needs Subject", tone: "warning" });
   badges.push({
     label: CLASSROOM_STATUS_LABELS[category] || "Unknown status",
     tone:
@@ -501,6 +505,7 @@ function SettingsPage({
   initialView = "hub",
   classroomCallbackStatus = null,
   googleCalendarCallbackStatus = null,
+  navigationRequest = 0,
 }) {
   const [settingsView, setSettingsView] = useState(() => initialView || "hub");
   const [savedThemeColorSnapshot, setSavedThemeColorSnapshot] = useState(() =>
@@ -517,7 +522,7 @@ function SettingsPage({
 
   useEffect(() => {
     setSettingsView(initialView || "hub");
-  }, [initialView]);
+  }, [initialView, navigationRequest]);
 
   useEffect(() => {
     themeColorDirtyRef.current = themeColorDirty;
@@ -1252,8 +1257,9 @@ function SettingsPage({
           restoreArchivedClassroomTasks={restoreArchivedClassroomTasks}
           updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
           classroomCallbackStatus={classroomCallbackStatus}
-          googleCalendarCallbackStatus={googleCalendarCallbackStatus}
-        />
+            googleCalendarCallbackStatus={googleCalendarCallbackStatus}
+            navigationRequest={navigationRequest}
+          />
       ) : settingsView === "quickLinks" ? (
         <QuickLinksSettings
           quickLinksPreferences={quickLinksPreferences}
@@ -1278,6 +1284,7 @@ function IntegrationsSettings({
   updateMockClassroomCourseSubject,
   classroomCallbackStatus,
   googleCalendarCallbackStatus,
+  navigationRequest = 0,
 }) {
   const sampleCourses = buildMockClassroomPreview(mockClassroomData);
   const importedCount = tasks.filter(
@@ -1306,9 +1313,9 @@ function IntegrationsSettings({
         ) === "1"
       );
     });
-  const [googleCalendarSaveStatus, setGoogleCalendarSaveStatus] = useState({
-    status: "saved",
-    message: "Saved",
+  const [integrationAutoSaveStatus, setIntegrationAutoSaveStatus] = useState({
+    status: "idle",
+    message: "",
   });
   const [pendingAction, setPendingAction] = useState(null);
   const [syncMessage, setSyncMessage] = useState("");
@@ -1460,6 +1467,11 @@ function IntegrationsSettings({
       return fallbackState;
     }
   });
+  const autoSaveTimerRef = useRef(null);
+  const autoSaveRequestedRef = useRef(false);
+  const realClassroomSelectionsReadyRef = useRef(false);
+  const realClassroomLinksReadyRef = useRef(false);
+  const googleCalendarPreferencesReadyRef = useRef(false);
   const realClassroomCleanup = {
     candidateCount: tasks.filter(
       (task) =>
@@ -1485,6 +1497,55 @@ function IntegrationsSettings({
   };
 
   useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        window.clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  function showIntegrationAutoSaveStatus(status, message) {
+    if (autoSaveTimerRef.current) {
+      window.clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+
+    setIntegrationAutoSaveStatus({ status, message });
+
+    if (status === "saved") {
+      autoSaveTimerRef.current = window.setTimeout(() => {
+        setIntegrationAutoSaveStatus({ status: "idle", message: "" });
+        autoSaveTimerRef.current = null;
+      }, 1800);
+    }
+  }
+
+  function markIntegrationAutoSaving() {
+    autoSaveRequestedRef.current = true;
+    showIntegrationAutoSaveStatus("saving", "Saving…");
+  }
+
+  function markIntegrationAutoSaved() {
+    if (!autoSaveRequestedRef.current) return;
+
+    autoSaveRequestedRef.current = false;
+    showIntegrationAutoSaveStatus("saved", "Saved");
+  }
+
+  function markIntegrationAutoSaveError() {
+    if (!autoSaveRequestedRef.current) return;
+
+    autoSaveRequestedRef.current = false;
+    showIntegrationAutoSaveStatus("error", "Couldn’t save");
+  }
+
+  function dismissIntegrationAutoSaveError() {
+    if (integrationAutoSaveStatus.status !== "error") return;
+
+    setIntegrationAutoSaveStatus({ status: "idle", message: "" });
+  }
+
+  useEffect(() => {
     localStorage.setItem(
       MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY,
       JSON.stringify({ ...classroomConnection, importedCount })
@@ -1492,34 +1553,53 @@ function IntegrationsSettings({
   }, [classroomConnection, importedCount]);
 
   useEffect(() => {
-    localStorage.setItem(
-      REAL_CLASSROOM_COURSE_SELECTIONS_KEY,
-      JSON.stringify(realClassroomCourseSelections)
-    );
+    if (!realClassroomSelectionsReadyRef.current) {
+      realClassroomSelectionsReadyRef.current = true;
+      return;
+    }
+
+    try {
+      localStorage.setItem(
+        REAL_CLASSROOM_COURSE_SELECTIONS_KEY,
+        JSON.stringify(realClassroomCourseSelections)
+      );
+      markIntegrationAutoSaved();
+    } catch {
+      markIntegrationAutoSaveError();
+    }
   }, [realClassroomCourseSelections]);
 
   useEffect(() => {
-    localStorage.setItem(
-      REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
-      JSON.stringify(realClassroomCourseSubjectLinks)
-    );
+    if (!realClassroomLinksReadyRef.current) {
+      realClassroomLinksReadyRef.current = true;
+      return;
+    }
+
+    try {
+      localStorage.setItem(
+        REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
+        JSON.stringify(realClassroomCourseSubjectLinks)
+      );
+      markIntegrationAutoSaved();
+    } catch {
+      markIntegrationAutoSaveError();
+    }
   }, [realClassroomCourseSubjectLinks]);
 
   useEffect(() => {
+    if (!googleCalendarPreferencesReadyRef.current) {
+      googleCalendarPreferencesReadyRef.current = true;
+      return;
+    }
+
     try {
       localStorage.setItem(
         GOOGLE_CALENDAR_PREFERENCES_KEY,
         JSON.stringify(googleCalendarPreferences)
       );
-      setGoogleCalendarSaveStatus({
-        status: "saved",
-        message: "Saved",
-      });
+      markIntegrationAutoSaved();
     } catch {
-      setGoogleCalendarSaveStatus({
-        status: "error",
-        message: "Couldn’t save",
-      });
+      markIntegrationAutoSaveError();
     }
   }, [googleCalendarPreferences]);
 
@@ -1540,6 +1620,15 @@ function IntegrationsSettings({
     return () =>
       window.removeEventListener("popstate", syncCalendarManagerFromHistory);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+
+    setShowGoogleCalendarManager(params.get("googleCalendarManager") === "1");
+    setShowRealClassroomReview(params.get("googleClassroomManager") === "1");
+  }, [navigationRequest]);
 
   useEffect(() => {
     checkRealClassroomSession();
@@ -1570,7 +1659,7 @@ function IntegrationsSettings({
 
     const toastTimer = window.setTimeout(() => {
       setSuccessToast(null);
-    }, 3400);
+    }, 1900);
 
     return () => window.clearTimeout(toastTimer);
   }, [successToast]);
@@ -2022,10 +2111,19 @@ function IntegrationsSettings({
 
     if (!calendarId) return;
 
-    setGoogleCalendarSaveStatus({
-      status: "saving",
-      message: "Saving…",
-    });
+    const currentPreference = {
+      ...getDefaultGoogleCalendarPreference(calendar),
+      ...googleCalendarPreferences[calendarId],
+      calendarId,
+      calendarName: calendar.summary || calendar.name || "Untitled calendar",
+    };
+    const hasChanges = Object.entries(updates).some(
+      ([key, value]) => currentPreference[key] !== value
+    );
+
+    if (!hasChanges) return;
+
+    markIntegrationAutoSaving();
     setGoogleCalendarPreferences((currentPreferences) => ({
       ...currentPreferences,
       [calendarId]: {
@@ -2039,10 +2137,21 @@ function IntegrationsSettings({
   }
 
   function updateAllGoogleCalendarVisibility(showInStudentHub) {
-    setGoogleCalendarSaveStatus({
-      status: "saving",
-      message: "Saving…",
+    const hasChanges = googleCalendarCalendars.calendars.some((calendar) => {
+      const calendarId = getGoogleCalendarId(calendar);
+
+      if (!calendarId) return false;
+
+      const currentPreference =
+        googleCalendarPreferences[calendarId] ||
+        getDefaultGoogleCalendarPreference(calendar);
+
+      return currentPreference.showInStudentHub !== showInStudentHub;
     });
+
+    if (!hasChanges) return;
+
+    markIntegrationAutoSaving();
     setGoogleCalendarPreferences((currentPreferences) => {
       const nextPreferences = { ...currentPreferences };
 
@@ -2101,6 +2210,28 @@ function IntegrationsSettings({
   }
 
   function updateRealClassroomCourseSelection(courseId, selection) {
+    const course = realClassroomCourses.courses.find(
+      (courseItem) => getRealClassroomCourseId(courseItem) === courseId
+    );
+    const suggestedLink =
+      selection === "included" && course
+        ? getSuggestedRealClassroomCourseLink(course)
+        : null;
+    const selectionWillChange =
+      selection === "included" || selection === "ignored"
+        ? realClassroomCourseSelections[courseId] !== selection
+        : Boolean(realClassroomCourseSelections[courseId]);
+    const linkWillChange =
+      (selection === "included" &&
+        course &&
+        !realClassroomCourseSubjectLinks[courseId] &&
+        Boolean(suggestedLink)) ||
+      (selection === "ignored" &&
+        Boolean(realClassroomCourseSubjectLinks[courseId]));
+
+    if (!selectionWillChange && !linkWillChange) return;
+
+    markIntegrationAutoSaving();
     setRealClassroomCourseSelections((currentSelections) => {
       const nextSelections = { ...currentSelections };
 
@@ -2113,15 +2244,9 @@ function IntegrationsSettings({
       return nextSelections;
     });
 
-    const course = realClassroomCourses.courses.find(
-      (courseItem) => getRealClassroomCourseId(courseItem) === courseId
-    );
-
     if (selection === "included" && course) {
       setRealClassroomCourseSubjectLinks((currentLinks) => {
         if (currentLinks[courseId]) return currentLinks;
-
-        const suggestedLink = getSuggestedRealClassroomCourseLink(course);
 
         return suggestedLink
           ? { ...currentLinks, [courseId]: suggestedLink }
@@ -2139,6 +2264,33 @@ function IntegrationsSettings({
   }
 
   function updateAllRealClassroomCourseSelections(selection) {
+    const hasSelectionChanges = realClassroomCourses.courses.some((course) => {
+      const courseId = getRealClassroomCourseId(course);
+
+      return courseId && realClassroomCourseSelections[courseId] !== selection;
+    });
+    const hasLinkChanges =
+      selection === "included"
+        ? realClassroomCourses.courses.some((course) => {
+            const courseId = getRealClassroomCourseId(course);
+
+            return (
+              courseId &&
+              !realClassroomCourseSubjectLinks[courseId] &&
+              Boolean(getSuggestedRealClassroomCourseLink(course))
+            );
+          })
+        : selection === "ignored"
+          ? realClassroomCourses.courses.some((course) => {
+              const courseId = getRealClassroomCourseId(course);
+
+              return courseId && Boolean(realClassroomCourseSubjectLinks[courseId]);
+            })
+          : false;
+
+    if (!hasSelectionChanges && !hasLinkChanges) return;
+
+    markIntegrationAutoSaving();
     setRealClassroomCourseSelections((currentSelections) => {
       const nextSelections = { ...currentSelections };
 
@@ -2190,6 +2342,19 @@ function IntegrationsSettings({
   }
 
   function resetRealClassroomCourseSelections() {
+    const hasCourseChoices = realClassroomCourses.courses.some((course) => {
+      const courseId = getRealClassroomCourseId(course);
+
+      return (
+        courseId &&
+        (realClassroomCourseSelections[courseId] ||
+          realClassroomCourseSubjectLinks[courseId])
+      );
+    });
+
+    if (!hasCourseChoices) return;
+
+    markIntegrationAutoSaving();
     setRealClassroomCourseSelections((currentSelections) => {
       const nextSelections = { ...currentSelections };
 
@@ -2223,7 +2388,16 @@ function IntegrationsSettings({
     if (!courseId) return;
 
     const selectedSubject = subjects.find((subject) => subject.id === subjectId);
+    const currentLink = realClassroomCourseSubjectLinks[courseId];
 
+    if (
+      (selectedSubject && currentLink?.subjectId === selectedSubject.id) ||
+      (!selectedSubject && !currentLink)
+    ) {
+      return;
+    }
+
+    markIntegrationAutoSaving();
     setRealClassroomCourseSubjectLinks((currentLinks) => {
       if (!selectedSubject) {
         if (!currentLinks[courseId]) return currentLinks;
@@ -2259,6 +2433,8 @@ function IntegrationsSettings({
       updateRealClassroomCourseSubject(course, duplicateSubject.id);
       return;
     }
+
+    markIntegrationAutoSaving();
 
     const newSubject = {
       id: `subject-${REAL_CLASSROOM_SOURCE}-${courseId}`,
@@ -2423,15 +2599,23 @@ function IntegrationsSettings({
   }
 
   function getImportableRealClassroomAssignments() {
+    const importedClassroomTasks = getImportedClassroomTaskMap(tasks);
+
     return realClassroomAssignmentPreview.assignments
       .filter((assignment) => {
         const courseId = assignment.classroomCourseId;
+        const link = realClassroomCourseSubjectLinks[courseId];
+        const existingTask = importedClassroomTasks.get(assignment.externalId);
 
         return (
           realClassroomCourseSelections[courseId] === "included" &&
+          link?.subjectId &&
+          link?.subjectName &&
           realClassroomAssignmentPreview.selectedAssignmentIds[
             assignment.externalId
-          ] === true
+          ] === true &&
+          (!existingTask ||
+            hasClassroomAssignmentChanges(assignment, existingTask))
         );
       })
       .map((assignment) => {
@@ -2448,24 +2632,11 @@ function IntegrationsSettings({
 
   function importPreviewedRealClassroomAssignments() {
     const importableAssignments = getImportableRealClassroomAssignments();
-    const hasUnlinkedAssignments = importableAssignments.some(
-      (assignment) => !assignment.linkedSubjectId || !assignment.linkedSubjectName
-    );
 
     if (importableAssignments.length === 0) {
       setRealClassroomAssignmentPreview((currentPreview) => ({
         ...currentPreview,
-        error: "Select at least one assignment to import or sync.",
-        importResult: null,
-        importResultCopy: null,
-      }));
-      return;
-    }
-
-    if (hasUnlinkedAssignments) {
-      setRealClassroomAssignmentPreview((currentPreview) => ({
-        ...currentPreview,
-        error: "Link included classes to Subjects before importing assignments.",
+        error: "Select at least one new or updated assignment with a linked Subject.",
         importResult: null,
         importResultCopy: null,
       }));
@@ -2547,6 +2718,12 @@ function IntegrationsSettings({
   if (showRealClassroomReview) {
     return (
       <div className="integrations-settings">
+        <IntegrationAutoSaveStatus
+          status={integrationAutoSaveStatus.status}
+          message={integrationAutoSaveStatus.message}
+          onDismiss={dismissIntegrationAutoSaveError}
+        />
+
         <RealClassroomCourseReviewPage
           courseState={realClassroomCourses}
           selections={realClassroomCourseSelections}
@@ -2608,10 +2785,15 @@ function IntegrationsSettings({
   if (showGoogleCalendarManager) {
     return (
       <div className="integrations-settings">
+        <IntegrationAutoSaveStatus
+          status={integrationAutoSaveStatus.status}
+          message={integrationAutoSaveStatus.message}
+          onDismiss={dismissIntegrationAutoSaveError}
+        />
+
         <GoogleCalendarManagerPage
           calendarState={googleCalendarCalendars}
           preferences={googleCalendarPreferences}
-          saveStatus={googleCalendarSaveStatus}
           onLoadCalendars={loadGoogleCalendars}
           onTogglePreference={updateGoogleCalendarPreference}
           onShowAll={() => updateAllGoogleCalendarVisibility(true)}
@@ -2632,6 +2814,12 @@ function IntegrationsSettings({
 
   return (
     <div className="integrations-settings">
+      <IntegrationAutoSaveStatus
+        status={integrationAutoSaveStatus.status}
+        message={integrationAutoSaveStatus.message}
+        onDismiss={dismissIntegrationAutoSaveError}
+      />
+
       <section className="panel integration-control-panel">
         <div className="integration-control-intro">
           <div>
@@ -3085,6 +3273,35 @@ function getRealClassroomImportResultCopy(result, checkedCount) {
   };
 }
 
+function IntegrationAutoSaveStatus({ status, message, onDismiss }) {
+  if (!status || status === "idle") return null;
+
+  const isError = status === "error";
+
+  return (
+    <div
+      className={`integration-auto-save-status ${status}`}
+      role={isError ? "alert" : "status"}
+      aria-live={isError ? "assertive" : "polite"}
+      aria-atomic="true"
+    >
+      <span className="integration-auto-save-icon" aria-hidden="true">
+        {status === "saving" ? "" : status === "saved" ? "✓" : "!"}
+      </span>
+      <span>{message}</span>
+      {isError && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss save error"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  );
+}
+
 function RealClassroomCourseSummary({ courseState, selections }) {
   const courses = courseState.courses;
   const { includedCount, ignoredCount, needsReviewCount } =
@@ -3221,7 +3438,6 @@ function GoogleCalendarCompactStatus({ session, calendarState, preferences }) {
 function GoogleCalendarManagerPage({
   calendarState,
   preferences,
-  saveStatus,
   onLoadCalendars,
   onTogglePreference,
   onShowAll,
@@ -3269,12 +3485,6 @@ function GoogleCalendarManagerPage({
           {calendarState.lastCheckedAt && (
             <small>Loaded {formatConnectionTime(calendarState.lastCheckedAt)}</small>
           )}
-          <small
-            className={`google-calendar-save-status ${saveStatus.status}`}
-            aria-live="polite"
-          >
-            {saveStatus.message}
-          </small>
         </div>
 
         <div className="google-calendar-setting-explainer">
@@ -3449,6 +3659,24 @@ function RealClassroomCourseReviewPage({
     onPreviewAssignments();
   }
 
+  function goToClassSetup(courseId = "") {
+    setActiveReviewTab("classes");
+
+    if (!courseId || typeof document === "undefined") return;
+
+    window.setTimeout(() => {
+      const safeCourseId =
+        typeof CSS !== "undefined" && typeof CSS.escape === "function"
+          ? CSS.escape(courseId)
+          : courseId.replace(/["\\]/g, "\\$&");
+      const courseRow = document.querySelector(
+        `[data-classroom-course-id="${safeCourseId}"]`
+      );
+
+      courseRow?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
+  }
+
   return (
     <section className="settings-provider-subpage real-classroom-manager-page">
       <div className="settings-provider-header">
@@ -3596,7 +3824,11 @@ function RealClassroomCourseReviewPage({
                 const subjectName = getSuggestedClassroomSubjectName(course);
 
                 return (
-                  <article className="real-classroom-course-row" key={courseId}>
+                  <article
+                    className="real-classroom-course-row"
+                    data-classroom-course-id={courseId}
+                    key={courseId}
+                  >
                     <div className="real-classroom-course-main">
                       <h4>{course.name}</h4>
                       <p>
@@ -3681,7 +3913,7 @@ function RealClassroomCourseReviewPage({
                           >
                             {suggestedSubject
                               ? `Link to ${suggestedSubject.name}`
-                              : `Create "${subjectName}" Subject`}
+                              : `Create and link "${subjectName}"`}
                           </button>
                         )}
                       </div>
@@ -3726,6 +3958,7 @@ function RealClassroomCourseReviewPage({
               onSelectAllAssignments={onSelectAllAssignments}
               onClearAssignmentSelection={onClearAssignmentSelection}
               onSelectDueAssignments={onSelectDueAssignments}
+              onGoToClassSetup={goToClassSetup}
             />
             </section>
           ) : (
@@ -3818,6 +4051,7 @@ function RealClassroomAssignmentPreview({
   onSelectAllAssignments,
   onClearAssignmentSelection,
   onSelectDueAssignments,
+  onGoToClassSetup,
 }) {
   const [assignmentFilter, setAssignmentFilter] = useState("active");
   const filteredAssignments = preview.assignments.filter((assignment) => {
@@ -3857,38 +4091,179 @@ function RealClassroomAssignmentPreview({
   const includedPreviewAssignments = preview.assignments.filter((assignment) =>
     includedCourseIds.has(assignment.classroomCourseId)
   );
-  const selectedAssignments = includedPreviewAssignments.filter(
-    (assignment) => preview.selectedAssignmentIds?.[assignment.externalId]
+  const assignmentDisplayStates = new Map(
+    includedPreviewAssignments.map((assignment) => {
+      const existingTask = importedClassroomTasks.get(assignment.externalId);
+      const syncStatus = getClassroomAssignmentSyncStatus({
+        assignment,
+        existingTask,
+        linkedCourseIds,
+      });
+
+      return [assignment.externalId, syncStatus];
+    })
   );
+  const staleSelectedIds = includedPreviewAssignments
+    .filter((assignment) => {
+      const syncStatus = assignmentDisplayStates.get(assignment.externalId);
+
+      return (
+        preview.selectedAssignmentIds?.[assignment.externalId] === true &&
+        syncStatus?.isImported &&
+        !syncStatus?.isUpdated
+      );
+    })
+    .map((assignment) => assignment.externalId);
+
+  useEffect(() => {
+    staleSelectedIds.forEach((assignmentId) => {
+      onSelectAssignment(assignmentId, false);
+    });
+  }, [onSelectAssignment, staleSelectedIds.join("|")]);
+
+  const selectedAssignments = includedPreviewAssignments.filter((assignment) => {
+    const syncStatus = assignmentDisplayStates.get(assignment.externalId);
+
+    return (
+      preview.selectedAssignmentIds?.[assignment.externalId] === true &&
+      !(syncStatus?.isImported && !syncStatus?.isUpdated)
+    );
+  });
   const selectedCount = selectedAssignments.length;
-  const importedCount = selectedAssignments.filter((assignment) =>
-    importedClassroomTasks.has(assignment.externalId)
+  const selectedAlreadyImportedCount = selectedAssignments.filter((assignment) => {
+    const syncStatus = assignmentDisplayStates.get(assignment.externalId);
+
+    return syncStatus?.isImported && !syncStatus?.isUpdated;
+  }).length;
+  const updatedCount = selectedAssignments.filter(
+    (assignment) => assignmentDisplayStates.get(assignment.externalId)?.isUpdated
   ).length;
-  const updatedCount = selectedAssignments.filter((assignment) =>
-    hasClassroomAssignmentChanges(
-      assignment,
-      importedClassroomTasks.get(assignment.externalId)
+  const newImportCount = selectedAssignments.filter((assignment) => {
+    const syncStatus = assignmentDisplayStates.get(assignment.externalId);
+
+    return !syncStatus?.isImported && !syncStatus?.isUnlinked;
+  }).length;
+  const unlinkedSelectedCourseIds = Array.from(
+    new Set(
+      selectedAssignments
+        .filter((assignment) => assignmentDisplayStates.get(assignment.externalId)?.isUnlinked)
+        .map((assignment) => assignment.classroomCourseId)
+        .filter(Boolean)
     )
-  ).length;
-  const importableCount = Math.max(0, selectedCount - importedCount);
-  const unlinkedPreviewCourseCount = new Set(
-    selectedAssignments
-      .filter((assignment) => !linkedCourseIds.has(assignment.classroomCourseId))
-      .map((assignment) => assignment.classroomCourseId)
-  ).size;
-  const importButtonLabel =
-    selectedCount > 0
-      ? `Import ${selectedCount} selected assignment${
-          selectedCount === 1 ? "" : "s"
-        }`
-      : "Import selected";
+  );
+  const unlinkedPreviewCourseCount = unlinkedSelectedCourseIds.length;
+  const actionableCount = newImportCount + updatedCount;
+  const visibleSelectableAssignmentIds = filteredAssignments
+    .filter((assignment) => {
+      const syncStatus =
+        assignmentDisplayStates.get(assignment.externalId) ||
+        getClassroomAssignmentSyncStatus({
+          assignment,
+          existingTask: importedClassroomTasks.get(assignment.externalId),
+          linkedCourseIds,
+        });
+
+      return !(syncStatus.isImported && !syncStatus.isUpdated);
+    })
+    .map((assignment) => assignment.externalId)
+    .filter(Boolean);
+  const unlinkedVisibleCourseIds = Array.from(
+    new Set(
+      filteredAssignments
+        .filter((assignment) => {
+          const syncStatus =
+            assignmentDisplayStates.get(assignment.externalId) ||
+            getClassroomAssignmentSyncStatus({
+              assignment,
+              existingTask: importedClassroomTasks.get(assignment.externalId),
+              linkedCourseIds,
+            });
+
+          return syncStatus.isUnlinked;
+        })
+        .map((assignment) => assignment.classroomCourseId)
+        .filter(Boolean)
+    )
+  );
+  const firstUnlinkedCourseId =
+    unlinkedSelectedCourseIds[0] || unlinkedVisibleCourseIds[0] || "";
+  const importedVisibleCount = filteredAssignments.filter((assignment) => {
+    const syncStatus =
+      assignmentDisplayStates.get(assignment.externalId) ||
+      getClassroomAssignmentSyncStatus({
+        assignment,
+        existingTask: importedClassroomTasks.get(assignment.externalId),
+        linkedCourseIds,
+      });
+
+    return syncStatus.isImported && !syncStatus.isUpdated;
+  }).length;
+  const noVisibleActionableAssignments =
+    hasAssignments &&
+    filteredAssignments.length > 0 &&
+    visibleSelectableAssignmentIds.length === 0 &&
+    importedVisibleCount > 0;
+  const skippedSelectedCount = selectedAssignments.filter((assignment) => {
+    const syncStatus = assignmentDisplayStates.get(assignment.externalId);
+
+    return syncStatus?.isUnlinked || (syncStatus?.isImported && !syncStatus?.isUpdated);
+  }).length;
+  const importButtonLabel = preview.loading
+    ? "Loading assignments..."
+    : noVisibleActionableAssignments
+      ? "No new assignments to import"
+    : selectedCount === 0
+      ? "Select assignments to import"
+      : actionableCount === 0 && unlinkedPreviewCourseCount > 0
+        ? "Link Subject to import"
+      : actionableCount === 0
+        ? "No new assignments to import"
+        : newImportCount > 0 && updatedCount > 0
+          ? `Import ${newImportCount} · sync ${updatedCount}`
+          : newImportCount > 0
+            ? `Import ${formatCountLabel(newImportCount, "assignment")}`
+            : `Sync ${formatCountLabel(updatedCount, "assignment")}`;
+  const importPanelSummary =
+    noVisibleActionableAssignments
+      ? `${formatCountLabel(importedVisibleCount, "assignment")} already imported.`
+      : selectedCount === 0
+      ? "Due-date assignments are selected by default."
+      : actionableCount === 0 && unlinkedPreviewCourseCount > 0
+        ? `Link ${formatCountLabel(
+            unlinkedPreviewCourseCount,
+            "class",
+            "classes"
+          )} to a Subject first.`
+      : actionableCount === 0
+        ? selectedAlreadyImportedCount > 0
+          ? `${formatCountLabel(
+              selectedAlreadyImportedCount,
+              "assignment"
+            )} already imported.`
+          : "No selected assignments can be imported."
+        : [
+            `${formatCountLabel(selectedCount, "assignment")} selected`,
+            newImportCount > 0
+              ? `${formatCountLabel(newImportCount, "new assignment")}`
+              : "",
+            updatedCount > 0
+              ? `${formatCountLabel(updatedCount, "Classroom update")}`
+              : "",
+            skippedSelectedCount > 0
+              ? `${formatCountLabel(skippedSelectedCount, "selection")} skipped`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" · ");
+  const hasMissingSubjectWarning =
+    unlinkedPreviewCourseCount > 0 || unlinkedVisibleCourseIds.length > 0;
 
   return (
     <section className="real-classroom-assignment-preview" aria-live="polite">
       <div className="real-classroom-assignment-preview-header">
         <div>
           <strong>Preview</strong>
-          <p>Only selected assignments become tasks.</p>
+          <p>Select the work to turn into Student Hub tasks.</p>
         </div>
         {preview.summary && (
           <span>
@@ -3902,17 +4277,20 @@ function RealClassroomAssignmentPreview({
         <div className="real-classroom-import-panel">
           <div>
             <strong>Import selected</strong>
-            <p>Manual tasks are never changed.</p>
-            <small>
-              {selectedCount} selected · {importableCount} new · {updatedCount} updated · {importedCount} already imported
-            </small>
+            <p>{importPanelSummary}</p>
+            {skippedSelectedCount > 0 && actionableCount > 0 && (
+              <small>
+                {formatCountLabel(skippedSelectedCount, "selected item")} will be skipped.
+              </small>
+            )}
           </div>
           <button
             type="button"
             onClick={onImportAssignments}
+            aria-label={importButtonLabel}
             disabled={
               selectedCount === 0 ||
-              unlinkedPreviewCourseCount > 0 ||
+              actionableCount === 0 ||
               preview.loading
             }
           >
@@ -3966,7 +4344,7 @@ function RealClassroomAssignmentPreview({
           <div className="real-classroom-selection-actions">
             <button
               type="button"
-              onClick={() => onSelectAllAssignments(visibleAssignmentIds)}
+              onClick={() => onSelectAllAssignments(visibleSelectableAssignmentIds)}
             >
               Select all visible
             </button>
@@ -3984,30 +4362,48 @@ function RealClassroomAssignmentPreview({
             </button>
           </div>
           <p>
-            Turned-in and no-due-date items are not selected by default.
+            Due-date assignments are selected by default.
           </p>
         </div>
       )}
 
       {hasAssignments && selectedCount === 0 && !preview.error && (
         <p className="real-classroom-preview-warning">
-          Select at least one assignment to import or sync.
+          {noVisibleActionableAssignments
+            ? "No new assignments to import in this view."
+            : "Select assignments to import."}
         </p>
       )}
 
-      {unlinkedPreviewCourseCount > 0 && (
-        <p className="real-classroom-preview-warning">
-          {unlinkedPreviewCourseCount} included class
-          {unlinkedPreviewCourseCount === 1 ? "" : "es"} with assignments not
-          linked to subjects yet. Import will need subject links.
-        </p>
+      {hasMissingSubjectWarning && (
+        <div className="real-classroom-preview-warning real-classroom-preview-warning-action">
+          <span>
+            {unlinkedPreviewCourseCount > 0
+              ? `Link ${formatCountLabel(
+                  unlinkedPreviewCourseCount,
+                  "class",
+                  "classes"
+                )} to a Subject before importing.`
+              : `${formatCountLabel(
+                  unlinkedVisibleCourseIds.length,
+                  "class",
+                  "classes"
+                )} need Subject links.`}
+          </span>
+          <button
+            type="button"
+            onClick={() => onGoToClassSetup(firstUnlinkedCourseId)}
+          >
+            Go to class setup
+          </button>
+        </div>
       )}
 
       {preview.loading && <p>Reading assignments from included classes...</p>}
       {preview.error && (
         <p className="real-classroom-preview-error">{preview.error}</p>
       )}
-      {preview.message && !preview.error && !preview.loading && (
+      {preview.message && !preview.error && !preview.loading && !hasAssignments && (
         <p>{preview.message}</p>
       )}
       {!preview.loading &&
@@ -4044,22 +4440,36 @@ function RealClassroomAssignmentPreview({
 
               <div className="real-classroom-assignment-list">
                 {group.assignments.map((assignment) => {
-                  const isSelected =
-                    preview.selectedAssignmentIds?.[assignment.externalId] ===
-                    true;
                   const existingTask = importedClassroomTasks.get(
                     assignment.externalId
                   );
-                  const syncStatus = getClassroomAssignmentSyncStatus({
-                    assignment,
-                    existingTask,
-                    linkedCourseIds,
-                  });
+                  const syncStatus =
+                    assignmentDisplayStates.get(assignment.externalId) ||
+                    getClassroomAssignmentSyncStatus({
+                      assignment,
+                      existingTask,
+                      linkedCourseIds,
+                    });
+                  const selectionDisabled =
+                    syncStatus.isImported && !syncStatus.isUpdated;
+                  const isSelected =
+                    !selectionDisabled &&
+                    preview.selectedAssignmentIds?.[assignment.externalId] ===
+                      true;
+                  const selectionLabel = selectionDisabled
+                    ? "Imported"
+                    : isSelected
+                      ? "Selected"
+                      : "Not selected";
 
                   return (
                     <div
                       className={`real-classroom-assignment-row ${
+                        isSelected ? "is-selected" : ""
+                      } ${
                         syncStatus.isImported ? "is-imported" : ""
+                      } ${
+                        syncStatus.isUnlinked ? "needs-subject" : ""
                       } ${
                         !syncStatus.hasDueDate ? "has-no-due-date" : ""
                       }`}
@@ -4069,6 +4479,13 @@ function RealClassroomAssignmentPreview({
                         <input
                           type="checkbox"
                           checked={isSelected}
+                          disabled={selectionDisabled}
+                          aria-label={`${assignment.title}: ${selectionLabel}`}
+                          title={
+                            selectionDisabled
+                              ? "This assignment is already imported and up to date."
+                              : undefined
+                          }
                           onChange={(event) =>
                             onSelectAssignment(
                               assignment.externalId,
@@ -4076,7 +4493,7 @@ function RealClassroomAssignmentPreview({
                             )
                           }
                         />
-                        <span>{isSelected ? "Selected" : "Not selected"}</span>
+                        <span>{selectionLabel}</span>
                       </label>
                       <div>
                         <strong>{assignment.title}</strong>

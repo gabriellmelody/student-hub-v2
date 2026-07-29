@@ -209,6 +209,7 @@ function App() {
   const [settingsView, setSettingsView] = useState(
     initialNavigation.settingsView
   );
+  const [settingsNavigationRequest, setSettingsNavigationRequest] = useState(0);
   const [homeEditMode, setHomeEditMode] = useState(false);
   const [rightRailEditMode, setRightRailEditMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -343,6 +344,21 @@ function App() {
     }
   }, [initialNavigation.classroomCallbackStatus]);
 
+  useEffect(() => {
+    function syncNavigationFromHistory() {
+      const nextNavigation = getInitialNavigationState();
+
+      setActivePage(nextNavigation.activePage);
+      setSettingsView(nextNavigation.settingsView);
+      setSettingsNavigationRequest((currentRequest) => currentRequest + 1);
+    }
+
+    window.addEventListener("popstate", syncNavigationFromHistory);
+
+    return () =>
+      window.removeEventListener("popstate", syncNavigationFromHistory);
+  }, []);
+
   const rightRailWidgets = getWidgetsForArea(
     widgetConfig,
     "rightRail"
@@ -401,8 +417,36 @@ function App() {
   }
 
   function openSettings(view = "hub", sectionId = "") {
-    setSettingsView(view);
+    const nextView = view || "hub";
+
+    setSettingsView(nextView);
+    setSettingsNavigationRequest((currentRequest) => currentRequest + 1);
     setActivePage("settings");
+
+    if (typeof window !== "undefined") {
+      const nextUrl = new URL(window.location.href);
+
+      nextUrl.searchParams.delete("settings");
+      nextUrl.searchParams.delete("googleCalendarManager");
+      nextUrl.searchParams.delete("googleClassroomManager");
+      nextUrl.searchParams.delete("classroom");
+      nextUrl.searchParams.delete("classroomStatus");
+      nextUrl.searchParams.delete("googleCalendar");
+      nextUrl.searchParams.delete("googleCalendarStatus");
+
+      if (nextView === "integrations") {
+        nextUrl.searchParams.set("tab", "integrations");
+      } else {
+        nextUrl.searchParams.delete("tab");
+      }
+
+      const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+      const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+      if (nextPath !== currentPath) {
+        window.history.pushState({}, "", nextPath);
+      }
+    }
 
     if (sectionId) {
       window.setTimeout(() => {
@@ -2075,6 +2119,7 @@ function App() {
             googleCalendarCallbackStatus={
               initialNavigation.googleCalendarCallbackStatus
             }
+            navigationRequest={settingsNavigationRequest}
           />
         )}
       </section>
