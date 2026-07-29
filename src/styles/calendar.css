@@ -4,7 +4,7 @@
   --calendar-effort-low: var(--safe);
   --calendar-effort-medium: var(--accent-soft);
   --calendar-effort-high: var(--urgent);
-  --calendar-dot-neutral: color-mix(in srgb, var(--text-muted) 76%, var(--surface-raised));
+  --calendar-deadline-color: var(--text-muted);
 }
 
 .calendar-page-header {
@@ -144,9 +144,9 @@
 .calendar-day {
   min-width: 0;
   min-height: var(--density-calendar-day-height);
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: 4px;
   border: 0;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -189,11 +189,8 @@
 .calendar-task-dots {
   min-width: 0;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
-  margin-top: auto;
-  min-height: 12px;
+  margin-top: 2px;
 }
 
 .calendar-google-events {
@@ -201,18 +198,21 @@
   display: grid;
   gap: 3px;
   margin-top: 2px;
+  align-content: start;
+  overflow: hidden;
 }
 
 .calendar-google-event-bar {
   min-width: 0;
   display: flex;
   align-items: center;
-  border: 1px solid color-mix(in srgb, var(--calendar-event-color, var(--accent-soft)) 34%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--calendar-event-color, var(--accent-soft)) 24%, var(--border));
   border-radius: 999px;
-  padding: 2px 5px;
-  background: color-mix(in srgb, var(--calendar-event-color, var(--accent-soft)) 16%, var(--surface-raised));
+  padding: 2px 5px 2px 7px;
+  background: color-mix(in srgb, var(--calendar-event-color, var(--accent-soft)) 9%, var(--surface-raised));
   color: var(--text-secondary);
-  box-shadow: inset 2px 0 var(--calendar-event-color, var(--accent-soft));
+  box-shadow: inset 2px 0 color-mix(in srgb, var(--calendar-event-color, var(--accent-soft)) 74%, transparent);
+  opacity: 0.88;
 }
 
 .calendar-google-event-bar span {
@@ -232,32 +232,42 @@
   line-height: 1;
 }
 
-.calendar-task-dot {
+.calendar-deadline-summary {
+  min-width: 0;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid color-mix(in srgb, var(--calendar-deadline-color) 38%, var(--border-strong));
+  border-radius: 999px;
+  padding: 2px 6px;
+  background: color-mix(in srgb, var(--calendar-deadline-color) 11%, var(--surface));
+  color: var(--text-secondary);
+  box-shadow: inset 2px 0 color-mix(in srgb, var(--calendar-deadline-color) 74%, transparent);
+  font-size: 0.57rem;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.calendar-deadline-summary > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-deadline-summary.has-assessment {
+  border-color: color-mix(in srgb, var(--calendar-deadline-color) 54%, var(--effort-high-border));
+  color: var(--text);
+}
+
+.calendar-deadline-assessment-mark {
   width: 6px;
   height: 6px;
   flex: 0 0 auto;
-  border-radius: 50%;
-  background: var(--calendar-dot-color, var(--calendar-dot-neutral));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--calendar-dot-color, var(--calendar-dot-neutral)) 24%, transparent);
-}
-
-.calendar-dot-effort-low {
-  --calendar-dot-color: var(--calendar-effort-low);
-}
-
-.calendar-dot-effort-medium {
-  --calendar-dot-color: var(--calendar-effort-medium);
-}
-
-.calendar-dot-effort-high {
-  --calendar-dot-color: var(--calendar-effort-high);
-}
-
-.calendar-dot-overflow {
-  color: var(--text-muted);
-  font-size: 0.56rem;
-  font-weight: 700;
-  line-height: 1;
+  border-radius: 2px;
+  background: var(--calendar-deadline-color);
+  transform: rotate(45deg);
 }
 
 .calendar-day-events {
@@ -632,6 +642,12 @@
   text-align: center;
 }
 
+.calendar-empty-state-compact {
+  padding: 12px;
+  border-style: solid;
+  background: var(--surface-subtle);
+}
+
 .calendar-empty-state h3 {
   margin: 0 0 5px;
   font-size: 0.84rem;
@@ -668,6 +684,10 @@
 
   .calendar-google-event-bar span {
     max-width: 100%;
+  }
+
+  .calendar-task-dots {
+    margin-top: 1px;
   }
 
   .calendar-google-event-item {

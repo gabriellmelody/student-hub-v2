@@ -247,53 +247,58 @@
 .evening-plan-success-toast {
   position: fixed;
   z-index: 100;
-  top: 24px;
-  left: 50%;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
   display: grid;
-  min-width: min(330px, calc(100vw - 32px));
-  justify-items: center;
-  gap: 7px;
-  padding: 18px 20px 16px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: min(340px, calc(100vw - 36px));
+  padding: 10px 10px;
   border: 1px solid var(--effort-low-border);
-  border-radius: 22px;
+  border-radius: 16px;
   background: var(--surface-raised);
-  box-shadow: var(--shadow-modal);
-  transform: translateX(-50%);
+  box-shadow: var(--shadow-card);
   animation: evening-success-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .evening-plan-success-toast > button {
-  position: absolute;
-  top: 8px;
-  right: 10px;
+  position: static;
+  grid-column: 3;
+  grid-row: 1 / span 2;
 }
 
 .evening-plan-success-toast strong {
+  min-width: 0;
   color: var(--text);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
+  line-height: var(--line-compact);
 }
 
 .evening-plan-success-toast p {
+  min-width: 0;
   margin: 0;
   color: var(--text-secondary);
   font-size: 0.68rem;
   font-weight: 650;
+  line-height: var(--line-compact);
 }
 
 .evening-plan-success-check {
   display: grid;
-  width: 54px;
-  height: 54px;
+  width: 34px;
+  height: 34px;
   place-items: center;
+  grid-row: 1 / span 2;
   border-radius: 999px;
   background: var(--effort-low-bg);
   color: var(--safe);
-  box-shadow: 0 0 0 9px color-mix(in srgb, var(--safe) 10%, transparent);
+  box-shadow: 0 0 0 5px color-mix(in srgb, var(--safe) 8%, transparent);
   animation: evening-success-pulse 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .evening-plan-success-check span {
-  font-size: 1.45rem;
+  font-size: 1rem;
   font-weight: 900;
   line-height: 1;
   animation: evening-check-pop 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -1016,12 +1021,12 @@
 @keyframes evening-success-enter {
   from {
     opacity: 0;
-    transform: translate(-50%, -10px) scale(0.96);
+    transform: translateY(8px) scale(0.98);
   }
 
   to {
     opacity: 1;
-    transform: translate(-50%, 0) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -1033,12 +1038,12 @@
 
   70% {
     transform: scale(1);
-    box-shadow: 0 0 0 11px color-mix(in srgb, var(--safe) 0%, transparent);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--safe) 0%, transparent);
   }
 
   100% {
     transform: scale(1);
-    box-shadow: 0 0 0 9px color-mix(in srgb, var(--safe) 10%, transparent);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--safe) 8%, transparent);
   }
 }
 

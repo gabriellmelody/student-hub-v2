@@ -15,8 +15,7 @@ import {
   updateTaskTitleWithDetection,
 } from "../utils/appUtils.js";
 
-const calendarDotLimit = 5;
-const googleCalendarEventLimit = 3;
+const googleCalendarEventLimit = 2;
 const GOOGLE_CALENDAR_PREFERENCES_KEY =
   "studentHub.googleCalendarPreferences";
 
@@ -232,12 +231,71 @@ function getCalendarEffortLevel(task) {
   return "medium";
 }
 
-function getCalendarDotStyle(event, colourMode) {
-  if (colourMode === "subject" && event.subjectColour) {
-    return { "--calendar-dot-color": event.subjectColour };
+function isAssessmentCalendarEvent(event) {
+  return (
+    event?.taskType === "assessment" ||
+    (Array.isArray(event?.detectedTags) && event.detectedTags.length > 0)
+  );
+}
+
+function getAssessmentCalendarLabel(event) {
+  const assessmentBadge = getTaskSignalBadges(event).find(
+    (badge) => badge.tone === "assessment"
+  );
+
+  return assessmentBadge?.label || "Assessment";
+}
+
+function formatAssessmentSummaryLabel(event) {
+  return getAssessmentCalendarLabel(event).toLowerCase();
+}
+
+function formatDueCount(count, { compact = false } = {}) {
+  if (compact) return `${count} due`;
+
+  if (count === 0) return "No tasks due";
+  if (count === 1) return "1 task due";
+  return `${count} tasks due`;
+}
+
+function getCalendarDeadlineSummaryLabel(events) {
+  const assessmentEvents = events.filter(isAssessmentCalendarEvent);
+  const assessmentCount = assessmentEvents.length;
+
+  if (assessmentCount === 1 && events.length === 1) {
+    return `1 ${formatAssessmentSummaryLabel(assessmentEvents[0])}`;
   }
 
-  return undefined;
+  if (assessmentCount > 0) {
+    return `${formatDueCount(events.length, { compact: true })} · ${assessmentCount} ${
+      assessmentCount === 1 ? "assessment" : "assessments"
+    }`;
+  }
+
+  return formatDueCount(events.length, { compact: true });
+}
+
+function getCalendarDeadlineSummaryStyle(events, colourMode) {
+  if (colourMode === "subject") {
+    const subjectEvent = events.find((event) => event.subjectColour);
+
+    return subjectEvent
+      ? { "--calendar-deadline-color": subjectEvent.subjectColour }
+      : undefined;
+  }
+
+  const effortRank = { low: 0, medium: 1, high: 2 };
+  const highestEffort = events.reduce((highestLevel, event) => {
+    const effortLevel = getCalendarEffortLevel(event);
+
+    return effortRank[effortLevel] > effortRank[highestLevel]
+      ? effortLevel
+      : highestLevel;
+  }, "low");
+
+  return {
+    "--calendar-deadline-color": `var(--calendar-effort-${highestEffort})`,
+  };
 }
 
 function createCalendarTaskDraft(dueDate) {
@@ -642,11 +700,9 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               const activeDayEvents = dayEvents.filter(
                 (event) => !event.completed
               );
-              const visibleDots = activeDayEvents.slice(0, calendarDotLimit);
-              const hiddenDotCount = Math.max(
-                0,
-                activeDayEvents.length - visibleDots.length
-              );
+              const assessmentCount = activeDayEvents.filter(
+                isAssessmentCalendarEvent
+              ).length;
               const dayGoogleCalendarEvents = visibleGoogleCalendarEvents.filter(
                 (event) => googleEventOccursOnDate(event, day.dateKey)
               );
@@ -673,9 +729,15 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                   aria-label={`${day.date.toLocaleDateString(undefined, {
                     month: "long",
                     day: "numeric",
-                  })}, ${activeDayEvents.length} active task${
-                    activeDayEvents.length === 1 ? "" : "s"
-                  } due`}
+                  })}, ${formatDueCount(activeDayEvents.length)}${
+                    assessmentCount > 0
+                      ? `, ${assessmentCount} assessment${
+                          assessmentCount === 1 ? "" : "s"
+                        }`
+                      : ""
+                  }, ${dayGoogleCalendarEvents.length} calendar event${
+                    dayGoogleCalendarEvents.length === 1 ? "" : "s"
+                  }`}
                   onClick={() => selectCalendarDay(day)}
                 >
                   <span className="calendar-day-number">{day.date.getDate()}</span>
@@ -700,37 +762,37 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                     </span>
                   )}
 
-                  <span
-                    className="calendar-task-dots"
-                    aria-hidden="true"
-                    data-colour-mode={dotColourMode}
-                  >
-                    {visibleDots.map((event) => {
-                      const effortLevel = getCalendarEffortLevel(event);
-
-                      return (
-                        <span
-                          key={event.id}
-                          className={`calendar-task-dot calendar-dot-${dotColourMode} calendar-dot-effort-${effortLevel} ${
-                            dotColourMode === "subject" && event.subjectColour
-                              ? "has-subject-colour"
-                              : ""
-                          }`}
-                          style={getCalendarDotStyle(event, dotColourMode)}
-                          title={`${event.title} · ${
-                            dotColourMode === "effort"
-                              ? `${effortLabels[effortLevel]} effort`
-                              : event.subject || "No subject"
-                          }`}
-                        />
-                      );
-                    })}
-                    {hiddenDotCount > 0 && (
-                      <small className="calendar-dot-overflow">
-                        +{hiddenDotCount}
-                      </small>
-                    )}
-                  </span>
+                  {activeDayEvents.length > 0 && (
+                    <span className="calendar-task-dots" aria-hidden="true">
+                      <span
+                        className={`calendar-deadline-summary ${
+                          assessmentCount > 0 ? "has-assessment" : ""
+                        }`}
+                        data-colour-mode={dotColourMode}
+                        style={getCalendarDeadlineSummaryStyle(
+                          activeDayEvents,
+                          dotColourMode
+                        )}
+                        title={`${formatDueCount(activeDayEvents.length)}${
+                          assessmentCount > 0
+                            ? ` · ${assessmentCount} assessment${
+                                assessmentCount === 1 ? "" : "s"
+                              }`
+                            : ""
+                        }`}
+                      >
+                        {assessmentCount > 0 && (
+                          <span
+                            className="calendar-deadline-assessment-mark"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <span>
+                          {getCalendarDeadlineSummaryLabel(activeDayEvents)}
+                        </span>
+                      </span>
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -750,10 +812,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               </h3>
             </div>
             <div className="calendar-detail-actions">
-              <span>
-                {selectedEvents.length} due
-                {selectedEvents.length === 1 ? "" : "s"}
-              </span>
+              <span>{formatDueCount(selectedEvents.length, { compact: true })}</span>
               <span>
                 {selectedScheduleEvents.length} event
                 {selectedScheduleEvents.length === 1 ? "" : "s"}
@@ -937,7 +996,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                 })}
               </div>
             ) : (
-              <div className="calendar-empty-state">
+              <div className="calendar-empty-state calendar-empty-state-compact">
                 <h3>
                   {calendarEvents.length === 0
                     ? "No due dates yet."

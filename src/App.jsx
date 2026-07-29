@@ -709,10 +709,17 @@ function App() {
     clearTimeout(eveningPlanSuccessTimerRef.current);
     eveningPlanSuccessTimerRef.current = setTimeout(() => {
       setEveningPlanSuccess(null);
-    }, 3600);
+    }, 1800);
 
     return () => clearTimeout(eveningPlanSuccessTimerRef.current);
   }, [eveningPlanSuccess]);
+
+  useEffect(() => {
+    if (activePage === "plan" || !eveningPlanSuccess) return;
+
+    clearTimeout(eveningPlanSuccessTimerRef.current);
+    setEveningPlanSuccess(null);
+  }, [activePage, eveningPlanSuccess]);
 
   function isCompletedInClassroom(task) {
     return (
@@ -1437,6 +1444,7 @@ function App() {
   }
 
   function openEveningPlanner() {
+    setEveningPlanSuccess(null);
     setEveningPlannerDraft(getDefaultEveningPlannerDraft());
     setEveningPlannerError("");
     setEveningPlannerNeedsReplace(false);
@@ -1504,6 +1512,8 @@ function App() {
     ignoreCalendar = false,
   } = {}) {
     if (eveningPlannerCheckingCalendar) return;
+
+    setEveningPlanSuccess(null);
 
     if (planBlocks.length > 0 && !replaceExisting) {
       setEveningPlannerNeedsReplace(true);
@@ -2159,7 +2169,7 @@ function App() {
         />
       )}
 
-      {eveningPlanSuccess && (
+      {activePage === "plan" && eveningPlanSuccess && (
         <EveningPlanSuccessToast
           title={eveningPlanSuccess.title}
           summary={eveningPlanSuccess.summary}
