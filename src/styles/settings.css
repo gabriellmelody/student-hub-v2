@@ -2214,8 +2214,8 @@
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0;
-  width: min(1100px, calc(100vw - 48px));
-  max-width: 1100px;
+  width: min(1100px, 100%);
+  max-width: 100%;
   min-width: 0;
   height: min(900px, calc(100dvh - 32px));
   max-height: calc(100dvh - 32px);
@@ -2332,6 +2332,7 @@
 
 .google-calendar-manager-list {
   min-height: 0;
+  min-width: 0;
   max-width: 100%;
   overflow-x: hidden;
   overflow-y: auto;
@@ -2346,13 +2347,20 @@
 .google-calendar-manager-row {
   min-width: 0;
   display: grid;
-  grid-template-columns: 16px minmax(260px, 1fr) minmax(180px, 205px) minmax(170px, 205px);
+  grid-template-columns: 16px minmax(0, 1fr) minmax(280px, 430px);
   align-items: center;
   gap: 10px;
   padding: 10px;
   border: 1px solid var(--border-soft);
   border-radius: 11px;
   background: var(--surface-subtle);
+}
+
+.google-calendar-manager-controls {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(132px, 1fr));
+  gap: 8px;
 }
 
 .google-calendar-manager-copy {
@@ -2402,6 +2410,7 @@
 
 .google-calendar-switch {
   min-width: 0;
+  width: 100%;
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
@@ -2488,8 +2497,13 @@
     align-items: start;
   }
 
-  .google-calendar-switch {
+  .google-calendar-manager-controls {
     grid-column: 2;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .google-calendar-switch {
     justify-content: space-between;
     white-space: normal;
   }
@@ -2520,8 +2534,8 @@
   }
 
   .google-calendar-manager-modal {
-    width: calc(100vw - 24px);
-    max-width: calc(100vw - 24px);
+    width: 100%;
+    max-width: 100%;
     height: min(900px, calc(100dvh - 24px));
     max-height: calc(100dvh - 24px);
     margin: 12px auto;
@@ -2547,6 +2561,12 @@
     flex: 1;
   }
 
+}
+
+@media (max-width: 560px) {
+  .google-calendar-manager-controls {
+    grid-template-columns: 1fr;
+  }
 }
 
 .integration-link-button {
@@ -3228,8 +3248,8 @@
 }
 
 .data-confirmation.google-calendar-manager-modal {
-  width: min(1100px, calc(100vw - 48px));
-  max-width: 1100px;
+  width: min(1100px, 100%);
+  max-width: 100%;
   min-width: 0;
   height: min(900px, calc(100dvh - 32px));
   max-height: calc(100dvh - 32px);
@@ -3247,8 +3267,8 @@
   }
 
   .data-confirmation.google-calendar-manager-modal {
-    width: calc(100vw - 24px);
-    max-width: calc(100vw - 24px);
+    width: 100%;
+    max-width: 100%;
     height: min(900px, calc(100dvh - 24px));
     max-height: calc(100dvh - 24px);
     margin: 12px auto;

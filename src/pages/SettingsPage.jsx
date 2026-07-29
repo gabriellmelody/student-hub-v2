@@ -3250,30 +3250,32 @@ function GoogleCalendarManagerRow({ calendar, preference, onTogglePreference }) 
           </p>
         )}
       </div>
-      <label className="google-calendar-switch">
-        <input
-          type="checkbox"
-          checked={preference.showInStudentHub}
-          onChange={(event) =>
-            onTogglePreference(calendar, {
-              showInStudentHub: event.target.checked,
-            })
-          }
-        />
-        <span>Show in Student Hub</span>
-      </label>
-      <label className="google-calendar-switch">
-        <input
-          type="checkbox"
-          checked={preference.useAsBusyTime}
-          onChange={(event) =>
-            onTogglePreference(calendar, {
-              useAsBusyTime: event.target.checked,
-            })
-          }
-        />
-        <span>Block study time</span>
-      </label>
+      <div className="google-calendar-manager-controls">
+        <label className="google-calendar-switch">
+          <input
+            type="checkbox"
+            checked={preference.showInStudentHub}
+            onChange={(event) =>
+              onTogglePreference(calendar, {
+                showInStudentHub: event.target.checked,
+              })
+            }
+          />
+          <span>Show in Student Hub</span>
+        </label>
+        <label className="google-calendar-switch">
+          <input
+            type="checkbox"
+            checked={preference.useAsBusyTime}
+            onChange={(event) =>
+              onTogglePreference(calendar, {
+                useAsBusyTime: event.target.checked,
+              })
+            }
+          />
+          <span>Block study time</span>
+        </label>
+      </div>
     </div>
   );
 }
