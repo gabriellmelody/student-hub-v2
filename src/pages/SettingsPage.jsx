@@ -1289,7 +1289,19 @@ function IntegrationsSettings({
   const [showMockPreview, setShowMockPreview] = useState(false);
   const [showRealClassroomReview, setShowRealClassroomReview] = useState(false);
   const [showGoogleCalendarManager, setShowGoogleCalendarManager] =
-    useState(false);
+    useState(() => {
+      if (typeof window === "undefined") return false;
+
+      return (
+        new URLSearchParams(window.location.search).get(
+          "googleCalendarManager"
+        ) === "1"
+      );
+    });
+  const [googleCalendarSaveStatus, setGoogleCalendarSaveStatus] = useState({
+    status: "saved",
+    message: "Saved",
+  });
   const [pendingAction, setPendingAction] = useState(null);
   const [syncMessage, setSyncMessage] = useState("");
   const [classroomCleanupMessage, setClassroomCleanupMessage] = useState("");
@@ -1486,11 +1498,38 @@ function IntegrationsSettings({
   }, [realClassroomCourseSubjectLinks]);
 
   useEffect(() => {
-    localStorage.setItem(
-      GOOGLE_CALENDAR_PREFERENCES_KEY,
-      JSON.stringify(googleCalendarPreferences)
-    );
+    try {
+      localStorage.setItem(
+        GOOGLE_CALENDAR_PREFERENCES_KEY,
+        JSON.stringify(googleCalendarPreferences)
+      );
+      setGoogleCalendarSaveStatus({
+        status: "saved",
+        message: "Saved",
+      });
+    } catch {
+      setGoogleCalendarSaveStatus({
+        status: "error",
+        message: "Couldn’t save",
+      });
+    }
   }, [googleCalendarPreferences]);
+
+  useEffect(() => {
+    function syncCalendarManagerFromHistory() {
+      const isManagerOpen =
+        new URLSearchParams(window.location.search).get(
+          "googleCalendarManager"
+        ) === "1";
+
+      setShowGoogleCalendarManager(isManagerOpen);
+    }
+
+    window.addEventListener("popstate", syncCalendarManagerFromHistory);
+
+    return () =>
+      window.removeEventListener("popstate", syncCalendarManagerFromHistory);
+  }, []);
 
   useEffect(() => {
     checkRealClassroomSession();
@@ -1802,6 +1841,36 @@ function IntegrationsSettings({
     }
   }
 
+  function setGoogleCalendarManagerPageOpen(isOpen, { push = true } = {}) {
+    setShowGoogleCalendarManager(isOpen);
+
+    if (typeof window === "undefined") return;
+
+    const nextUrl = new URL(window.location.href);
+
+    if (isOpen) {
+      nextUrl.searchParams.set("tab", "integrations");
+      nextUrl.searchParams.set("googleCalendarManager", "1");
+    } else {
+      nextUrl.searchParams.delete("googleCalendarManager");
+      if (!nextUrl.searchParams.get("tab")) {
+        nextUrl.searchParams.set("tab", "integrations");
+      }
+    }
+
+    const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+
+    if (nextPath === `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      return;
+    }
+
+    if (push) {
+      window.history.pushState({}, "", nextPath);
+    } else {
+      window.history.replaceState({}, "", nextPath);
+    }
+  }
+
   async function loadGoogleCalendars() {
     setGoogleCalendarCalendars((currentState) => ({
       ...currentState,
@@ -1891,7 +1960,9 @@ function IntegrationsSettings({
         } found`,
       });
       if (loadedCalendars.length > 0) {
-        setShowGoogleCalendarManager(true);
+        setGoogleCalendarManagerPageOpen(true, {
+          push: !showGoogleCalendarManager,
+        });
       }
     } catch {
       setGoogleCalendarCalendars((currentState) => ({
@@ -1907,6 +1978,10 @@ function IntegrationsSettings({
 
     if (!calendarId) return;
 
+    setGoogleCalendarSaveStatus({
+      status: "saving",
+      message: "Saving…",
+    });
     setGoogleCalendarPreferences((currentPreferences) => ({
       ...currentPreferences,
       [calendarId]: {
@@ -1920,6 +1995,10 @@ function IntegrationsSettings({
   }
 
   function updateAllGoogleCalendarVisibility(showInStudentHub) {
+    setGoogleCalendarSaveStatus({
+      status: "saving",
+      message: "Saving…",
+    });
     setGoogleCalendarPreferences((currentPreferences) => {
       const nextPreferences = { ...currentPreferences };
 
@@ -2421,6 +2500,31 @@ function IntegrationsSettings({
     (integration) => integration.id !== "google-classroom"
   );
 
+  if (showGoogleCalendarManager) {
+    return (
+      <div className="integrations-settings">
+        <GoogleCalendarManagerPage
+          calendarState={googleCalendarCalendars}
+          preferences={googleCalendarPreferences}
+          saveStatus={googleCalendarSaveStatus}
+          onLoadCalendars={loadGoogleCalendars}
+          onTogglePreference={updateGoogleCalendarPreference}
+          onShowAll={() => updateAllGoogleCalendarVisibility(true)}
+          onHideAll={() => updateAllGoogleCalendarVisibility(false)}
+          onBack={() => setGoogleCalendarManagerPageOpen(false)}
+        />
+
+        {successToast && (
+          <ClassroomSuccessToast
+            title={successToast.title}
+            summary={successToast.summary}
+            onClose={() => setSuccessToast(null)}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="integrations-settings">
       <section className="panel integration-control-panel">
@@ -2468,7 +2572,9 @@ function IntegrationsSettings({
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
               onLoadGoogleCalendars={loadGoogleCalendars}
-              onManageGoogleCalendars={() => setShowGoogleCalendarManager(true)}
+              onManageGoogleCalendars={() =>
+                setGoogleCalendarManagerPageOpen(true)
+              }
             />
           ))}
         </div>
@@ -2520,18 +2626,6 @@ function IntegrationsSettings({
           }
           onRestoreArchivedClassroomTasks={restoreArchivedRealClassroomTasks}
           onClose={() => setShowRealClassroomReview(false)}
-        />
-      )}
-
-      {showGoogleCalendarManager && (
-        <GoogleCalendarManagerModal
-          calendarState={googleCalendarCalendars}
-          preferences={googleCalendarPreferences}
-          onLoadCalendars={loadGoogleCalendars}
-          onTogglePreference={updateGoogleCalendarPreference}
-          onShowAll={() => updateAllGoogleCalendarVisibility(true)}
-          onHideAll={() => updateAllGoogleCalendarVisibility(false)}
-          onClose={() => setShowGoogleCalendarManager(false)}
         />
       )}
 
@@ -3050,16 +3144,16 @@ function GoogleCalendarCompactStatus({ session, calendarState, preferences }) {
   );
 }
 
-function GoogleCalendarManagerModal({
+function GoogleCalendarManagerPage({
   calendarState,
   preferences,
+  saveStatus,
   onLoadCalendars,
   onTogglePreference,
   onShowAll,
   onHideAll,
-  onClose,
+  onBack,
 }) {
-  const [showSavedConfirmation, setShowSavedConfirmation] = useState(false);
   const calendars = calendarState.calendars;
   const duplicateRiskCount = calendars.filter((calendar) => {
     const preference =
@@ -3069,154 +3163,118 @@ function GoogleCalendarManagerModal({
     return Boolean(preference.duplicateRisk);
   }).length;
 
-  useEffect(() => {
-    function closeOnEscape(event) {
-      if (event.key === "Escape" && !showSavedConfirmation) onClose();
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose, showSavedConfirmation]);
-
-  function saveChoices() {
-    setShowSavedConfirmation(true);
-
-    window.setTimeout(() => {
-      onClose();
-    }, 1250);
-  }
-
   return (
-    <div
-      className="data-confirmation-backdrop real-classroom-modal-backdrop google-calendar-manager-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !showSavedConfirmation) {
-          onClose();
-        }
-      }}
-    >
-      <section
-        className="data-confirmation google-calendar-manager-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="google-calendar-manager-title"
-        aria-describedby="google-calendar-manager-description"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="google-calendar-manager-top">
-          <header className="google-calendar-manager-header">
-            <div>
-              <p className="settings-group-label">Google Calendar</p>
-              <h3 id="google-calendar-manager-title">Manage calendars</h3>
-              <p id="google-calendar-manager-description">
-                Choose what Student Hub should show and what should block study
-                time. Nothing is changed in Google.
-              </p>
-              <p>
-                The planner will avoid events from calendars marked Block study
-                time.
-              </p>
-            </div>
-          </header>
-
-          <div className="google-calendar-manager-summary">
-            <span>{calendars.length} calendars</span>
-            {duplicateRiskCount > 0 && (
-              <span>{duplicateRiskCount} Classroom assignment calendars</span>
-            )}
-            {calendarState.lastCheckedAt && (
-              <small>
-                Loaded {formatConnectionTime(calendarState.lastCheckedAt)}
-              </small>
-            )}
+    <section className="panel google-calendar-manager-page">
+      <div className="google-calendar-manager-top">
+        <button
+          type="button"
+          className="settings-back-button google-calendar-manager-back"
+          onClick={onBack}
+          aria-label="Back to Integrations"
+        >
+          ← Integrations
+        </button>
+        <header className="google-calendar-manager-header">
+          <div>
+            <p className="settings-group-label">Google Calendar</p>
+            <h3 id="google-calendar-manager-title">Manage calendars</h3>
+            <p id="google-calendar-manager-description">
+              Choose what Student Hub should show and what should block study
+              time. Nothing is changed in Google.
+            </p>
+            <p>
+              The planner avoids events from calendars marked Block study time.
+            </p>
           </div>
+        </header>
 
-          <div className="google-calendar-manager-actions">
-            <button
-              type="button"
-              onClick={onShowAll}
-              disabled={calendars.length === 0}
-            >
-              Show all
-            </button>
-            <button
-              type="button"
-              onClick={onHideAll}
-              disabled={calendars.length === 0}
-            >
-              Hide all
-            </button>
-            <button
-              type="button"
-              onClick={onLoadCalendars}
-              disabled={calendarState.loading}
-            >
-              {calendarState.loading ? "Refreshing..." : "Refresh calendars"}
-            </button>
-          </div>
-        </div>
-
-        <div className="google-calendar-manager-list">
-          {calendarState.loading && calendars.length === 0 ? (
-            <div className="classroom-preview-empty">
-              <strong>Loading calendars...</strong>
-              <p>Reading your calendar list securely.</p>
-            </div>
-          ) : calendarState.error ? (
-            <div className="classroom-preview-empty">
-              <strong>Could not load calendars</strong>
-              <p>{calendarState.error}</p>
-            </div>
-          ) : calendars.length === 0 ? (
-            <div className="classroom-preview-empty">
-              <strong>No calendars loaded yet</strong>
-              <p>Connect Google Calendar, then load your calendars.</p>
-            </div>
-          ) : (
-            calendars.map((calendar) => {
-              const calendarId = getGoogleCalendarId(calendar);
-              const preference =
-                preferences[calendarId] ||
-                getDefaultGoogleCalendarPreference(calendar);
-
-              return (
-                <GoogleCalendarManagerRow
-                  calendar={calendar}
-                  preference={preference}
-                  key={calendarId}
-                  onTogglePreference={onTogglePreference}
-                />
-              );
-            })
+        <div className="google-calendar-manager-summary">
+          <span>{calendars.length} calendars</span>
+          {duplicateRiskCount > 0 && (
+            <span>{duplicateRiskCount} Classroom assignment calendars</span>
           )}
-        </div>
-
-        <footer className="google-calendar-manager-footer">
-          <button type="button" className="secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" onClick={saveChoices}>
-            Save choices
-          </button>
-        </footer>
-
-        {showSavedConfirmation && (
-          <div
-            className="google-calendar-save-confirmation"
-            role="status"
+          {calendarState.lastCheckedAt && (
+            <small>Loaded {formatConnectionTime(calendarState.lastCheckedAt)}</small>
+          )}
+          <small
+            className={`google-calendar-save-status ${saveStatus.status}`}
             aria-live="polite"
           >
-            <div className="classroom-success-check" aria-hidden="true">
-              <span>✓</span>
-            </div>
-            <strong>Calendar choices saved</strong>
-            <p>Student Hub will remember these settings.</p>
+            {saveStatus.message}
+          </small>
+        </div>
+
+        <div className="google-calendar-setting-explainer">
+          <span>
+            <strong>Show in Student Hub</strong> controls which calendar events
+            appear here.
+          </span>
+          <span>
+            <strong>Block study time</strong> tells the planner when you are
+            unavailable.
+          </span>
+        </div>
+
+        <div className="google-calendar-manager-actions">
+          <button
+            type="button"
+            onClick={onShowAll}
+            disabled={calendars.length === 0}
+          >
+            Show all
+          </button>
+          <button
+            type="button"
+            onClick={onHideAll}
+            disabled={calendars.length === 0}
+          >
+            Hide all
+          </button>
+          <button
+            type="button"
+            onClick={onLoadCalendars}
+            disabled={calendarState.loading}
+          >
+            {calendarState.loading ? "Refreshing..." : "Refresh calendars"}
+          </button>
+        </div>
+      </div>
+
+      <div className="google-calendar-manager-list">
+        {calendarState.loading && calendars.length === 0 ? (
+          <div className="classroom-preview-empty">
+            <strong>Loading calendars...</strong>
+            <p>Reading your calendar list securely.</p>
           </div>
+        ) : calendarState.error ? (
+          <div className="classroom-preview-empty">
+            <strong>Could not load calendars</strong>
+            <p>{calendarState.error}</p>
+          </div>
+        ) : calendars.length === 0 ? (
+          <div className="classroom-preview-empty">
+            <strong>No calendars loaded yet</strong>
+            <p>Connect Google Calendar, then load your calendars.</p>
+          </div>
+        ) : (
+          calendars.map((calendar) => {
+            const calendarId = getGoogleCalendarId(calendar);
+            const preference =
+              preferences[calendarId] ||
+              getDefaultGoogleCalendarPreference(calendar);
+
+            return (
+              <GoogleCalendarManagerRow
+                calendar={calendar}
+                preference={preference}
+                key={calendarId}
+                onTogglePreference={onTogglePreference}
+              />
+            );
+          })
         )}
-      </section>
-    </div>
+      </div>
+    </section>
   );
 }
 
