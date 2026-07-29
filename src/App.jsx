@@ -2075,6 +2075,7 @@ function App() {
             tasks={visibleTasks}
             completedTaskHistory={completedTaskHistory}
             setActivePage={setActivePage}
+            openSettings={openSettings}
           />
         )}
 

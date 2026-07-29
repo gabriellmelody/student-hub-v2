@@ -39,6 +39,7 @@ function SubjectsPage({
   tasks,
   completedTaskHistory,
   setActivePage,
+  openSettings,
 }) {
   const [selectedScope, setSelectedScope] = useState("all");
   const activeTasks = tasks.filter((task) => !task.completed);
@@ -92,15 +93,20 @@ function SubjectsPage({
   return (
     <div className="page subjects-page">
       <header className="page-header subjects-page-header">
-        <div>
-          <p className="eyebrow">Subjects</p>
-          <h2>Your subjects</h2>
+        <div className="subjects-page-header-copy">
+          <p className="eyebrow">SUBJECTS</p>
+          <h1>Your subjects</h1>
           <p>Workload, grades, and history by class.</p>
         </div>
         <button
           type="button"
           className="secondary-button"
-          onClick={() => setActivePage("settings")}
+          aria-label="Manage subjects in Settings"
+          onClick={() =>
+            typeof openSettings === "function"
+              ? openSettings("subjects")
+              : setActivePage("settings")
+          }
         >
           Manage in Settings
         </button>
@@ -113,7 +119,11 @@ function SubjectsPage({
           <button
             type="button"
             className="primary-button"
-            onClick={() => setActivePage("settings")}
+            onClick={() =>
+              typeof openSettings === "function"
+                ? openSettings("subjects")
+                : setActivePage("settings")
+            }
           >
             Open Settings
           </button>
@@ -133,6 +143,7 @@ function SubjectsPage({
                   }`}
                   key={subject.id}
                   aria-pressed={isSelected}
+                  aria-label={`${subject.name}, ${summary.activeCount} active, ${summary.completedCount} completed${isSelected ? ", selected" : ""}`}
                   style={{ "--subject-color": subject.colour }}
                   onClick={() => setSelectedScope(subject.id)}
                 >
