@@ -1287,7 +1287,15 @@ function IntegrationsSettings({
     (task) => task.source === REAL_CLASSROOM_SOURCE
   ).length;
   const [showMockPreview, setShowMockPreview] = useState(false);
-  const [showRealClassroomReview, setShowRealClassroomReview] = useState(false);
+  const [showRealClassroomReview, setShowRealClassroomReview] = useState(() => {
+    if (typeof window === "undefined") return false;
+
+    return (
+      new URLSearchParams(window.location.search).get(
+        "googleClassroomManager"
+      ) === "1"
+    );
+  });
   const [showGoogleCalendarManager, setShowGoogleCalendarManager] =
     useState(() => {
       if (typeof window === "undefined") return false;
@@ -1517,12 +1525,14 @@ function IntegrationsSettings({
 
   useEffect(() => {
     function syncCalendarManagerFromHistory() {
-      const isManagerOpen =
-        new URLSearchParams(window.location.search).get(
-          "googleCalendarManager"
-        ) === "1";
+      const params = new URLSearchParams(window.location.search);
+      const isCalendarManagerOpen =
+        params.get("googleCalendarManager") === "1";
+      const isClassroomManagerOpen =
+        params.get("googleClassroomManager") === "1";
 
-      setShowGoogleCalendarManager(isManagerOpen);
+      setShowGoogleCalendarManager(isCalendarManagerOpen);
+      setShowRealClassroomReview(isClassroomManagerOpen);
     }
 
     window.addEventListener("popstate", syncCalendarManagerFromHistory);
@@ -1788,7 +1798,9 @@ function IntegrationsSettings({
         realClassroomCourseSelections
       );
       if (loadedCourses.length > 0) {
-        setShowRealClassroomReview(true);
+        setRealClassroomManagerPageOpen(true, {
+          push: !showRealClassroomReview,
+        });
       }
       setSuccessToast({
         title: "Google Classroom ready",
@@ -1802,6 +1814,37 @@ function IntegrationsSettings({
         loading: false,
         error: "Could not load Classroom courses. Try again later.",
       }));
+    }
+  }
+
+  function setRealClassroomManagerPageOpen(isOpen, { push = true } = {}) {
+    setShowRealClassroomReview(isOpen);
+
+    if (typeof window === "undefined") return;
+
+    const nextUrl = new URL(window.location.href);
+
+    if (isOpen) {
+      nextUrl.searchParams.set("tab", "integrations");
+      nextUrl.searchParams.set("googleClassroomManager", "1");
+      nextUrl.searchParams.delete("googleCalendarManager");
+    } else {
+      nextUrl.searchParams.delete("googleClassroomManager");
+      if (!nextUrl.searchParams.get("tab")) {
+        nextUrl.searchParams.set("tab", "integrations");
+      }
+    }
+
+    const nextPath = `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
+
+    if (nextPath === `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      return;
+    }
+
+    if (push) {
+      window.history.pushState({}, "", nextPath);
+    } else {
+      window.history.replaceState({}, "", nextPath);
     }
   }
 
@@ -1851,6 +1894,7 @@ function IntegrationsSettings({
     if (isOpen) {
       nextUrl.searchParams.set("tab", "integrations");
       nextUrl.searchParams.set("googleCalendarManager", "1");
+      nextUrl.searchParams.delete("googleClassroomManager");
     } else {
       nextUrl.searchParams.delete("googleCalendarManager");
       if (!nextUrl.searchParams.get("tab")) {
@@ -2500,6 +2544,67 @@ function IntegrationsSettings({
     (integration) => integration.id !== "google-classroom"
   );
 
+  if (showRealClassroomReview) {
+    return (
+      <div className="integrations-settings">
+        <RealClassroomCourseReviewPage
+          courseState={realClassroomCourses}
+          selections={realClassroomCourseSelections}
+          subjects={subjects}
+          subjectLinks={realClassroomCourseSubjectLinks}
+          cleanup={realClassroomCleanup}
+          assignmentPreview={realClassroomAssignmentPreview}
+          importedClassroomTasks={getImportedClassroomTaskMap(tasks)}
+          onLoadCourses={loadRealClassroomCourses}
+          onSelectCourse={updateRealClassroomCourseSelection}
+          onSelectSubject={updateRealClassroomCourseSubject}
+          onCreateSubject={createSubjectFromRealClassroomCourse}
+          onPreviewAssignments={previewRealClassroomAssignments}
+          onImportAssignments={importPreviewedRealClassroomAssignments}
+          onSelectAssignment={updateRealClassroomAssignmentSelection}
+          onSelectAllAssignments={(assignmentIds) =>
+            updateVisibleRealClassroomAssignmentSelection("all", assignmentIds)
+          }
+          onClearAssignmentSelection={(assignmentIds) =>
+            updateVisibleRealClassroomAssignmentSelection("clear", assignmentIds)
+          }
+          onSelectDueAssignments={(assignmentIds) =>
+            updateVisibleRealClassroomAssignmentSelection("due", assignmentIds)
+          }
+          onIncludeAll={() =>
+            updateAllRealClassroomCourseSelections("included")
+          }
+          onIgnoreAll={() =>
+            updateAllRealClassroomCourseSelections("ignored")
+          }
+          onResetChoices={resetRealClassroomCourseSelections}
+          onArchiveNoDueDateClassroomTasks={() =>
+            setPendingAction("archive-real-no-due")
+          }
+          onRestoreArchivedClassroomTasks={restoreArchivedRealClassroomTasks}
+          onBack={() => setRealClassroomManagerPageOpen(false)}
+        />
+
+        {pendingAction && (
+          <ClassroomConnectionConfirmation
+            action={pendingAction}
+            cleanupCount={realClassroomCleanup.candidateCount}
+            onCancel={() => setPendingAction(null)}
+            onConfirm={confirmAction}
+          />
+        )}
+
+        {successToast && (
+          <ClassroomSuccessToast
+            title={successToast.title}
+            summary={successToast.summary}
+            onClose={() => setSuccessToast(null)}
+          />
+        )}
+      </div>
+    );
+  }
+
   if (showGoogleCalendarManager) {
     return (
       <div className="integrations-settings">
@@ -2571,6 +2676,9 @@ function IntegrationsSettings({
               onPreview={() => setShowMockPreview(true)}
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
+              onManageRealClassroom={() =>
+                setRealClassroomManagerPageOpen(true)
+              }
               onLoadGoogleCalendars={loadGoogleCalendars}
               onManageGoogleCalendars={() =>
                 setGoogleCalendarManagerPageOpen(true)
@@ -2587,45 +2695,6 @@ function IntegrationsSettings({
           setSubjects={setSubjects}
           onCourseMappingChange={updateCourseMapping}
           onClose={() => setShowMockPreview(false)}
-        />
-      )}
-
-      {showRealClassroomReview && (
-        <RealClassroomCourseReviewModal
-          courseState={realClassroomCourses}
-          selections={realClassroomCourseSelections}
-          subjects={subjects}
-          subjectLinks={realClassroomCourseSubjectLinks}
-          onSelectCourse={updateRealClassroomCourseSelection}
-          onSelectSubject={updateRealClassroomCourseSubject}
-          onCreateSubject={createSubjectFromRealClassroomCourse}
-          cleanup={realClassroomCleanup}
-          assignmentPreview={realClassroomAssignmentPreview}
-          importedClassroomTasks={getImportedClassroomTaskMap(tasks)}
-          onPreviewAssignments={previewRealClassroomAssignments}
-          onImportAssignments={importPreviewedRealClassroomAssignments}
-          onSelectAssignment={updateRealClassroomAssignmentSelection}
-          onSelectAllAssignments={(assignmentIds) =>
-            updateVisibleRealClassroomAssignmentSelection("all", assignmentIds)
-          }
-          onClearAssignmentSelection={(assignmentIds) =>
-            updateVisibleRealClassroomAssignmentSelection("clear", assignmentIds)
-          }
-          onSelectDueAssignments={(assignmentIds) =>
-            updateVisibleRealClassroomAssignmentSelection("due", assignmentIds)
-          }
-          onIncludeAll={() =>
-            updateAllRealClassroomCourseSelections("included")
-          }
-          onIgnoreAll={() =>
-            updateAllRealClassroomCourseSelections("ignored")
-          }
-          onResetChoices={resetRealClassroomCourseSelections}
-          onArchiveNoDueDateClassroomTasks={() =>
-            setPendingAction("archive-real-no-due")
-          }
-          onRestoreArchivedClassroomTasks={restoreArchivedRealClassroomTasks}
-          onClose={() => setShowRealClassroomReview(false)}
         />
       )}
 
@@ -2736,6 +2805,7 @@ function IntegrationCard({
   onPreview,
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
+  onManageRealClassroom,
   onLoadGoogleCalendars,
   onManageGoogleCalendars,
 }) {
@@ -2889,7 +2959,11 @@ function IntegrationCard({
               <button
                 type="button"
                 className="integration-preview-button"
-                onClick={onLoadRealClassroomCourses}
+                onClick={
+                  realClassroomCourses.courses.length > 0
+                    ? onManageRealClassroom
+                    : onLoadRealClassroomCourses
+                }
                 disabled={realClassroomCourses.loading}
               >
                 {realClassroomCourses.loading
@@ -3164,11 +3238,11 @@ function GoogleCalendarManagerPage({
   }).length;
 
   return (
-    <section className="panel google-calendar-manager-page">
-      <div className="google-calendar-manager-top">
+    <section className="settings-provider-subpage google-calendar-manager-page">
+      <div className="settings-provider-header google-calendar-manager-top">
         <button
           type="button"
-          className="settings-back-button google-calendar-manager-back"
+          className="settings-back-button settings-provider-back google-calendar-manager-back"
           onClick={onBack}
           aria-label="Back to Integrations"
         >
@@ -3176,14 +3250,13 @@ function GoogleCalendarManagerPage({
         </button>
         <header className="google-calendar-manager-header">
           <div>
-            <p className="settings-group-label">Google Calendar</p>
-            <h3 id="google-calendar-manager-title">Manage calendars</h3>
-            <p id="google-calendar-manager-description">
-              Choose what Student Hub should show and what should block study
-              time. Nothing is changed in Google.
+            <p className="settings-group-label">
+              Settings / Integrations / Google Calendar
             </p>
-            <p>
-              The planner avoids events from calendars marked Block study time.
+            <h2 id="google-calendar-manager-title">Manage calendars</h2>
+            <p id="google-calendar-manager-description">
+              Choose what appears in Student Hub and what blocks study time.
+              Nothing is changed in Google.
             </p>
           </div>
         </header>
@@ -3206,12 +3279,10 @@ function GoogleCalendarManagerPage({
 
         <div className="google-calendar-setting-explainer">
           <span>
-            <strong>Show in Student Hub</strong> controls which calendar events
-            appear here.
+            <strong>Show in Student Hub</strong> controls event visibility.
           </span>
           <span>
-            <strong>Block study time</strong> tells the planner when you are
-            unavailable.
+            <strong>Block study time</strong> tells the planner when you are unavailable.
           </span>
         </div>
 
@@ -3338,11 +3409,12 @@ function GoogleCalendarManagerRow({ calendar, preference, onTogglePreference }) 
   );
 }
 
-function RealClassroomCourseReviewModal({
+function RealClassroomCourseReviewPage({
   courseState,
   selections,
   subjects,
   subjectLinks,
+  onLoadCourses,
   onSelectCourse,
   onSelectSubject,
   onCreateSubject,
@@ -3360,7 +3432,7 @@ function RealClassroomCourseReviewModal({
   onResetChoices,
   onArchiveNoDueDateClassroomTasks,
   onRestoreArchivedClassroomTasks,
-  onClose,
+  onBack,
 }) {
   const courses = courseState.courses;
   const [activeReviewTab, setActiveReviewTab] = useState("classes");
@@ -3372,65 +3444,61 @@ function RealClassroomCourseReviewModal({
     return selections[courseId] === "included" && !subjectLinks[courseId];
   }).length;
 
-  useEffect(() => {
-    function closeOnEscape(event) {
-      if (event.key === "Escape") onClose();
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
-
   function previewAssignments() {
     setActiveReviewTab("assignments");
     onPreviewAssignments();
   }
 
   return (
-    <div
-      className="data-confirmation-backdrop real-classroom-modal-backdrop"
-      role="presentation"
-      onMouseDown={onClose}
-    >
-      <section
-        className="real-classroom-course-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="real-classroom-review-title"
-        aria-describedby="real-classroom-review-description"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="real-classroom-modal-header">
+    <section className="settings-provider-subpage real-classroom-manager-page">
+      <div className="settings-provider-header">
+        <button
+          type="button"
+          className="settings-back-button settings-provider-back"
+          onClick={onBack}
+          aria-label="Back to Integrations"
+        >
+          ← Integrations
+        </button>
+        <header className="real-classroom-manager-header">
           <div>
-            <p className="settings-group-label">Real Google Classroom</p>
-            <h3 id="real-classroom-review-title">
+            <p className="settings-group-label">
+              Settings / Integrations / Google Classroom
+            </p>
+            <h2 id="real-classroom-review-title">
               Manage Classroom
-            </h3>
+            </h2>
             <p id="real-classroom-review-description">
               Choose classes, link Subjects, and import selected work.
             </p>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close class review">
-            Close
-          </button>
         </header>
+      </div>
 
-        <div className="real-classroom-modal-body">
+        <div className="real-classroom-manager-body">
           <div className="real-classroom-course-summary">
             <span>{courses.length} classes found</span>
-            <span>{includedCount} included</span>
-            <span>{ignoredCount} ignored</span>
-            <span>
-              {needsReviewCount}{" "}
-              {needsReviewCount === 1 ? "needs class choice" : "need class choices"}
-            </span>
-            <span>
-              {unlinkedIncludedCount}{" "}
-              {unlinkedIncludedCount === 1
-                ? "needs Subject"
-                : "need Subjects"}
-            </span>
+            {includedCount > 0 && <span>{includedCount} included</span>}
+            {ignoredCount > 0 && <span>{ignoredCount} ignored</span>}
+            {needsReviewCount > 0 && (
+              <span>
+                {needsReviewCount}{" "}
+                {needsReviewCount === 1
+                  ? "needs class choice"
+                  : "need class choices"}
+              </span>
+            )}
+            {unlinkedIncludedCount > 0 && (
+              <span>
+                {unlinkedIncludedCount}{" "}
+                {unlinkedIncludedCount === 1
+                  ? "needs Subject"
+                  : "need Subjects"}
+              </span>
+            )}
+            {courseState.lastCheckedAt && (
+              <small>Loaded {formatConnectionTime(courseState.lastCheckedAt)}</small>
+            )}
           </div>
 
           <div
@@ -3472,19 +3540,27 @@ function RealClassroomCourseReviewModal({
             <div className="real-classroom-tab-heading">
               <div>
                 <strong>Classes & subjects</strong>
-                <p>
-                  Pick classes and match them to Subjects.
-                </p>
+                <p>Included classes need a Subject before import.</p>
               </div>
-              <button
-                type="button"
-                onClick={previewAssignments}
-                disabled={assignmentPreview.loading}
-              >
-                {assignmentPreview.loading
-                  ? "Loading..."
-                  : "Preview assignments"}
-              </button>
+              <div className="real-classroom-tab-actions">
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={onLoadCourses}
+                  disabled={courseState.loading}
+                >
+                  {courseState.loading ? "Loading..." : "Refresh classes"}
+                </button>
+                <button
+                  type="button"
+                  onClick={previewAssignments}
+                  disabled={assignmentPreview.loading}
+                >
+                  {assignmentPreview.loading
+                    ? "Loading..."
+                    : "Preview assignments"}
+                </button>
+              </div>
             </div>
 
             {unlinkedIncludedCount > 0 && (
@@ -3622,15 +3698,17 @@ function RealClassroomCourseReviewModal({
                 <strong>Assignments</strong>
                 <p>Only selected assignments become tasks.</p>
               </div>
-              <button
-                type="button"
-                onClick={previewAssignments}
-                disabled={assignmentPreview.loading}
-              >
-                {assignmentPreview.loading
-                  ? "Loading..."
-                  : "Refresh assignments"}
-              </button>
+              <div className="real-classroom-tab-actions">
+                <button
+                  type="button"
+                  onClick={previewAssignments}
+                  disabled={assignmentPreview.loading}
+                >
+                  {assignmentPreview.loading
+                    ? "Loading..."
+                    : "Refresh assignments"}
+                </button>
+              </div>
             </div>
 
             <RealClassroomAssignmentPreview
@@ -3655,7 +3733,7 @@ function RealClassroomCourseReviewModal({
             <div className="real-classroom-tab-heading">
               <div>
                 <strong>Cleanup</strong>
-                <p>No-due-date Classroom items can be noisy.</p>
+                <p>Archive imported Classroom items without due dates.</p>
               </div>
             </div>
             <div className="real-classroom-cleanup-card">
@@ -3708,15 +3786,7 @@ function RealClassroomCourseReviewModal({
             </section>
           )}
         </div>
-
-        <footer className="real-classroom-modal-footer">
-          <p>Choices and Subject links are saved on this device.</p>
-          <button type="button" onClick={onClose}>
-            Done
-          </button>
-        </footer>
-      </section>
-    </div>
+    </section>
   );
 }
 

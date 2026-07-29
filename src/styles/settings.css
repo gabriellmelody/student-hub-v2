@@ -14,6 +14,25 @@
   color: var(--text);
 }
 
+.settings-page:has(.settings-provider-subpage) > .page-header {
+  display: none;
+}
+
+.settings-provider-subpage {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.settings-provider-header {
+  display: grid;
+  gap: 10px;
+}
+
+.settings-provider-back {
+  width: fit-content;
+}
+
 .settings-hub-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1002,8 +1021,7 @@
 .real-classroom-course-summary-card p,
 .real-classroom-course-summary-card small,
 .real-classroom-course-summary-card span,
-.real-classroom-modal-header p,
-.real-classroom-modal-footer p,
+.real-classroom-manager-header p,
 .real-classroom-course-row h4 {
   margin: 0;
 }
@@ -1014,9 +1032,7 @@
   font-size: 0.58rem;
 }
 
-.real-classroom-course-summary-card button,
-.real-classroom-modal-header button,
-.real-classroom-modal-footer button {
+.real-classroom-course-summary-card button {
   appearance: none;
   width: fit-content;
   min-height: 28px;
@@ -1031,29 +1047,7 @@
   cursor: pointer;
 }
 
-.real-classroom-modal-backdrop {
-  z-index: 1000;
-}
-
-.real-classroom-course-modal {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 0;
-  width: min(1100px, calc(100vw - 48px));
-  max-width: 1100px;
-  min-width: 0;
-  height: min(900px, calc(100dvh - 32px));
-  max-height: calc(100dvh - 32px);
-  margin: 16px auto;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 18px;
-  background: var(--surface-raised);
-  box-shadow: var(--shadow-modal);
-  overflow: hidden;
-}
-
-.real-classroom-modal-header,
+.real-classroom-manager-header,
 .real-classroom-review-heading {
   display: flex;
   align-items: flex-start;
@@ -1061,20 +1055,13 @@
   gap: 16px;
 }
 
-.real-classroom-modal-header {
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid var(--border-soft);
-  background: var(--surface-raised);
-}
-
-.real-classroom-modal-header h3 {
+.real-classroom-manager-header h2 {
   margin: 2px 0 5px;
   color: var(--text);
   font-size: var(--font-section-title);
 }
 
-.real-classroom-modal-header p,
-.real-classroom-modal-footer p {
+.real-classroom-manager-header p {
   color: var(--text-secondary);
   font-size: var(--font-helper);
   line-height: var(--line-body);
@@ -1087,13 +1074,10 @@
   font-weight: 650;
 }
 
-.real-classroom-modal-body {
+.real-classroom-manager-body {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 12px;
   min-height: 0;
-  overflow: hidden;
-  padding: 14px 20px;
 }
 
 .real-classroom-course-summary,
@@ -1155,15 +1139,6 @@
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
   background: var(--surface-raised);
-  overflow: hidden;
-}
-
-.real-classroom-tab-panel--classes {
-  grid-template-rows: auto auto auto minmax(0, 1fr);
-}
-
-.real-classroom-tab-panel--assignments {
-  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .real-classroom-tab-heading {
@@ -1171,6 +1146,14 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 14px;
+}
+
+.real-classroom-tab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .real-classroom-tab-heading strong {
@@ -1191,6 +1174,12 @@
   border-color: var(--accent-border);
   background: var(--accent-tint);
   color: var(--accent-soft);
+}
+
+.real-classroom-tab-heading button.secondary {
+  border-color: var(--border-soft);
+  background: var(--surface-raised);
+  color: var(--text-secondary);
 }
 
 .real-classroom-course-summary span {
@@ -1241,25 +1230,6 @@
   display: grid;
   gap: 8px;
   min-height: 0;
-  overflow-y: auto;
-  padding-right: 4px;
-  scrollbar-color: var(--border-hover) transparent;
-  scrollbar-width: thin;
-}
-
-.real-classroom-course-list::-webkit-scrollbar {
-  width: 8px;
-}
-
-.real-classroom-course-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.real-classroom-course-list::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: var(--border-hover);
-  background-clip: padding-box;
 }
 
 .real-classroom-course-row {
@@ -1408,33 +1378,10 @@
   display: grid;
   gap: 8px;
   min-height: 0;
-  max-height: 260px;
-  overflow-y: auto;
   padding: 10px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-control);
   background: var(--surface-subtle);
-  scrollbar-color: var(--border-hover) transparent;
-  scrollbar-width: thin;
-}
-
-.real-classroom-tab-panel--assignments .real-classroom-assignment-preview {
-  max-height: none;
-}
-
-.real-classroom-assignment-preview::-webkit-scrollbar {
-  width: 8px;
-}
-
-.real-classroom-assignment-preview::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.real-classroom-assignment-preview::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: var(--border-hover);
-  background-clip: padding-box;
 }
 
 .real-classroom-assignment-preview-header,
@@ -1745,31 +1692,6 @@
   font-size: 0.65rem;
   font-weight: 700;
   text-decoration: none;
-}
-
-.real-classroom-modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--border-soft);
-  background: color-mix(in srgb, var(--surface-raised) 92%, var(--surface));
-}
-
-.real-classroom-modal-footer button {
-  min-height: var(--density-button-height);
-  border-color: var(--accent);
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-size: var(--font-button);
-}
-
-.real-classroom-modal-footer button:hover,
-.real-classroom-modal-footer button:focus-visible {
-  border-color: var(--accent-hover);
-  background: var(--accent-hover);
-  color: var(--accent-contrast);
 }
 
 .integration-card-message {
@@ -2234,7 +2156,7 @@
   gap: 16px;
 }
 
-.google-calendar-manager-header h3 {
+.google-calendar-manager-header h2 {
   margin: 2px 0 5px;
   color: var(--text);
   font-size: 1rem;
@@ -2476,29 +2398,6 @@
 }
 
 @media (max-width: 760px) {
-  .real-classroom-course-modal {
-    width: calc(100vw - 24px);
-    max-width: calc(100vw - 24px);
-    height: min(900px, calc(100dvh - 24px));
-    max-height: calc(100dvh - 24px);
-    margin: 12px auto;
-  }
-
-  .real-classroom-modal-header,
-  .real-classroom-modal-body,
-  .real-classroom-modal-footer {
-    padding-inline: 14px;
-  }
-
-  .real-classroom-modal-footer {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .real-classroom-modal-footer button {
-    width: 100%;
-  }
-
   .google-calendar-manager-top,
   .google-calendar-manager-list {
     padding-inline: 14px;
@@ -4464,7 +4363,7 @@
     width: 100%;
   }
 
-  .real-classroom-modal-header,
+  .real-classroom-manager-header,
   .real-classroom-connection-status,
   .real-classroom-tab-heading {
     display: grid;
