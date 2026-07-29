@@ -3102,6 +3102,7 @@ function GoogleCalendarManagerModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="google-calendar-manager-title"
+        aria-describedby="google-calendar-manager-description"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="google-calendar-manager-top">
@@ -3109,7 +3110,7 @@ function GoogleCalendarManagerModal({
             <div>
               <p className="settings-group-label">Google Calendar</p>
               <h3 id="google-calendar-manager-title">Manage calendars</h3>
-              <p>
+              <p id="google-calendar-manager-description">
                 Choose what Student Hub should show and what should block study
                 time. Nothing is changed in Google.
               </p>
@@ -3337,6 +3338,7 @@ function RealClassroomCourseReviewModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="real-classroom-review-title"
+        aria-describedby="real-classroom-review-description"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="real-classroom-modal-header">
@@ -3345,65 +3347,68 @@ function RealClassroomCourseReviewModal({
             <h3 id="real-classroom-review-title">
               Manage Classroom
             </h3>
-            <p>Choose classes, link Subjects, and import selected work.</p>
+            <p id="real-classroom-review-description">
+              Choose classes, link Subjects, and import selected work.
+            </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close class review">
             Close
           </button>
         </header>
 
-        <div className="real-classroom-course-summary">
-          <span>{courses.length} classes found</span>
-          <span>{includedCount} included</span>
-          <span>{ignoredCount} ignored</span>
-          <span>
-            {needsReviewCount}{" "}
-            {needsReviewCount === 1 ? "needs class choice" : "need class choices"}
-          </span>
-          <span>
-            {unlinkedIncludedCount}{" "}
-            {unlinkedIncludedCount === 1
-              ? "needs Subject"
-              : "need Subjects"}
-          </span>
-        </div>
+        <div className="real-classroom-modal-body">
+          <div className="real-classroom-course-summary">
+            <span>{courses.length} classes found</span>
+            <span>{includedCount} included</span>
+            <span>{ignoredCount} ignored</span>
+            <span>
+              {needsReviewCount}{" "}
+              {needsReviewCount === 1 ? "needs class choice" : "need class choices"}
+            </span>
+            <span>
+              {unlinkedIncludedCount}{" "}
+              {unlinkedIncludedCount === 1
+                ? "needs Subject"
+                : "need Subjects"}
+            </span>
+          </div>
 
-        <div
-          className="real-classroom-review-tabs"
-          role="tablist"
-          aria-label="Google Classroom review sections"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeReviewTab === "classes"}
-            className={activeReviewTab === "classes" ? "active" : ""}
-            onClick={() => setActiveReviewTab("classes")}
+          <div
+            className="real-classroom-review-tabs"
+            role="tablist"
+            aria-label="Google Classroom review sections"
           >
-            Classes & subjects
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeReviewTab === "assignments"}
-            className={activeReviewTab === "assignments" ? "active" : ""}
-            onClick={() => setActiveReviewTab("assignments")}
-          >
-            Assignment preview
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeReviewTab === "cleanup"}
-            className={activeReviewTab === "cleanup" ? "active" : ""}
-            onClick={() => setActiveReviewTab("cleanup")}
-          >
-            Cleanup
-          </button>
-        </div>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeReviewTab === "classes"}
+              className={activeReviewTab === "classes" ? "active" : ""}
+              onClick={() => setActiveReviewTab("classes")}
+            >
+              Classes & subjects
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeReviewTab === "assignments"}
+              className={activeReviewTab === "assignments" ? "active" : ""}
+              onClick={() => setActiveReviewTab("assignments")}
+            >
+              Assignment preview
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeReviewTab === "cleanup"}
+              className={activeReviewTab === "cleanup" ? "active" : ""}
+              onClick={() => setActiveReviewTab("cleanup")}
+            >
+              Cleanup
+            </button>
+          </div>
 
-        {activeReviewTab === "classes" ? (
-          <section className="real-classroom-tab-panel real-classroom-tab-panel--classes">
+          {activeReviewTab === "classes" ? (
+            <section className="real-classroom-tab-panel real-classroom-tab-panel--classes">
             <div className="real-classroom-tab-heading">
               <div>
                 <strong>Classes & subjects</strong>
@@ -3549,9 +3554,9 @@ function RealClassroomCourseReviewModal({
                 );
               })}
             </div>
-          </section>
-        ) : activeReviewTab === "assignments" ? (
-          <section className="real-classroom-tab-panel real-classroom-tab-panel--assignments">
+            </section>
+          ) : activeReviewTab === "assignments" ? (
+            <section className="real-classroom-tab-panel real-classroom-tab-panel--assignments">
             <div className="real-classroom-tab-heading">
               <div>
                 <strong>Assignments</strong>
@@ -3584,9 +3589,9 @@ function RealClassroomCourseReviewModal({
               onClearAssignmentSelection={onClearAssignmentSelection}
               onSelectDueAssignments={onSelectDueAssignments}
             />
-          </section>
-        ) : (
-          <section className="real-classroom-tab-panel real-classroom-tab-panel--cleanup">
+            </section>
+          ) : (
+            <section className="real-classroom-tab-panel real-classroom-tab-panel--cleanup">
             <div className="real-classroom-tab-heading">
               <div>
                 <strong>Cleanup</strong>
@@ -3640,8 +3645,9 @@ function RealClassroomCourseReviewModal({
                   : "Due-date tasks are never auto-archived."}
               </small>
             </div>
-          </section>
-        )}
+            </section>
+          )}
+        </div>
 
         <footer className="real-classroom-modal-footer">
           <p>Choices and Subject links are saved on this device.</p>
