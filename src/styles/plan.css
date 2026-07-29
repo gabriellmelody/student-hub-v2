@@ -1115,10 +1115,54 @@
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 700px) {
+  .plan-page {
+    gap: 12px;
+  }
+
+  .plan-page-header h1 {
+    font-size: 1.36rem;
+  }
+
+  .plan-page-header p {
+    margin-top: 5px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+
+  .plan-panel {
+    gap: 11px;
+  }
+
   .plan-panel .panel-header {
     align-items: stretch;
     flex-direction: column;
+    gap: 10px;
+  }
+
+  .plan-panel .panel-header h3 {
+    font-size: 0.98rem;
+  }
+
+  .plan-panel .panel-header span {
+    font-size: 0.72rem;
+  }
+
+  .plan-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 7px;
+  }
+
+  .plan-actions button {
+    min-height: 42px;
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 0.72rem;
+  }
+
+  .plan-primary-create-button {
+    grid-column: 1 / -1;
   }
 
   .stale-plan-notice {
@@ -1139,8 +1183,8 @@
   }
 
   .plan-timeline-item {
-    grid-template-columns: 18px minmax(0, 1fr);
-    gap: 8px;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 9px;
   }
 
   .plan-timeline-time {
@@ -1149,6 +1193,12 @@
     justify-items: start;
     padding-top: 0;
     text-align: left;
+  }
+
+  .plan-time-range {
+    max-width: 100%;
+    font-size: 0.68rem;
+    white-space: nowrap;
   }
 
   .plan-timeline-rail {
@@ -1166,8 +1216,81 @@
     justify-content: flex-start;
   }
 
+  .plan-timeline-item:not(:last-child) {
+    padding-bottom: 8px;
+  }
+
+  .plan-block {
+    min-width: 0;
+    border-radius: 14px;
+    padding: 9px 10px;
+  }
+
+  .plan-block.break-block {
+    padding-top: 7px;
+    padding-bottom: 7px;
+  }
+
   .plan-block-header {
     align-items: flex-start;
+    gap: 8px;
+  }
+
+  .plan-block h3 {
+    font-size: 0.9rem;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .plan-study-meta {
+    gap: 4px;
+  }
+
+  .plan-study-meta .task-source-badge,
+  .plan-study-meta .effort-pill,
+  .plan-study-meta .task-signal-badge {
+    max-width: 100%;
+    font-size: 0.6rem;
+  }
+
+  .plan-block-tip {
+    margin-top: 7px;
+    font-size: 0.74rem;
+    line-height: 1.38;
+    color: color-mix(in srgb, var(--text-secondary) 82%, var(--text));
+  }
+
+  .plan-block-header-actions {
+    opacity: 1;
+  }
+
+  .plan-drag-handle,
+  .plan-more-button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .plan-block-controls {
+    margin-top: 8px;
+  }
+
+  .complete-plan-button {
+    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 0.72rem;
+  }
+
+  .empty-plan {
+    padding: 18px 14px;
+  }
+
+  .empty-plan h3 {
+    font-size: 0.98rem;
+  }
+
+  .empty-plan p {
+    font-size: 0.8rem;
+    line-height: 1.45;
   }
 
   .plan-block-editor {

@@ -1273,34 +1273,138 @@
 }
 
 @media (max-width: 720px) {
+  .tasks-page {
+    gap: 12px;
+  }
+
   .tasks-page-header {
     align-items: stretch;
     grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .tasks-page-header h1 {
+    font-size: 1.36rem;
+  }
+
+  .tasks-header-copy > p:not(.eyebrow):not(.task-live-counts) {
+    margin-top: 5px;
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+
+  .task-live-counts {
+    margin-top: 5px;
+    font-size: 0.72rem;
   }
 
   .tasks-header-actions {
-    justify-items: start;
+    justify-items: stretch;
+    gap: 8px;
   }
 
   .tasks-header-actions .task-sort-row {
     justify-content: flex-start;
+    gap: 5px;
   }
 
   .task-add-trigger {
+    width: fit-content;
+    min-width: 104px;
+    min-height: 42px;
     align-self: flex-start;
+    padding-inline: 13px;
+    font-size: 0.8rem;
+  }
+
+  .tasks-header-actions .sort-button,
+  .tasks-panel .sort-button {
+    min-height: 34px;
+    padding: 6px 8px;
+    font-size: 0.67rem;
+  }
+
+  .tasks-panel {
+    gap: 11px;
+  }
+
+  .task-group-stack {
+    gap: 10px;
+  }
+
+  .section-label {
+    margin-bottom: 5px;
+    font-size: 0.64rem;
+  }
+
+  .task-list {
+    border-radius: 13px;
   }
 
   .task-row {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
-    padding: 10px 10px;
+    gap: 8px;
+    min-height: 56px;
+    padding: 8px 8px;
+  }
+
+  .check-circle {
+    width: 22px;
+    height: 22px;
+    margin-top: 2px;
+  }
+
+  .task-content {
+    gap: 3px;
+  }
+
+  .task-card h3 {
+    display: -webkit-box;
+    font-size: 0.82rem;
+    line-height: 1.24;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .task-topline {
+    font-size: 0.66rem;
+  }
+
+  .task-meta {
+    gap: 3px;
   }
 
   .task-row-end {
     grid-column: 2;
     justify-content: space-between;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .task-due-pill {
+    min-width: 0;
+    max-width: min(190px, 100%);
+    min-height: 22px;
+    padding: 3px 7px;
+    font-size: 0.64rem;
+    line-height: 1.15;
+    white-space: normal;
+  }
+
+  .task-options-button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .task-source-badge,
+  .effort-pill,
+  .task-signal-badge {
+    max-width: 100%;
+    font-size: 0.6rem;
+    line-height: 1.15;
   }
 
   .task-date-selector {
