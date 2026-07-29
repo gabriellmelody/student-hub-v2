@@ -728,6 +728,12 @@
   }
 }
 
+.mobile-topbar,
+.mobile-bottom-nav,
+.mobile-more-layer {
+  display: none;
+}
+
 .main-content {
   min-width: 0;
   padding: var(--density-main-top) var(--density-main-x)

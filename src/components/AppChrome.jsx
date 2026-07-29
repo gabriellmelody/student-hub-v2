@@ -20,6 +20,270 @@ function NavButton({ label, icon, active, onClick }) {
   );
 }
 
+function getMobilePageTitle(activePage, settingsView) {
+  if (activePage === "tasks") return "To-do";
+  if (activePage === "plan") return "Today’s Plan";
+  if (activePage === "calendar") return "Calendar";
+  if (activePage === "subjects") return "Subjects";
+  if (activePage === "settings") {
+    if (settingsView === "integrations") return "Integrations";
+    if (settingsView === "appearance") return "Appearance";
+    if (settingsView === "help") return "Help / FAQ";
+    return "Settings";
+  }
+
+  return "Home";
+}
+
+function getAccountIdentity(displayName) {
+  const accountName = (displayName || "Student").trim() || "Student";
+  const accountInitials =
+    accountName
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "S";
+
+  return { accountName, accountInitials };
+}
+
+function MobileTopBar({ activePage, settingsView }) {
+  return (
+    <header className="mobile-topbar" aria-label="Student Hub mobile header">
+      <div className="mobile-topbar-brand">
+        <span className="mobile-topbar-mark" aria-hidden="true">
+          S
+        </span>
+        <div>
+          <strong>{getMobilePageTitle(activePage, settingsView)}</strong>
+          <small>Student Hub</small>
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function MobileBottomNav({ activePage, moreOpen, onNavigate, onToggleMore }) {
+  const navItems = [
+    { id: "tasks", label: "To-do", icon: "✓" },
+    { id: "plan", label: "Plan", icon: "◷" },
+    { id: "home", label: "Home", icon: "⌂", center: true },
+    { id: "calendar", label: "Calendar", icon: "▦" },
+  ];
+  const moreActive = moreOpen || activePage === "subjects" || activePage === "settings";
+
+  return (
+    <nav className="mobile-bottom-nav" aria-label="Primary mobile navigation">
+      {navItems.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={`mobile-bottom-nav-item${
+            activePage === item.id ? " active" : ""
+          }${item.center ? " mobile-bottom-nav-home" : ""}`}
+          aria-current={activePage === item.id ? "page" : undefined}
+          onClick={() => onNavigate(item.id)}
+        >
+          <span aria-hidden="true">{item.icon}</span>
+          <strong>{item.label}</strong>
+        </button>
+      ))}
+
+      <button
+        type="button"
+        className={`mobile-bottom-nav-item${moreActive ? " active" : ""}`}
+        aria-current={moreActive && !moreOpen ? "page" : undefined}
+        aria-haspopup="dialog"
+        aria-expanded={moreOpen}
+        onClick={onToggleMore}
+      >
+        <span aria-hidden="true">•••</span>
+        <strong>More</strong>
+      </button>
+    </nav>
+  );
+}
+
+function MobileMoreSheet({
+  open,
+  onClose,
+  setActivePage,
+  openSettings,
+  quickLinksPreferences,
+  displayName,
+  theme,
+  setTheme,
+}) {
+  const closeButtonRef = useRef(null);
+  const { accountName, accountInitials } = getAccountIdentity(displayName);
+  const pinnedLinks = getPinnedQuickLinks(quickLinksPreferences);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    requestAnimationFrame(() => closeButtonRef.current?.focus());
+
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose();
+    }
+
+    document.addEventListener("keydown", closeOnEscape);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose, open]);
+
+  if (!open || typeof document === "undefined") return null;
+
+  function navigate(page) {
+    setActivePage(page);
+    onClose();
+  }
+
+  function navigateSettings(view) {
+    openSettings(view);
+    onClose();
+  }
+
+  return createPortal(
+    <div className="mobile-more-layer" role="presentation">
+      <button
+        type="button"
+        className="mobile-more-backdrop"
+        aria-label="Close More menu"
+        onClick={onClose}
+      />
+
+      <section
+        className="mobile-more-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mobile-more-title"
+      >
+        <div className="mobile-more-handle" aria-hidden="true" />
+        <div className="mobile-more-header">
+          <div>
+            <p className="eyebrow">More</p>
+            <h2 id="mobile-more-title">Student Hub</h2>
+          </div>
+          <button
+            type="button"
+            className="mobile-more-close"
+            ref={closeButtonRef}
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mobile-more-content">
+          <section className="mobile-more-section" aria-label="Destinations">
+            <button type="button" onClick={() => navigate("subjects")}>
+              <span aria-hidden="true">◈</span>
+              <strong>Subjects</strong>
+            </button>
+            <button type="button" onClick={() => navigateSettings("hub")}>
+              <span aria-hidden="true">⚙</span>
+              <strong>Settings</strong>
+            </button>
+            <button type="button" onClick={() => navigateSettings("integrations")}>
+              <span aria-hidden="true">⇄</span>
+              <strong>Integrations</strong>
+            </button>
+          </section>
+
+          <section className="mobile-more-section" aria-labelledby="mobile-more-quick-links">
+            <div className="mobile-more-section-heading">
+              <h3 id="mobile-more-quick-links">Quick links</h3>
+              <button type="button" onClick={() => navigateSettings("quickLinks")}>
+                Manage
+              </button>
+            </div>
+
+            {pinnedLinks.length > 0 ? (
+              <div className="mobile-more-quick-links">
+                {pinnedLinks.map((link) => (
+                  <a
+                    key={link.id}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={onClose}
+                  >
+                    <span aria-hidden="true">
+                      <QuickLinkIcon iconId={link.iconId} />
+                    </span>
+                    <strong>{link.label}</strong>
+                    <small aria-hidden="true">↗</small>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="mobile-more-empty">No pinned links yet.</p>
+            )}
+          </section>
+
+          <section className="mobile-more-section" aria-labelledby="mobile-more-account">
+            <div className="mobile-more-account">
+              <span className="mobile-more-avatar" aria-hidden="true">
+                {accountInitials}
+              </span>
+              <span>
+                <strong id="mobile-more-account">{accountName}</strong>
+                <small>Local workspace</small>
+              </span>
+            </div>
+
+            <div className="mobile-more-theme" role="group" aria-label="Appearance">
+              {["light", "dark", "system"].map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={theme === option ? "active" : ""}
+                  aria-pressed={theme === option}
+                  onClick={() => setTheme(option)}
+                >
+                  {option === "light"
+                    ? "Light"
+                    : option === "dark"
+                      ? "Dark"
+                      : "System"}
+                </button>
+              ))}
+            </div>
+
+            <button type="button" onClick={() => navigateSettings("appearance")}>
+              <span aria-hidden="true">◐</span>
+              <strong>Personalisation</strong>
+            </button>
+            <button type="button" onClick={() => navigateSettings("help")}>
+              <span aria-hidden="true">?</span>
+              <strong>Help / FAQ</strong>
+            </button>
+            <button
+              type="button"
+              className="mobile-more-disabled"
+              disabled
+              title="Log out unavailable until accounts are added"
+            >
+              <span aria-hidden="true">↪</span>
+              <strong>Log out</strong>
+              <small>Accounts coming later</small>
+            </button>
+          </section>
+        </div>
+      </section>
+    </div>,
+    document.body
+  );
+}
+
 function QuickLinksNav({ collapsed, quickLinksPreferences, openSettings }) {
   const pinnedLinks = getPinnedQuickLinks(quickLinksPreferences);
 
@@ -225,13 +489,7 @@ function AccountMenu({
     setPersonalisationOpen(false);
   }
 
-  const accountName = (displayName || "Student").trim() || "Student";
-  const accountInitials = accountName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("") || "S";
+  const { accountName, accountInitials } = getAccountIdentity(displayName);
   const backgroundStrengthLabel =
     themeColors.backgroundStrength === "medium"
       ? "Medium"
@@ -1075,4 +1333,12 @@ function RightRail({
   );
 }
 
-export { AccountMenu, NavButton, QuickLinksNav, RightRail };
+export {
+  AccountMenu,
+  MobileBottomNav,
+  MobileMoreSheet,
+  MobileTopBar,
+  NavButton,
+  QuickLinksNav,
+  RightRail,
+};

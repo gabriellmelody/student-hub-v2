@@ -2,6 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./App.css";
 import {
   AccountMenu,
+  MobileBottomNav,
+  MobileMoreSheet,
+  MobileTopBar,
   NavButton,
   QuickLinksNav,
   RightRail,
@@ -213,6 +216,7 @@ function App() {
   const [homeEditMode, setHomeEditMode] = useState(false);
   const [rightRailEditMode, setRightRailEditMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("student-hub-theme");
     return savedTheme === "dark" || savedTheme === "system" ? savedTheme : "light";
@@ -359,6 +363,17 @@ function App() {
       window.removeEventListener("popstate", syncNavigationFromHistory);
   }, []);
 
+  useEffect(() => {
+    function closeMobileMoreOnDesktop() {
+      if (window.innerWidth > 700) setMobileMoreOpen(false);
+    }
+
+    closeMobileMoreOnDesktop();
+    window.addEventListener("resize", closeMobileMoreOnDesktop);
+
+    return () => window.removeEventListener("resize", closeMobileMoreOnDesktop);
+  }, []);
+
   const rightRailWidgets = getWidgetsForArea(
     widgetConfig,
     "rightRail"
@@ -456,6 +471,11 @@ function App() {
         });
       }, 0);
     }
+  }
+
+  function navigateMobilePage(page) {
+    setMobileMoreOpen(false);
+    setActivePage(page);
   }
 
   function updateRightRailVisibility(nextVisible) {
@@ -1933,6 +1953,8 @@ function App() {
         rightRailVisible ? "right-rail-visible" : ""
       } ${rightRailCollapsed ? "right-rail-collapsed" : ""}`}
     >
+      <MobileTopBar activePage={activePage} settingsView={settingsView} />
+
       <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="brand-row">
           <div className="brand">
@@ -2148,6 +2170,24 @@ function App() {
           setEditMode={setRightRailEditMode}
         />
       )}
+
+      <MobileBottomNav
+        activePage={activePage}
+        moreOpen={mobileMoreOpen}
+        onNavigate={navigateMobilePage}
+        onToggleMore={() => setMobileMoreOpen((open) => !open)}
+      />
+
+      <MobileMoreSheet
+        open={mobileMoreOpen}
+        onClose={() => setMobileMoreOpen(false)}
+        setActivePage={setActivePage}
+        openSettings={openSettings}
+        quickLinksPreferences={quickLinksPreferences}
+        displayName={studentProfile.displayName || studentProfile.name || "Student"}
+        theme={theme}
+        setTheme={setTheme}
+      />
 
       {eveningPlannerOpen && (
         <EveningPlannerModal
