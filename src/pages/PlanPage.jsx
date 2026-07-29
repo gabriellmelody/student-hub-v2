@@ -6,6 +6,7 @@ import {
   getTaskSignalBadges,
   parseDateKey,
 } from "../utils/appUtils.js";
+import RevealOnScroll from "../components/RevealOnScroll.jsx";
 import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
 
 function getCurrentMinutes() {
@@ -680,7 +681,11 @@ function PlanPage({
           const nextClassName = isNext ? " plan-block-next" : "";
 
           return (
-            <div
+            <RevealOnScroll
+              as="div"
+              index={index}
+              delayStep={34}
+              maxDelay={150}
               key={blockKey}
               className={`plan-timeline-item ${
                 block.type === "break"
@@ -917,7 +922,7 @@ function PlanPage({
                 </div>
               )}
               </article>
-            </div>
+            </RevealOnScroll>
           );
             })}
           </div>

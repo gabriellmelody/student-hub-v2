@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import RevealOnScroll from "./RevealOnScroll.jsx";
 import SubjectField from "./SubjectField.jsx";
 import TaskClassificationFields from "./TaskClassificationFields.jsx";
 import TaskSourceBadge from "./TaskSourceBadge.jsx";
@@ -35,6 +36,8 @@ function TaskCard({
   completed = false,
   openMenuTaskId = null,
   setOpenMenuTaskId,
+  reveal = false,
+  revealIndex = 0,
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [menuPosition, setMenuPosition] = useState(null);
@@ -218,15 +221,26 @@ function TaskCard({
     );
   }
 
+  const CardRoot = reveal ? RevealOnScroll : "div";
+  const cardRootProps = reveal
+    ? {
+        as: "div",
+        index: revealIndex,
+        delayStep: 32,
+        maxDelay: 140,
+      }
+    : {};
+
   return (
-      <div
-        className={`task-card task-card-${urgencyClass} ${
-          completed ? "completed" : ""
-        } ${subjectProfile ? "has-subject-colour" : ""}${
-          hasAssessmentSignal ? " task-card-assessment" : ""
-        }`}
-        style={subjectStyle}
-      >
+    <CardRoot
+      {...cardRootProps}
+      className={`task-card task-card-${urgencyClass} ${
+        completed ? "completed" : ""
+      } ${subjectProfile ? "has-subject-colour" : ""}${
+        hasAssessmentSignal ? " task-card-assessment" : ""
+      }`}
+      style={subjectStyle}
+    >
       <div className="task-row">
         <button
           className={`check-circle ${completed ? "checked" : ""}`}
@@ -309,7 +323,7 @@ function TaskCard({
           </div>
         </div>
       </div>
-    </div>
+    </CardRoot>
   );
 }
 

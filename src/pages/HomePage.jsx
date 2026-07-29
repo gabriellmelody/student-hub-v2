@@ -9,6 +9,7 @@ import {
   getEffortClass,
   getTaskSignalBadges,
 } from "../utils/appUtils.js";
+import RevealOnScroll from "../components/RevealOnScroll.jsx";
 import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -214,9 +215,11 @@ function HomePage({
         </div>
       </section>
 
-      <section
+      <RevealOnScroll
+        as="section"
         className="home-week-strip-panel home-glow-surface"
         aria-label="This week"
+        initiallyVisible={playHomeIntro}
         {...glowSurfaceProps}
       >
         <div className="home-section-heading">
@@ -256,11 +259,14 @@ function HomePage({
             </div>
           ))}
         </div>
-      </section>
+      </RevealOnScroll>
 
-      <section
+      <RevealOnScroll
+        as="section"
         className="home-coming-up home-glow-surface"
         aria-label="Coming up"
+        index={1}
+        initiallyVisible={playHomeIntro}
         {...glowSurfaceProps}
       >
         <div className="home-section-heading">
@@ -297,7 +303,7 @@ function HomePage({
         ) : (
           <p className="home-coming-empty">Nothing due soon.</p>
         )}
-      </section>
+      </RevealOnScroll>
     </div>
   );
 }

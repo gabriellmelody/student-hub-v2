@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import SubjectField from "../components/SubjectField.jsx";
 import TaskClassificationFields from "../components/TaskClassificationFields.jsx";
 import TaskCard from "../components/TaskCard.jsx";
+import RevealOnScroll from "../components/RevealOnScroll.jsx";
 import {
   getDaysLeft,
   getEffortClass,
@@ -153,11 +154,12 @@ function TasksPage({
 
         {hasActiveTasks && taskSortMode === "smart" && (
           <div className="task-group-stack">
-            {recommendedGroups.map((group) => (
+            {recommendedGroups.map((group, groupIndex) => (
               <TaskGroup
                 key={group.id}
                 title={group.title}
                 tasks={group.tasks}
+                revealIndex={groupIndex}
                 subjects={subjects}
                 onToggle={toggleTask}
                 onDelete={deleteTask}
@@ -177,14 +179,14 @@ function TasksPage({
               onSelect={setDueDateSelection}
             />
 
-            <section className="task-section">
+            <RevealOnScroll as="section" className="task-section" maxDelay={120}>
               <h3 className="section-label">
                 {getDueDateSelectionHeading(selectedDueOption, selectedDueTasks.length)}
               </h3>
 
               {selectedDueTasks.length > 0 ? (
                 <div className="task-list">
-                  {selectedDueTasks.map((task) => (
+                  {selectedDueTasks.map((task, taskIndex) => (
                     <TaskCard
                       key={task.id}
                       task={task}
@@ -194,6 +196,8 @@ function TasksPage({
                       onUpdate={updateTask}
                       openMenuTaskId={openMenuTaskId}
                       setOpenMenuTaskId={setOpenMenuTaskId}
+                      reveal
+                      revealIndex={taskIndex}
                     />
                   ))}
                 </div>
@@ -203,7 +207,7 @@ function TasksPage({
                   <p>Choose another day or add a task when something comes in.</p>
                 </div>
               )}
-            </section>
+            </RevealOnScroll>
           </div>
         )}
 
@@ -213,6 +217,7 @@ function TasksPage({
               <TaskGroup
                 title="Active"
                 tasks={sortedActiveTasks}
+                revealIndex={0}
                 subjects={subjects}
                 onToggle={toggleTask}
                 onDelete={deleteTask}
@@ -226,6 +231,7 @@ function TasksPage({
               <TaskGroup
                 title="Later"
                 tasks={sortedBacklogTasks}
+                revealIndex={1}
                 subjects={subjects}
                 onToggle={toggleTask}
                 onDelete={deleteTask}
@@ -246,6 +252,7 @@ function TasksPage({
               <TaskGroup
                 title="No deadline"
                 tasks={sortedNoDeadlineTasks}
+                revealIndex={2}
                 subjects={subjects}
                 onToggle={toggleTask}
                 onDelete={deleteTask}
@@ -274,6 +281,7 @@ function TasksPage({
                 <TaskGroup
                   title="Completed"
                   tasks={sortedCompletedTasks}
+                  revealIndex={0}
                   subjects={subjects}
                   onToggle={toggleTask}
                   onDelete={deleteTask}
@@ -406,13 +414,19 @@ function TaskGroup({
   onUpdate,
   completed = false,
   hideHeading = false,
+  revealIndex = 0,
   openMenuTaskId,
   setOpenMenuTaskId,
 }) {
   if (tasks.length === 0) return null;
 
   return (
-    <section className="task-section">
+    <RevealOnScroll
+      as="section"
+      className="task-section"
+      index={revealIndex}
+      maxDelay={120}
+    >
       {!hideHeading && (
         <h3 className="section-label">
           {title} <span>· {tasks.length}</span>
@@ -420,7 +434,7 @@ function TaskGroup({
       )}
 
       <div className="task-list">
-        {tasks.map((task) => (
+        {tasks.map((task, taskIndex) => (
           <TaskCard
             key={task.id}
             task={task}
@@ -431,10 +445,12 @@ function TaskGroup({
             completed={completed}
             openMenuTaskId={openMenuTaskId}
             setOpenMenuTaskId={setOpenMenuTaskId}
+            reveal
+            revealIndex={taskIndex}
           />
         ))}
       </div>
-    </section>
+    </RevealOnScroll>
   );
 }
 
