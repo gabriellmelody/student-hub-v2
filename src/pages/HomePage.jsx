@@ -19,7 +19,7 @@ const HOME_INTRO_SESSION_KEY = "studentHubHomeIntroPlayed";
 function HomePage({
   tasks,
   nextTask,
-  openEveningPlanner,
+  openSmartPlanner,
   hasPlan,
   planBlocks = [],
   setActivePage,
@@ -202,9 +202,9 @@ function HomePage({
           <button
             type="button"
             className="primary-button home-plan-action"
-            onClick={hasPlan ? () => setActivePage("plan") : openEveningPlanner}
+            onClick={hasPlan ? () => setActivePage("plan") : openSmartPlanner}
           >
-            {hasPlan ? "Continue plan" : "Create plan"}
+            {hasPlan ? "Continue plan" : "Smart Planner"}
           </button>
         </div>
       </section>

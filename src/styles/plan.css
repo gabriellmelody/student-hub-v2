@@ -1,5 +1,17 @@
 /* Today plan blocks, editors, movement, and drag states. */
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .plan-actions {
   display: flex;
   align-items: center;
@@ -1062,6 +1074,436 @@
   color: var(--text-control);
 }
 
+.smart-planner-backdrop {
+  position: fixed;
+  z-index: 1550;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(4px);
+}
+
+.smart-planner-modal {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(760px, 100%);
+  max-height: calc(100dvh - 36px);
+  overflow: hidden;
+  border: 1px solid var(--border-raised);
+  border-radius: 18px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-modal);
+  animation: evening-planner-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.smart-planner-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.smart-planner-header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.22rem;
+  line-height: 1.2;
+  outline: none;
+}
+
+.smart-planner-header p:last-child {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--font-helper);
+  line-height: 1.45;
+}
+
+.smart-planner-header > button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 1.1rem;
+}
+
+.smart-planner-header > button:hover,
+.smart-planner-header > button:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.smart-planner-setup,
+.smart-planner-preview {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px 18px 18px;
+}
+
+.smart-planner-setup {
+  display: grid;
+  gap: 14px;
+}
+
+.smart-planner-time-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.smart-planner-time-fields label > span,
+.smart-planner-style-fieldset legend {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  font-weight: 750;
+}
+
+.smart-planner-time-fields input {
+  width: 100%;
+  min-height: var(--density-input-height);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: var(--density-input-padding);
+  background: var(--surface-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.smart-planner-style-fieldset {
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.smart-planner-style-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.smart-planner-style-options label {
+  display: grid;
+  min-width: 0;
+  min-height: 78px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--surface-subtle);
+  cursor: pointer;
+}
+
+.smart-planner-style-options label.is-selected {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  box-shadow: inset 0 0 0 1px var(--accent-border);
+}
+
+.smart-planner-style-options input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.smart-planner-style-options label:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.smart-planner-style-options strong,
+.smart-planner-calendar-option strong {
+  display: block;
+  color: var(--text);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+.smart-planner-style-options small,
+.smart-planner-calendar-option small {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.smart-planner-calendar-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 10px 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+
+.smart-planner-calendar-option input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+}
+
+.smart-planner-calendar-option.is-unavailable {
+  opacity: 0.72;
+}
+
+.smart-planner-loading,
+.smart-planner-replace-notice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  background: var(--accent-tint);
+}
+
+.smart-planner-loading > span {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--accent-border);
+  border-top-color: var(--accent);
+  border-radius: 999px;
+  animation: smart-planner-spin 700ms linear infinite;
+}
+
+.smart-planner-loading strong,
+.smart-planner-replace-notice strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.smart-planner-loading p,
+.smart-planner-replace-notice p {
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.smart-planner-error,
+.smart-planner-message {
+  margin: 0;
+  border-radius: 10px;
+  padding: 10px 11px;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.smart-planner-quota {
+  margin: -2px 0 0;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.smart-planner-error {
+  border: 1px solid var(--effort-high-border);
+  background: var(--effort-high-bg);
+  color: var(--urgent);
+}
+
+.smart-planner-message {
+  border: 1px solid var(--border-soft);
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+
+.smart-planner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.smart-planner-actions button {
+  min-height: var(--density-small-button-height);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-button);
+  padding: var(--density-small-button-padding);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-button-small);
+  font-weight: 720;
+}
+
+.smart-planner-actions .primary-button {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.smart-planner-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.smart-planner-preview {
+  display: grid;
+  gap: 14px;
+}
+
+.smart-planner-preview-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.smart-planner-preview-intro p {
+  margin: 1px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.smart-planner-source-badge {
+  flex: 0 0 auto;
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+  font-size: 0.62rem;
+  font-weight: 780;
+}
+
+.smart-planner-source-badge.is-basic {
+  border-color: var(--border-strong);
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+}
+
+.smart-planner-preview-blocks,
+.smart-planner-omitted ul,
+.smart-planner-warnings ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.smart-planner-preview-block {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 10px;
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--surface-subtle);
+}
+
+.smart-planner-preview-block.is-break {
+  border-left-color: var(--border-hover);
+  background: color-mix(in srgb, var(--surface-subtle) 86%, transparent);
+}
+
+.smart-planner-preview-time {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.smart-planner-preview-block-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px 8px;
+}
+
+.smart-planner-preview-block-heading strong {
+  color: var(--text);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.smart-planner-preview-block-heading span {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 720;
+}
+
+.smart-planner-preview-block p,
+.smart-planner-preview-block small {
+  display: block;
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.4;
+}
+
+.smart-planner-preview-block small {
+  color: var(--text-muted);
+}
+
+.smart-planner-omitted,
+.smart-planner-warnings {
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.smart-planner-omitted h3,
+.smart-planner-warnings h3 {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.smart-planner-omitted li {
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.smart-planner-omitted strong {
+  color: var(--text);
+  font-size: 0.72rem;
+}
+
+.smart-planner-omitted p,
+.smart-planner-omitted small,
+.smart-planner-warnings li {
+  margin: 3px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.smart-planner-preview-actions {
+  position: sticky;
+  bottom: -18px;
+  margin: 0 -18px -18px;
+  padding: 12px 18px max(14px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border-soft);
+  background: color-mix(in srgb, var(--surface-raised) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+@keyframes smart-planner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes evening-planner-enter {
   from {
     opacity: 0;
@@ -1116,6 +1558,63 @@
 }
 
 @media (max-width: 700px) {
+  .smart-planner-backdrop {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .smart-planner-modal {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    border-radius: 22px 22px 18px 18px;
+  }
+
+  .smart-planner-header {
+    padding: 15px 15px 12px;
+  }
+
+  .smart-planner-setup,
+  .smart-planner-preview {
+    padding: 14px 15px calc(18px + env(safe-area-inset-bottom));
+  }
+
+  .smart-planner-style-options {
+    grid-template-columns: 1fr;
+  }
+
+  .smart-planner-time-fields input {
+    min-width: 0;
+    font-size: 16px;
+  }
+
+  .smart-planner-style-options label {
+    min-height: 0;
+  }
+
+  .smart-planner-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .smart-planner-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .smart-planner-preview-block {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .smart-planner-preview-actions {
+    bottom: calc(-18px - env(safe-area-inset-bottom));
+    margin-right: -15px;
+    margin-bottom: calc(-18px - env(safe-area-inset-bottom));
+    margin-left: -15px;
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+
   .evening-planner-backdrop {
     z-index: 1550;
     align-items: end;
@@ -1405,6 +1904,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .smart-planner-modal,
+  .smart-planner-loading > span,
   .evening-planner-modal,
   .evening-plan-success-toast,
   .evening-plan-success-check,

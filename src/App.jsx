@@ -9,6 +9,7 @@ import {
   QuickLinksNav,
   RightRail,
 } from "./components/AppChrome.jsx";
+import SmartPlannerModal from "./components/SmartPlannerModal.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import HomePage from "./pages/HomePage.jsx";
 import OnboardingFlow from "./pages/Onboarding.jsx";
@@ -51,7 +52,6 @@ import {
   saveTodayPlanSnapshot,
   loadQuickLinksPreferences,
   saveQuickLinksPreferences,
-  getDefaultEveningPlannerDraft,
   buildEveningPlan,
   timeToMinutes,
   createDemoTasks,
@@ -66,6 +66,14 @@ import {
   getBusyGoogleCalendarIdsFromStorage,
   loadGoogleCalendarAccountMeta,
 } from "./utils/googleCalendarStorage.js";
+import {
+  buildSmartPlannerTaskPayload,
+  formatLocalDate,
+  formatPlannerPreviewTime,
+  getDefaultSmartPlannerDraft,
+  getSmartPlannerLocalContext,
+  timeStringToMinute,
+} from "./utils/smartPlannerUtils.js";
 
 function resolveThemePreference(themePreference) {
   if (themePreference !== "system") return themePreference === "dark" ? "dark" : "light";
@@ -270,6 +278,11 @@ function App() {
         )
       : []
   );
+  const [planMetadata, setPlanMetadata] = useState(() =>
+    savedPlanIsForToday && initialSavedPlan?.metadata
+      ? initialSavedPlan.metadata
+      : null
+  );
   const [stalePlanDate, setStalePlanDate] = useState(() =>
     initialSavedPlan && !savedPlanIsForToday
       ? initialSavedPlan.generatedDate
@@ -277,19 +290,20 @@ function App() {
   );
   const [planMoveFeedback, setPlanMoveFeedback] = useState(null);
   const planMoveFeedbackTimerRef = useRef(null);
-  const [eveningPlannerOpen, setEveningPlannerOpen] = useState(false);
-  const [eveningPlannerDraft, setEveningPlannerDraft] = useState(
-    getDefaultEveningPlannerDraft
+  const [smartPlannerOpen, setSmartPlannerOpen] = useState(false);
+  const [smartPlannerDraft, setSmartPlannerDraft] = useState(() =>
+    getDefaultSmartPlannerDraft()
   );
-  const [eveningPlannerError, setEveningPlannerError] = useState("");
-  const [eveningPlannerNeedsReplace, setEveningPlannerNeedsReplace] =
+  const [smartPlannerError, setSmartPlannerError] = useState("");
+  const [smartPlannerPreview, setSmartPlannerPreview] = useState(null);
+  const [smartPlannerNeedsReplace, setSmartPlannerNeedsReplace] =
     useState(false);
-  const [eveningPlannerCheckingCalendar, setEveningPlannerCheckingCalendar] =
-    useState(false);
-  const [
-    eveningPlannerCanContinueWithoutCalendar,
-    setEveningPlannerCanContinueWithoutCalendar,
-  ] = useState(false);
+  const [smartPlannerLoading, setSmartPlannerLoading] = useState(false);
+  const [smartPlannerQuota, setSmartPlannerQuota] = useState({
+    remainingGenerations: null,
+    resetAt: "",
+  });
+  const smartPlannerRequestRef = useRef({ id: 0, controller: null });
   const [eveningPlanSuccess, setEveningPlanSuccess] = useState(null);
   const eveningPlanSuccessTimerRef = useRef(null);
 
@@ -562,8 +576,16 @@ function App() {
       blocks: planBlocks,
       startTime,
       hoursAvailable,
+      metadata: planMetadata,
     });
-  }, [planBlocks, startTime, hoursAvailable, stalePlanDate]);
+  }, [planBlocks, startTime, hoursAvailable, stalePlanDate, planMetadata]);
+
+  useEffect(() => {
+    if (planBlocks.length > 0 || !planMetadata) return undefined;
+
+    const clearMetadataTimer = setTimeout(() => setPlanMetadata(null), 0);
+    return () => clearTimeout(clearMetadataTimer);
+  }, [planBlocks.length, planMetadata]);
 
   useLayoutEffect(() => {
     const root = document.documentElement;
@@ -887,25 +909,31 @@ function App() {
     );
 
     setPlanBlocks([]);
+    setPlanMetadata(null);
   }
 
   function clearPlan() {
-    setPlanBlocks((currentBlocks) =>
-      recalculatePlanTimes(
+    setPlanBlocks((currentBlocks) => {
+      const remainingBlocks = recalculatePlanTimes(
         currentBlocks.filter((block) => block.locked === true),
         startTime
-      )
-    );
+      );
+
+      if (remainingBlocks.length === 0) setPlanMetadata(null);
+      return remainingBlocks;
+    });
   }
 
   function startFreshPlan() {
     localStorage.removeItem(TODAY_PLAN_STORAGE_KEY);
     setStalePlanDate(null);
     setPlanBlocks([]);
+    setPlanMetadata(null);
     setPlanMoveFeedback(null);
   }
 
   function addManualPlanBlock(blockInput) {
+    if (planBlocks.length === 0) setPlanMetadata(null);
     setStalePlanDate(null);
     const type = blockInput.type === "break" ? "break" : "study";
     const numericDuration = Number(blockInput.duration);
@@ -1446,25 +1474,41 @@ function App() {
     setActivePage("plan");
   }
 
-  function openEveningPlanner() {
+  function calendarBusyTimeIsAvailable() {
+    return (
+      getBusyGoogleCalendarIds().length > 0 &&
+      Boolean(loadGoogleCalendarAccountMeta()?.accountId)
+    );
+  }
+
+  function openSmartPlanner() {
+    const calendarAvailable = calendarBusyTimeIsAvailable();
+
     setEveningPlanSuccess(null);
-    setEveningPlannerDraft(getDefaultEveningPlannerDraft());
-    setEveningPlannerError("");
-    setEveningPlannerNeedsReplace(false);
-    setEveningPlannerCheckingCalendar(false);
-    setEveningPlannerCanContinueWithoutCalendar(false);
-    setEveningPlannerOpen(true);
+    setSmartPlannerDraft(
+      getDefaultSmartPlannerDraft({ calendarAvailable })
+    );
+    setSmartPlannerError("");
+    setSmartPlannerPreview(null);
+    setSmartPlannerNeedsReplace(false);
+    setSmartPlannerLoading(false);
+    setSmartPlannerOpen(true);
   }
 
-  function closeEveningPlanner() {
-    setEveningPlannerOpen(false);
-    setEveningPlannerError("");
-    setEveningPlannerNeedsReplace(false);
-    setEveningPlannerCheckingCalendar(false);
-    setEveningPlannerCanContinueWithoutCalendar(false);
+  function closeSmartPlanner() {
+    smartPlannerRequestRef.current.controller?.abort();
+    smartPlannerRequestRef.current = {
+      id: smartPlannerRequestRef.current.id + 1,
+      controller: null,
+    };
+    setSmartPlannerOpen(false);
+    setSmartPlannerError("");
+    setSmartPlannerPreview(null);
+    setSmartPlannerNeedsReplace(false);
+    setSmartPlannerLoading(false);
   }
 
-  async function fetchPlanningBusyIntervals() {
+  async function fetchPlanningBusyIntervals(draft, signal) {
     const busyCalendarIds = getBusyGoogleCalendarIds();
     const googleCalendarAccount = loadGoogleCalendarAccountMeta();
 
@@ -1472,8 +1516,8 @@ function App() {
       return [];
     }
 
-    const startMinutes = timeToMinutes(eveningPlannerDraft.startTime);
-    const endMinutes = timeToMinutes(eveningPlannerDraft.endTime);
+    const startMinutes = timeToMinutes(draft.startTime);
+    const endMinutes = timeToMinutes(draft.endTime);
 
     if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) {
       return [];
@@ -1483,6 +1527,7 @@ function App() {
     const response = await fetch("/api/google-calendar/events", {
       method: "POST",
       credentials: "include",
+      signal,
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
@@ -1511,99 +1556,372 @@ function App() {
       planningDate,
       startMinutes,
       endMinutes
-    );
+    ).slice(0, 40);
   }
 
-  async function createEveningPlan({
-    replaceExisting = false,
-    ignoreCalendar = false,
-  } = {}) {
-    if (eveningPlannerCheckingCalendar) return;
-
-    setEveningPlanSuccess(null);
-
-    if (planBlocks.length > 0 && !replaceExisting) {
-      setEveningPlannerNeedsReplace(true);
-      setEveningPlannerError("");
-      setEveningPlannerCanContinueWithoutCalendar(false);
-      return;
-    }
-
-    if (replaceExisting && planBlocks.some((block) => block.locked === true)) {
-      setEveningPlannerError("Unlock locked blocks before replacing this plan.");
-      setEveningPlannerNeedsReplace(false);
-      setEveningPlannerCanContinueWithoutCalendar(false);
-      return;
-    }
-
-    setEveningPlannerCanContinueWithoutCalendar(false);
-    setEveningPlannerError("");
-
-    let busyIntervals = [];
-
-    if (!ignoreCalendar && getBusyGoogleCalendarIds().length > 0) {
-      setEveningPlannerCheckingCalendar(true);
-      setEveningPlannerError("");
-
-      try {
-        busyIntervals = await fetchPlanningBusyIntervals();
-      } catch (error) {
-        setEveningPlannerCheckingCalendar(false);
-        setEveningPlannerCanContinueWithoutCalendar(true);
-        setEveningPlannerError(
-          error instanceof Error
-            ? error.message
-            : "Calendar is unavailable. Continue without Calendar?"
-        );
-        return;
-      }
-
-      setEveningPlannerCheckingCalendar(false);
-      setEveningPlannerError("");
-    }
-
+  function buildBasicPlannerPreview(busyIntervals = [], fallbackMessage = "") {
     const result = buildEveningPlan({
       tasks: visibleTasks,
-      startTime: eveningPlannerDraft.startTime,
-      endTime: eveningPlannerDraft.endTime,
-      energy: eveningPlannerDraft.energy,
-      includeBreaks: eveningPlannerDraft.includeBreaks,
-      maxFocusMinutes: eveningPlannerDraft.maxFocusMinutes,
-      planStyle: eveningPlannerDraft.planStyle,
+      startTime: smartPlannerDraft.startTime,
+      endTime: smartPlannerDraft.endTime,
+      energy: "normal",
+      includeBreaks: true,
+      maxFocusMinutes: 35,
+      planStyle:
+        smartPlannerDraft.planStyle === "lighter"
+          ? "light"
+          : smartPlannerDraft.planStyle === "maximum"
+            ? "push"
+            : "balanced",
       busyIntervals,
     });
 
     if (!result.ok) {
-      setEveningPlannerError(result.reason);
-      setEveningPlannerNeedsReplace(false);
+      if (result.reason === "No active tasks to plan yet.") {
+        setSmartPlannerPreview({
+          source: "basic",
+          status: "no_tasks",
+          summary: "Nothing needs planning right now.",
+          blocks: [],
+          omittedTasks: [],
+          warnings: [],
+        });
+        setSmartPlannerError(fallbackMessage);
+        return true;
+      }
+
+      setSmartPlannerError(
+        [fallbackMessage, result.reason].filter(Boolean).join(" ")
+      );
+      setSmartPlannerPreview(null);
+      return false;
+    }
+
+    const eligibleTasks = buildSmartPlannerTaskPayload(
+      sortTasksForDisplay(visibleTasks),
+      formatLocalDate()
+    );
+    const scheduledTaskIds = new Set(
+      result.blocks
+        .filter((block) => block.type === "study")
+        .map((block) => String(block.taskId))
+    );
+    const omittedTasks = eligibleTasks
+      .filter((task) => !scheduledTaskIds.has(task.id))
+      .map((task) => ({
+        taskId: task.id,
+        title: task.title,
+        reason: "It did not fit after higher-priority work.",
+        suggestedNextStep: "Review it when you next update your plan.",
+      }));
+
+    setSmartPlannerPreview({
+      source: "basic",
+      status: "ready",
+      summary: `${result.scheduledTaskCount} task${
+        result.scheduledTaskCount === 1 ? "" : "s"
+      } scheduled with the Basic planner.`,
+      blocks: result.blocks.map((block) => ({
+        ...block,
+        plannerSource: "basic",
+      })),
+      omittedTasks,
+      warnings:
+        busyIntervals.length > 0
+          ? [`Calendar leaves ${formatPlannerMinutes(result.usableMinutes)} free.`]
+          : [],
+      windowMinutes: result.windowMinutes,
+      usableMinutes: result.usableMinutes,
+    });
+    setSmartPlannerNeedsReplace(false);
+    setSmartPlannerError(fallbackMessage);
+    return true;
+  }
+
+  function mapSmartPlannerPlan(plan) {
+    const taskMap = new Map(visibleTasks.map((task) => [String(task.id), task]));
+
+    return plan.blocks.map((block, index) => {
+      if (block.type === "break") {
+        return {
+          id: `smart-break-${block.startMinute}-${index}`,
+          type: "break",
+          source: "generated",
+          plannerSource: "smart",
+          edited: false,
+          locked: false,
+          taskId: null,
+          calendarEventId: null,
+          start: formatPlannerPreviewTime(block.startMinute),
+          end: formatPlannerPreviewTime(block.endMinute),
+          startMinute: block.startMinute,
+          endMinute: block.endMinute,
+          duration: block.durationMinutes,
+          title: block.title || "Break",
+          tip: block.goal || "Step away for a few minutes.",
+          reason: block.reason || "",
+        };
+      }
+
+      const task = taskMap.get(String(block.taskId));
+      return {
+        id: `smart-${block.taskId}-${block.startMinute}-${index}`,
+        type: "study",
+        source: "generated",
+        plannerSource: "smart",
+        taskSource: task?.source || "manual",
+        edited: false,
+        locked: false,
+        taskId: task?.id ?? block.taskId,
+        calendarEventId: null,
+        subject: task?.subject || block.subject || "",
+        title: task?.title || block.title,
+        start: formatPlannerPreviewTime(block.startMinute),
+        end: formatPlannerPreviewTime(block.endMinute),
+        startMinute: block.startMinute,
+        endMinute: block.endMinute,
+        duration: block.durationMinutes,
+        effort: task?.effort,
+        taskType: task?.taskType,
+        importance: task?.importance,
+        detectedTags: task?.detectedTags,
+        importanceSource: task?.importanceSource,
+        classroomCourseId: task?.classroomCourseId || null,
+        classroomCourseName: task?.classroomCourseName || "",
+        externalId: task?.externalId || null,
+        tip: block.goal,
+        reason: block.reason,
+      };
+    });
+  }
+
+  async function generateSmartPlannerPreview({ basic = false } = {}) {
+    if (smartPlannerLoading) return;
+
+    const context = getSmartPlannerLocalContext(smartPlannerDraft);
+    if (
+      context.startMinute === null ||
+      context.finishMinute === null ||
+      context.finishMinute <= context.startMinute
+    ) {
+      setSmartPlannerError("Choose a finish time after your start time.");
       return;
     }
 
-    setStalePlanDate(null);
-    setStartTime(eveningPlannerDraft.startTime);
-    setHoursAvailable(
-      Number(((result.usableMinutes || result.windowMinutes) / 60).toFixed(2))
-    );
-    setPlanBlocks(result.blocks);
-    setActivePage("plan");
-    closeEveningPlanner();
-    const calendarSummary =
-      busyIntervals.length > 0 && result.unscheduledWorkMinutes > 0
-        ? ` · calendar leaves ${formatPlannerMinutes(
-            result.usableMinutes
-          )} free · some work could not be scheduled`
-        : "";
-    setEveningPlanSuccess({
-      title: replaceExisting ? "Plan updated" : "Plan created",
-      summary: `${result.scheduledTaskCount} task${
-        result.scheduledTaskCount === 1 ? "" : "s"
-      } scheduled${
-        result.breakCount > 0
-          ? ` · ${result.breakCount} break${
-              result.breakCount === 1 ? "" : "s"
-            } added`
+    if (context.startMinute < context.currentMinute) {
+      setSmartPlannerError("Choose a start time that has not passed.");
+      return;
+    }
+
+    if (context.finishMinute - context.startMinute < 15) {
+      setSmartPlannerError("There isn’t enough time left to build today’s plan.");
+      return;
+    }
+
+    const useBasicForQuota =
+      !basic && smartPlannerQuota.remainingGenerations === 0;
+
+    smartPlannerRequestRef.current.controller?.abort();
+    const controller = new AbortController();
+    const requestId = smartPlannerRequestRef.current.id + 1;
+    smartPlannerRequestRef.current = { id: requestId, controller };
+    setSmartPlannerLoading(true);
+    setSmartPlannerError("");
+    setSmartPlannerPreview(null);
+    setSmartPlannerNeedsReplace(false);
+
+    let busyIntervals = [];
+    if (smartPlannerDraft.useCalendar && calendarBusyTimeIsAvailable()) {
+      try {
+        busyIntervals = await fetchPlanningBusyIntervals(
+          smartPlannerDraft,
+          controller.signal
+        );
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        if (smartPlannerRequestRef.current.id !== requestId) return;
+        setSmartPlannerLoading(false);
+        setSmartPlannerError(
+          "Calendar could not be checked. Turn off Calendar consideration or try again."
+        );
+        return;
+      }
+    }
+
+    if (smartPlannerRequestRef.current.id !== requestId) return;
+
+    if (basic || useBasicForQuota) {
+      const resetLabel = smartPlannerQuota.resetAt
+        ? new Date(smartPlannerQuota.resetAt).toLocaleString([], {
+            dateStyle: "medium",
+            timeStyle: "short",
+          })
+        : "later";
+      buildBasicPlannerPreview(
+        busyIntervals,
+        useBasicForQuota
+          ? `AI limit reached. It resets ${resetLabel}. Here’s a Basic plan instead.`
           : ""
-      }${calendarSummary}`,
+      );
+      setSmartPlannerLoading(false);
+      smartPlannerRequestRef.current.controller = null;
+      return;
+    }
+
+    const eligibleTasks = buildSmartPlannerTaskPayload(
+      sortTasksForDisplay(visibleTasks),
+      context.localDate
+    );
+
+    if (eligibleTasks.length === 0) {
+      setSmartPlannerLoading(false);
+      setSmartPlannerPreview({
+        source: "smart",
+        status: "no_tasks",
+        summary: "Nothing needs planning right now.",
+        blocks: [],
+        omittedTasks: [],
+        warnings: [],
+      });
+      smartPlannerRequestRef.current.controller = null;
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/smart-planner/generate", {
+        method: "POST",
+        credentials: "same-origin",
+        signal: controller.signal,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          "X-Student-Hub-Request": "smart-planner",
+        },
+        body: JSON.stringify({
+          ...context,
+          tasks: eligibleTasks,
+          busyIntervals: busyIntervals.map((interval) => ({
+            startMinute: interval.startMinutes,
+            endMinute: interval.endMinutes,
+          })),
+        }),
+      });
+      const result = await response.json().catch(() => null);
+
+      if (smartPlannerRequestRef.current.id !== requestId) return;
+
+      if (Number.isInteger(result?.remainingGenerations)) {
+        setSmartPlannerQuota({
+          remainingGenerations: Math.max(0, result.remainingGenerations),
+          resetAt: typeof result.resetAt === "string" ? result.resetAt : "",
+        });
+      }
+
+      if (!response.ok || result?.ok !== true || !result.plan) {
+        buildBasicPlannerPreview(
+          busyIntervals,
+          `${result?.message || "Smart Planner is unavailable."} Here’s a Basic plan instead.`
+        );
+        return;
+      }
+
+      const mappedBlocks = mapSmartPlannerPlan(result.plan);
+      setSmartPlannerPreview({
+        source: "smart",
+        status: result.plan.status,
+        summary: result.plan.summary,
+        blocks: mappedBlocks,
+        omittedTasks: result.plan.omittedTasks || [],
+        warnings: result.plan.warnings || [],
+        windowMinutes: context.finishMinute - context.startMinute,
+        usableMinutes:
+          context.finishMinute -
+          context.startMinute -
+          busyIntervals.reduce(
+            (total, interval) =>
+              total + Math.max(0, interval.endMinutes - interval.startMinutes),
+            0
+          ),
+      });
+      setSmartPlannerError("");
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      if (smartPlannerRequestRef.current.id !== requestId) return;
+      buildBasicPlannerPreview(
+        busyIntervals,
+        "Smart Planner could not be reached. Here’s a Basic plan instead."
+      );
+    } finally {
+      if (smartPlannerRequestRef.current.id === requestId) {
+        setSmartPlannerLoading(false);
+        smartPlannerRequestRef.current.controller = null;
+      }
+    }
+  }
+
+  function editSmartPlannerSettings() {
+    setSmartPlannerPreview(null);
+    setSmartPlannerNeedsReplace(false);
+    setSmartPlannerError("");
+  }
+
+  function useSmartPlannerPreview() {
+    if (!smartPlannerPreview || smartPlannerPreview.blocks.length === 0) return;
+
+    if (planBlocks.some((block) => block.locked === true)) {
+      setSmartPlannerNeedsReplace(true);
+      setSmartPlannerError("Unlock locked blocks before replacing this plan.");
+      return;
+    }
+
+    if (planBlocks.length > 0 && !smartPlannerNeedsReplace) {
+      setSmartPlannerNeedsReplace(true);
+      setSmartPlannerError("");
+      return;
+    }
+
+    const replacedExistingPlan = planBlocks.length > 0;
+    const startMinutes = timeStringToMinute(smartPlannerDraft.startTime);
+    const finishMinutes = timeStringToMinute(smartPlannerDraft.endTime);
+    const scheduledTaskCount = new Set(
+      smartPlannerPreview.blocks
+        .filter((block) => block.type === "study")
+        .map((block) => block.taskId)
+    ).size;
+    const breakCount = smartPlannerPreview.blocks.filter(
+      (block) => block.type === "break"
+    ).length;
+
+    setStalePlanDate(null);
+    setStartTime(smartPlannerDraft.startTime);
+    setHoursAvailable(
+      Number((((finishMinutes || 0) - (startMinutes || 0)) / 60).toFixed(2))
+    );
+    setPlanBlocks(smartPlannerPreview.blocks);
+    setPlanMetadata({
+      source: smartPlannerPreview.source,
+      generatedDate: formatLocalDate(),
+      generatedAt: new Date().toISOString(),
+      summary: String(smartPlannerPreview.summary || "").slice(0, 280),
+      omittedTasks: smartPlannerPreview.omittedTasks.map((task) => ({
+        taskId: String(task.taskId || "").slice(0, 120),
+        title: String(task.title || "").slice(0, 180),
+        reason: String(task.reason || "").slice(0, 240),
+        suggestedNextStep: String(task.suggestedNextStep || "").slice(0, 240),
+      })),
+      warnings: smartPlannerPreview.warnings
+        .map((warning) => String(warning).slice(0, 240))
+        .slice(0, 8),
+    });
+    setActivePage("plan");
+    closeSmartPlanner();
+    setEveningPlanSuccess({
+      title: replacedExistingPlan ? "Plan updated" : "Plan created",
+      summary: `${scheduledTaskCount} task${scheduledTaskCount === 1 ? "" : "s"} scheduled${
+        breakCount > 0
+          ? ` · ${breakCount} break${breakCount === 1 ? "" : "s"} added`
+          : ""
+      }`,
     });
   }
 
@@ -1788,6 +2106,7 @@ function App() {
     setTasks([]);
     setCompletedTaskHistory([]);
     setPlanBlocks([]);
+    setPlanMetadata(null);
     setStalePlanDate(null);
     setPlanMoveFeedback(null);
     setShowAddTask(false);
@@ -1885,6 +2204,7 @@ function App() {
     setCompletedTaskHistory([]);
     setSubjects([]);
     setPlanBlocks([]);
+    setPlanMetadata(null);
     setStalePlanDate(null);
     setPlanMoveFeedback(null);
     setShowAddTask(false);
@@ -2029,7 +2349,7 @@ function App() {
             hiddenBacklogCount={hiddenBacklogCount}
             progressPercentage={progressPercentage}
             nextTask={nextTask}
-            openEveningPlanner={openEveningPlanner}
+            openSmartPlanner={openSmartPlanner}
             hasPlan={planBlocks.length > 0}
             planBlocks={planBlocks}
             setActivePage={setActivePage}
@@ -2064,6 +2384,7 @@ function App() {
         {activePage === "plan" && (
           <PlanPage
             planBlocks={planBlocks}
+            planMetadata={planBlocks.length > 0 ? planMetadata : null}
             clearPlan={clearPlan}
             addManualPlanBlock={addManualPlanBlock}
             movePlanStudyBlock={movePlanStudyBlock}
@@ -2075,7 +2396,7 @@ function App() {
             completeTaskFromPlan={completeTaskFromPlan}
             stalePlanDate={stalePlanDate}
             startFreshPlan={startFreshPlan}
-            openEveningPlanner={openEveningPlanner}
+            openSmartPlanner={openSmartPlanner}
           />
         )}
 
@@ -2176,23 +2497,22 @@ function App() {
         setTheme={setTheme}
       />
 
-      {eveningPlannerOpen && (
-        <EveningPlannerModal
-          draft={eveningPlannerDraft}
-          setDraft={setEveningPlannerDraft}
-          error={eveningPlannerError}
-          needsReplace={eveningPlannerNeedsReplace}
-          checkingCalendar={eveningPlannerCheckingCalendar}
-          canContinueWithoutCalendar={eveningPlannerCanContinueWithoutCalendar}
-          onClose={closeEveningPlanner}
-          onPlan={() => createEveningPlan()}
-          onReplace={() => createEveningPlan({ replaceExisting: true })}
-          onContinueWithoutCalendar={() =>
-            createEveningPlan({
-              replaceExisting: eveningPlannerNeedsReplace,
-              ignoreCalendar: true,
-            })
-          }
+      {smartPlannerOpen && (
+        <SmartPlannerModal
+          draft={smartPlannerDraft}
+          setDraft={setSmartPlannerDraft}
+          loading={smartPlannerLoading}
+          error={smartPlannerError}
+          preview={smartPlannerPreview}
+          quota={smartPlannerQuota}
+          needsReplace={smartPlannerNeedsReplace}
+          hasLockedBlocks={planBlocks.some((block) => block.locked === true)}
+          calendarAvailable={calendarBusyTimeIsAvailable()}
+          onClose={closeSmartPlanner}
+          onGenerate={() => generateSmartPlannerPreview()}
+          onPlanWithoutAi={() => generateSmartPlannerPreview({ basic: true })}
+          onEditSettings={editSmartPlannerSettings}
+          onUsePlan={useSmartPlannerPreview}
         />
       )}
 
@@ -2204,204 +2524,6 @@ function App() {
         />
       )}
     </main>
-  );
-}
-
-function EveningPlannerModal({
-  draft,
-  setDraft,
-  error,
-  needsReplace,
-  checkingCalendar,
-  canContinueWithoutCalendar,
-  onClose,
-  onPlan,
-  onReplace,
-  onContinueWithoutCalendar,
-}) {
-  useEffect(() => {
-    function closeOnEscape(event) {
-      if (event.key === "Escape") onClose();
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
-
-  function updateDraft(field, value) {
-    setDraft((currentDraft) => ({
-      ...currentDraft,
-      [field]: value,
-    }));
-  }
-
-  function submitPlan(event) {
-    event.preventDefault();
-    if (checkingCalendar) return;
-    onPlan();
-  }
-
-  return (
-    <div
-      className="evening-planner-backdrop"
-      role="presentation"
-      onMouseDown={onClose}
-    >
-      <section
-        className="evening-planner-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="evening-planner-title"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <form onSubmit={submitPlan}>
-          <header className="evening-planner-header">
-            <div>
-              <p className="eyebrow">Planner</p>
-              <h3 id="evening-planner-title">Create study plan</h3>
-              <p>Choose when you’re free. You can edit it after.</p>
-            </div>
-            <button type="button" onClick={onClose} aria-label="Close planner">
-              ×
-            </button>
-          </header>
-
-          <div className="evening-planner-fields">
-            <label>
-              <span>Start</span>
-              <input
-                type="time"
-                value={draft.startTime}
-                onChange={(event) => updateDraft("startTime", event.target.value)}
-              />
-            </label>
-            <label>
-              <span>End</span>
-              <input
-                type="time"
-                value={draft.endTime}
-                onChange={(event) => updateDraft("endTime", event.target.value)}
-              />
-            </label>
-          </div>
-
-          <section className="evening-plan-options">
-            <div>
-              <strong>Plan options</strong>
-              <p>Adjust how intense the plan should feel.</p>
-            </div>
-
-            <label className="evening-break-toggle">
-              <span>Include breaks</span>
-              <button
-                type="button"
-                className={draft.includeBreaks ? "active" : ""}
-                aria-pressed={draft.includeBreaks}
-                onClick={() => updateDraft("includeBreaks", !draft.includeBreaks)}
-              >
-                {draft.includeBreaks ? "Yes" : "No"}
-              </button>
-            </label>
-
-            <label>
-              <span>Max focus block</span>
-              <select
-                value={draft.maxFocusMinutes}
-                onChange={(event) =>
-                  updateDraft("maxFocusMinutes", Number(event.target.value))
-                }
-              >
-                <option value={25}>25 min</option>
-                <option value={35}>35 min</option>
-                <option value={45}>45 min</option>
-                <option value={60}>60 min</option>
-              </select>
-            </label>
-
-            <label>
-              <span>Plan style</span>
-              <select
-                value={draft.planStyle}
-                onChange={(event) => updateDraft("planStyle", event.target.value)}
-              >
-                <option value="light">Light</option>
-                <option value="balanced">Balanced</option>
-                <option value="push">Push me</option>
-              </select>
-            </label>
-          </section>
-
-          <div className="evening-energy-row" aria-label="Energy level">
-            <span>Energy</span>
-            {[
-              ["low", "Low"],
-              ["normal", "Normal"],
-              ["high", "High"],
-            ].map(([value, label]) => (
-              <button
-                type="button"
-                key={value}
-                className={draft.energy === value ? "active" : ""}
-                aria-pressed={draft.energy === value}
-                onClick={() => updateDraft("energy", value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {needsReplace && (
-            <div className="evening-planner-notice">
-              <strong>Replace current plan?</strong>
-              <p>This will replace the plan already in Today’s Plan.</p>
-            </div>
-          )}
-
-          {checkingCalendar && (
-            <div className="evening-planner-notice">
-              <strong>Checking your calendar...</strong>
-              <p>Student Hub is finding open study time.</p>
-            </div>
-          )}
-
-          {error && <p className="evening-planner-error">{error}</p>}
-
-          {canContinueWithoutCalendar && (
-            <div className="evening-planner-notice">
-              <strong>Calendar could not be checked</strong>
-              <p>You can reconnect Calendar in Settings, or plan without it.</p>
-              <button type="button" onClick={onContinueWithoutCalendar}>
-                Continue without Calendar
-              </button>
-            </div>
-          )}
-
-          <footer className="evening-planner-actions">
-            <button type="button" onClick={onClose} disabled={checkingCalendar}>
-              Cancel
-            </button>
-            {needsReplace ? (
-              <button
-                type="button"
-                className="primary-button"
-                onClick={onReplace}
-                disabled={checkingCalendar}
-              >
-                {checkingCalendar ? "Checking calendar..." : "Replace current plan"}
-              </button>
-            ) : (
-              <button
-                type="submit"
-                className="primary-button"
-                disabled={checkingCalendar}
-              >
-                {checkingCalendar ? "Checking calendar..." : "Create plan"}
-              </button>
-            )}
-          </footer>
-        </form>
-      </section>
-    </div>
   );
 }
 

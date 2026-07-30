@@ -1,0 +1,325 @@
+import { useEffect, useRef } from "react";
+import { formatPlannerPreviewTime } from "../utils/smartPlannerUtils.js";
+
+const PLAN_STYLE_OPTIONS = [
+  ["balanced", "Balanced", "Realistic progress with breaks"],
+  ["lighter", "Lighter", "Less work and more breathing room"],
+  ["maximum", "Maximum progress", "Use the available window efficiently"],
+];
+
+function PreviewBlock({ block, index }) {
+  const startMinute = Number.isInteger(block.startMinute) ? block.startMinute : null;
+  const endMinute = Number.isInteger(block.endMinute) ? block.endMinute : null;
+  const timeLabel =
+    startMinute !== null && endMinute !== null
+      ? `${formatPlannerPreviewTime(startMinute)}–${formatPlannerPreviewTime(endMinute)}`
+      : `${block.start || ""}–${block.end || ""}`;
+
+  return (
+    <li className={`smart-planner-preview-block ${block.type === "break" ? "is-break" : ""}`}>
+      <div className="smart-planner-preview-time">{timeLabel}</div>
+      <div>
+        <div className="smart-planner-preview-block-heading">
+          <strong>{block.title || (block.type === "break" ? "Break" : "Study block")}</strong>
+          {block.type === "study" && block.subject && <span>{block.subject}</span>}
+        </div>
+        {block.tip && <p>{block.tip}</p>}
+        {block.reason && block.type === "study" && <small>{block.reason}</small>}
+      </div>
+      <span className="sr-only">Plan block {index + 1}</span>
+    </li>
+  );
+}
+
+export default function SmartPlannerModal({
+  draft,
+  setDraft,
+  loading,
+  error,
+  preview,
+  quota,
+  needsReplace,
+  hasLockedBlocks,
+  calendarAvailable,
+  onClose,
+  onGenerate,
+  onPlanWithoutAi,
+  onEditSettings,
+  onUsePlan,
+}) {
+  const headingRef = useRef(null);
+  const returnFocusRef = useRef(null);
+
+  useEffect(() => {
+    returnFocusRef.current = document.activeElement;
+    return () => returnFocusRef.current?.focus?.();
+  }, []);
+
+  useEffect(() => {
+    headingRef.current?.focus();
+  }, [preview]);
+
+  useEffect(() => {
+    function closeOnEscape(event) {
+      if (event.key === "Escape") onClose();
+    }
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  function updateDraft(field, value) {
+    setDraft((currentDraft) => ({ ...currentDraft, [field]: value }));
+  }
+
+  function submit(event) {
+    event.preventDefault();
+    if (!loading) onGenerate();
+  }
+
+  const quotaExhausted = quota?.remainingGenerations === 0;
+  const quotaResetLabel = quota?.resetAt
+    ? new Date(quota.resetAt).toLocaleString([], {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "";
+  const quotaLabel = quotaExhausted
+    ? `AI limit reached — Basic planner is still available${
+        quotaResetLabel ? `. Resets ${quotaResetLabel}` : ""
+      }`
+    : Number.isInteger(quota?.remainingGenerations)
+      ? `${quota.remainingGenerations} AI plan${quota.remainingGenerations === 1 ? "" : "s"} remaining`
+      : "3 AI plans available every 24 hours";
+
+  return (
+    <div className="smart-planner-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="smart-planner-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="smart-planner-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="smart-planner-header">
+          <div>
+            <p className="eyebrow">Today’s Plan</p>
+            <h2 id="smart-planner-title" ref={headingRef} tabIndex="-1">
+              Smart Planner
+            </h2>
+            <p>
+              {preview
+                ? "Review the plan before it changes Today’s Plan."
+                : "Smart Planner uses AI to suggest today’s study plan."}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close Smart Planner">
+            ×
+          </button>
+        </header>
+
+        {!preview ? (
+          <form className="smart-planner-setup" onSubmit={submit}>
+            <div className="smart-planner-time-fields">
+              <label>
+                <span>Start time</span>
+                <input
+                  type="time"
+                  value={draft.startTime}
+                  onChange={(event) => updateDraft("startTime", event.target.value)}
+                  disabled={loading || draft.noTimeLeftToday}
+                  required
+                />
+              </label>
+              <label>
+                <span>Finish time</span>
+                <input
+                  type="time"
+                  value={draft.endTime}
+                  onChange={(event) => updateDraft("endTime", event.target.value)}
+                  disabled={loading || draft.noTimeLeftToday}
+                  required
+                />
+              </label>
+            </div>
+
+            <fieldset className="smart-planner-style-fieldset" disabled={loading}>
+              <legend>Planning style</legend>
+              <div className="smart-planner-style-options">
+                {PLAN_STYLE_OPTIONS.map(([value, label, helper]) => (
+                  <label key={value} className={draft.planStyle === value ? "is-selected" : ""}>
+                    <input
+                      type="radio"
+                      name="smart-planner-style"
+                      value={value}
+                      checked={draft.planStyle === value}
+                      onChange={() => updateDraft("planStyle", value)}
+                    />
+                    <span>
+                      <strong>{label}</strong>
+                      <small>{helper}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <label className={`smart-planner-calendar-option ${!calendarAvailable ? "is-unavailable" : ""}`}>
+              <input
+                type="checkbox"
+                checked={draft.useCalendar && calendarAvailable}
+                disabled={loading || !calendarAvailable}
+                onChange={(event) => updateDraft("useCalendar", event.target.checked)}
+              />
+              <span>
+                <strong>Work around Calendar events</strong>
+                <small>
+                  {calendarAvailable
+                    ? "Uses calendars marked Block study time."
+                    : "No Calendar busy-time data is available."}
+                </small>
+              </span>
+            </label>
+
+            <p className="smart-planner-quota" role="status">
+              {quotaLabel}
+            </p>
+
+            {draft.noTimeLeftToday && (
+              <p className="smart-planner-message" role="status">
+                There isn’t enough time left to build today’s plan.
+              </p>
+            )}
+
+            {loading && (
+              <div className="smart-planner-loading" role="status" aria-live="polite">
+                <span aria-hidden="true" />
+                <div>
+                  <strong>Building your plan…</strong>
+                  <p>Choosing realistic blocks for today.</p>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <p className="smart-planner-error" role="alert">
+                {error}
+              </p>
+            )}
+
+            <footer className="smart-planner-actions">
+              <button type="button" className="secondary" onClick={onClose} disabled={loading}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={onPlanWithoutAi}
+                disabled={loading || draft.noTimeLeftToday}
+              >
+                Plan without AI
+              </button>
+              <button type="submit" className="primary-button" disabled={loading || draft.noTimeLeftToday}>
+                {loading ? "Building your plan…" : "Generate plan"}
+              </button>
+            </footer>
+          </form>
+        ) : (
+          <div className="smart-planner-preview">
+            <div className="smart-planner-preview-intro">
+              <span className={`smart-planner-source-badge is-${preview.source}`}>
+                {preview.source === "smart" ? "AI plan" : "Basic plan"}
+              </span>
+              <p>{preview.summary}</p>
+            </div>
+
+            <p className="smart-planner-quota" role="status">
+              {quotaLabel}
+            </p>
+
+            {preview.blocks.length > 0 ? (
+              <ol className="smart-planner-preview-blocks" aria-label="Proposed plan blocks">
+                {preview.blocks.map((block, index) => (
+                  <PreviewBlock block={block} index={index} key={`${block.type}-${block.taskId || "break"}-${index}`} />
+                ))}
+              </ol>
+            ) : (
+              <p className="smart-planner-message">
+                {preview.status === "no_tasks"
+                  ? "Nothing needs planning right now."
+                  : "There isn’t enough time left to build today’s plan."}
+              </p>
+            )}
+
+            {preview.omittedTasks.length > 0 && (
+              <section className="smart-planner-omitted">
+                <h3>Not scheduled today</h3>
+                <ul>
+                  {preview.omittedTasks.map((task) => (
+                    <li key={task.taskId}>
+                      <strong>{task.title}</strong>
+                      <p>{task.reason}</p>
+                      <small>{task.suggestedNextStep}</small>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {preview.warnings.length > 0 && (
+              <section className="smart-planner-warnings" aria-label="Plan notes">
+                <h3>Plan notes</h3>
+                <ul>
+                  {preview.warnings.map((warning, index) => (
+                    <li key={`${warning}-${index}`}>{warning}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {error && (
+              <p className="smart-planner-error" role="alert">
+                {error}
+              </p>
+            )}
+
+            {(needsReplace || hasLockedBlocks) && (
+              <div className="smart-planner-replace-notice" role="alert">
+                <strong>{hasLockedBlocks ? "Unlock blocks first" : "Replace current plan?"}</strong>
+                <p>
+                  {hasLockedBlocks
+                    ? "Locked blocks must be unlocked before Smart Planner can replace this plan."
+                    : "Using this preview will replace the plan already in Today’s Plan."}
+                </p>
+              </div>
+            )}
+
+            <footer className="smart-planner-actions smart-planner-preview-actions">
+              {preview.source === "smart" && (
+                <button type="button" className="secondary" onClick={onPlanWithoutAi} disabled={loading}>
+                  Plan without AI
+                </button>
+              )}
+              <button type="button" className="secondary" onClick={onEditSettings} disabled={loading}>
+                Edit settings
+              </button>
+              {!quotaExhausted && (
+                <button type="button" className="secondary" onClick={onGenerate} disabled={loading}>
+                  Try again
+                </button>
+              )}
+              <button
+                type="button"
+                className="primary-button"
+                onClick={onUsePlan}
+                disabled={loading || preview.blocks.length === 0 || hasLockedBlocks}
+              >
+                {needsReplace ? "Replace current plan" : "Use this plan"}
+              </button>
+            </footer>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}

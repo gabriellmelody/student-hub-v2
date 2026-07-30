@@ -1,0 +1,81 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  buildSmartPlannerTaskPayload,
+  getNextHalfHourStart,
+} from "./smartPlannerUtils.js";
+
+function localTime(hours, minutes) {
+  const date = new Date(2026, 6, 30, hours, minutes, 0, 0);
+  return date;
+}
+
+test("rounds a fresh Smart Planner start to the next half-hour", () => {
+  assert.deepEqual(getNextHalfHourStart(localTime(14, 5)), {
+    available: true,
+    minute: 14 * 60 + 30,
+    time: "14:30",
+  });
+  assert.deepEqual(getNextHalfHourStart(localTime(14, 29)), {
+    available: true,
+    minute: 14 * 60 + 30,
+    time: "14:30",
+  });
+  assert.deepEqual(getNextHalfHourStart(localTime(14, 30)), {
+    available: true,
+    minute: 14 * 60 + 30,
+    time: "14:30",
+  });
+  assert.deepEqual(getNextHalfHourStart(localTime(14, 31)), {
+    available: true,
+    minute: 15 * 60,
+    time: "15:00",
+  });
+  assert.deepEqual(getNextHalfHourStart(localTime(14, 45)), {
+    available: true,
+    minute: 15 * 60,
+    time: "15:00",
+  });
+});
+
+test("does not roll a current-day plan into tomorrow", () => {
+  assert.deepEqual(getNextHalfHourStart(localTime(23, 45)), {
+    available: false,
+    minute: null,
+    time: "",
+  });
+});
+
+test("preselects the 20 most relevant active tasks", () => {
+  const lowPriority = Array.from({ length: 24 }, (_, index) => ({
+    id: `low-${index}`,
+    title: `Low priority ${index}`,
+    dueDate: "",
+    importance: "low",
+    effort: 1,
+  }));
+  const urgent = {
+    id: "urgent-overdue",
+    title: "Overdue essay assessment",
+    dueDate: "2026-07-29",
+    importance: "high",
+    effort: 5,
+  };
+  const dueToday = {
+    id: "due-today",
+    title: "Questions",
+    dueDate: "2026-07-30",
+    effort: 2,
+  };
+
+  const selected = buildSmartPlannerTaskPayload(
+    [...lowPriority, dueToday, urgent],
+    "2026-07-30"
+  );
+
+  assert.equal(selected.length, 20);
+  assert.deepEqual(selected.slice(0, 2).map((task) => task.id), [
+    "urgent-overdue",
+    "due-today",
+  ]);
+});

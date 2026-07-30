@@ -1606,6 +1606,19 @@ export function restoreSavedPlanBlocks(savedPlan, tasks, startTime) {
       };
     });
 
+  const hasValidatedSmartTiming = normalizedBlocks.every(
+    (block) =>
+      block.type === "message" ||
+      (block.plannerSource === "smart" &&
+        Number.isInteger(block.startMinute) &&
+        Number.isInteger(block.endMinute) &&
+        block.endMinute > block.startMinute &&
+        typeof block.start === "string" &&
+        typeof block.end === "string")
+  );
+
+  if (hasValidatedSmartTiming) return normalizedBlocks;
+
   return recalculatePlanTimes(normalizedBlocks, startTime);
 }
 
@@ -1613,6 +1626,7 @@ export function saveTodayPlanSnapshot({
   blocks,
   startTime,
   hoursAvailable,
+  metadata = null,
 }) {
   localStorage.setItem(
     TODAY_PLAN_STORAGE_KEY,
@@ -1621,6 +1635,7 @@ export function saveTodayPlanSnapshot({
       savedAt: new Date().toISOString(),
       startTime,
       hoursAvailable,
+      metadata,
       blocks,
     })
   );

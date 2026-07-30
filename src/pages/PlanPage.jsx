@@ -86,6 +86,7 @@ function getNextPlanBlockKey(planBlocks, nowMinutes) {
 
 function PlanPage({
   planBlocks,
+  planMetadata,
   clearPlan,
   addManualPlanBlock,
   movePlanStudyBlock,
@@ -97,7 +98,7 @@ function PlanPage({
   completeTaskFromPlan,
   stalePlanDate,
   startFreshPlan,
-  openEveningPlanner,
+  openSmartPlanner,
 }) {
   const hasLockedBlocks = planBlocks.some((block) => block.locked === true);
   const [editingBlockId, setEditingBlockId] = useState(null);
@@ -481,7 +482,11 @@ function PlanPage({
               {planBlocks.length > 0
                 ? `${planBlocks.length} block${
                     planBlocks.length === 1 ? "" : "s"
-                  } scheduled`
+                  } scheduled${
+                    planMetadata?.source
+                      ? ` · ${planMetadata.source === "smart" ? "Smart plan" : "Basic plan"}`
+                      : ""
+                  }`
                 : "Build a realistic study flow"}
             </span>
           </div>
@@ -490,9 +495,9 @@ function PlanPage({
             <button
               type="button"
               className="small-button plan-primary-create-button"
-              onClick={openEveningPlanner}
+              onClick={openSmartPlanner}
             >
-              {planBlocks.length > 0 ? "Regenerate plan" : "Create plan"}
+              Smart Planner
             </button>
 
             <button
