@@ -140,6 +140,16 @@ export default async function handler(request, response) {
       calendarSummary: {
         count: calendars.length,
       },
+      account: {
+        id:
+          typeof activeSession.account_id === "string"
+            ? activeSession.account_id
+            : "",
+        email:
+          typeof activeSession.account_email === "string"
+            ? activeSession.account_email
+            : "",
+      },
       calendars,
     });
   } catch {

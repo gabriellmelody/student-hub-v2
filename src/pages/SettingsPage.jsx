@@ -39,11 +39,14 @@ import {
   formatMockClassroomDueDate,
   loadMockClassroomCourseLinks,
 } from "../utils/classroomMockUtils.js";
+import {
+  GOOGLE_CALENDAR_PREFERENCES_KEY,
+  getGoogleCalendarAccountId,
+  reconcileGoogleCalendarAccountStorage,
+} from "../utils/googleCalendarStorage.js";
 
 const REAL_CLASSROOM_COURSE_SELECTIONS_KEY =
   "studentHub.realClassroomCourseSelections";
-const GOOGLE_CALENDAR_PREFERENCES_KEY =
-  "studentHub.googleCalendarPreferences";
 const GOOGLE_IDENTITY_SERVICES_SRC = "https://accounts.google.com/gsi/client";
 const GOOGLE_OAUTH_BROWSER_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLASSROOM_CLIENT_ID ||
@@ -1936,7 +1939,23 @@ function IntegrationsSettings({
     focusGoogleConnectButton(provider);
   }
 
-  function clearProviderResultsAfterReconnect(provider) {
+  function clearGoogleCalendarProviderState({
+    accountId = "",
+    message = "Google Calendar connected. Load calendars to review them.",
+  } = {}) {
+    reconcileGoogleCalendarAccountStorage(accountId);
+    setGoogleCalendarCalendars({
+      loading: false,
+      calendars: [],
+      summary: null,
+      lastCheckedAt: "",
+      message,
+      error: "",
+    });
+    setGoogleCalendarPreferences({});
+  }
+
+  function clearProviderResultsAfterReconnect(provider, accountId = "") {
     if (provider === "classroom") {
       setRealClassroomCourses({
         loading: false,
@@ -1958,13 +1977,9 @@ function IntegrationsSettings({
         selectedAssignmentIds: {},
       });
     } else {
-      setGoogleCalendarCalendars({
-        loading: false,
-        calendars: [],
-        summary: null,
-        lastCheckedAt: "",
+      clearGoogleCalendarProviderState({
+        accountId,
         message: "Google Calendar connected. Load calendars to review them.",
-        error: "",
       });
     }
   }
@@ -1998,7 +2013,10 @@ function IntegrationsSettings({
     }
 
     if (result.accountChanged === true) {
-      clearProviderResultsAfterReconnect(provider);
+      clearProviderResultsAfterReconnect(
+        provider,
+        provider === "calendar" ? getGoogleCalendarAccountId(result) : ""
+      );
     }
     await refreshProviderSessionAfterPopup(provider);
     setSuccessToast({
@@ -2324,18 +2342,50 @@ function IntegrationsSettings({
         },
       });
       const result = await response.json();
+      const accountId =
+        response.ok && result.connected === true
+          ? getGoogleCalendarAccountId(result)
+          : "";
+
+      if (!accountId) {
+        clearGoogleCalendarProviderState({
+          message:
+            result.connected === true
+              ? "Google Calendar connected. Load calendars to review them."
+              : "No Google Calendar connected.",
+        });
+      } else {
+        const accountScope =
+          reconcileGoogleCalendarAccountStorage(accountId);
+
+        if (accountScope.cleared) {
+          setGoogleCalendarCalendars({
+            loading: false,
+            calendars: [],
+            summary: null,
+            lastCheckedAt: "",
+            message: "Google Calendar connected. Load calendars to review them.",
+            error: "",
+          });
+          setGoogleCalendarPreferences({});
+        }
+      }
 
       setGoogleCalendarSession({
         checking: false,
-        connected: result.connected === true,
+        connected: result.connected === true && Boolean(accountId),
         status: result.status || "unknown",
         message:
-          result.connected === true
+          result.connected === true && accountId
             ? "Google Calendar connected."
             : result.message || "No Google Calendar connected.",
         tokenSummary: result.tokenSummary || null,
+        accountId,
       });
     } catch {
+      clearGoogleCalendarProviderState({
+        message: "Could not check Google Calendar status.",
+      });
       setGoogleCalendarSession({
         checking: false,
         connected: false,
@@ -2399,6 +2449,12 @@ function IntegrationsSettings({
           result.status === "no_calendar_session" ||
           result.status === "calendar_session_invalid_or_expired"
         ) {
+          clearGoogleCalendarProviderState({
+            message:
+              result.status === "no_calendar_session"
+                ? "No Google Calendar connected."
+                : "Google Calendar connection expired. Connect again.",
+          });
           setGoogleCalendarSession({
             checking: false,
             connected: false,
@@ -2408,6 +2464,7 @@ function IntegrationsSettings({
                 ? "No Google Calendar connected."
                 : "Google Calendar connection expired. Connect again.",
             tokenSummary: null,
+            accountId: "",
           });
         }
 
@@ -2425,6 +2482,29 @@ function IntegrationsSettings({
       const loadedCalendars = Array.isArray(result.calendars)
         ? result.calendars
         : [];
+      const accountId = getGoogleCalendarAccountId(result);
+
+      if (!accountId) {
+        clearGoogleCalendarProviderState({
+          message: "Google Calendar connected. Load calendars to review them.",
+        });
+        setGoogleCalendarSession({
+          checking: false,
+          connected: false,
+          status: "calendar_account_missing",
+          message: "Reconnect Google Calendar to load calendars.",
+          tokenSummary: null,
+          accountId: "",
+        });
+        setGoogleCalendarCalendars((currentState) => ({
+          ...currentState,
+          loading: false,
+          error: "Reconnect Google Calendar to load calendars.",
+        }));
+        return;
+      }
+
+      const accountScope = reconcileGoogleCalendarAccountStorage(accountId);
       const duplicateRiskMap = getClassroomCalendarDuplicateRiskMap({
         calendars: loadedCalendars,
         courses: realClassroomCourses.courses,
@@ -2447,7 +2527,7 @@ function IntegrationsSettings({
       });
       setGoogleCalendarPreferences((currentPreferences) =>
         mergeGoogleCalendarPreferences(
-          currentPreferences,
+          accountScope.cleared ? {} : currentPreferences,
           loadedCalendars,
           duplicateRiskMap
         )
@@ -2458,6 +2538,7 @@ function IntegrationsSettings({
         connected: true,
         status: "calendar_session_available",
         message: "Google Calendar connected.",
+        accountId,
       }));
       setSuccessToast({
         title: "Google Calendar ready",

@@ -39,6 +39,7 @@ export default async function handler(request, response) {
       scope: session.scope,
     },
     account: {
+      id: typeof session.account_id === "string" ? session.account_id : "",
       email: typeof session.account_email === "string" ? session.account_email : "",
     },
   });

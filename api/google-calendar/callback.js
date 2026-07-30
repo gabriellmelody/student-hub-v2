@@ -137,6 +137,7 @@ async function handlePopupCodeExchange(request, response, config) {
       message: "Google Calendar connected for this browser.",
       accountChanged: sessionCookie.accountChanged,
       account: {
+        id: sessionCookie.accountId,
         email: sessionCookie.accountEmail,
       },
       session: {
@@ -279,6 +280,7 @@ export default async function handler(request, response) {
       message: "Google Calendar connected for this browser.",
       accountChanged: sessionCookie.accountChanged,
       account: {
+        id: sessionCookie.accountId,
         email: sessionCookie.accountEmail,
       },
       session: {

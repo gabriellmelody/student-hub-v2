@@ -14,10 +14,16 @@ import {
   getTaskSignalBadges,
   updateTaskTitleWithDetection,
 } from "../utils/appUtils.js";
+import {
+  GOOGLE_CALENDAR_ACCOUNT_KEY,
+  GOOGLE_CALENDAR_PREFERENCES_KEY,
+  getGoogleCalendarAccountId,
+  loadGoogleCalendarAccountMeta,
+  loadGoogleCalendarPreferencesFromStorage,
+  reconcileGoogleCalendarAccountStorage,
+} from "../utils/googleCalendarStorage.js";
 
 const googleCalendarEventLimit = 2;
-const GOOGLE_CALENDAR_PREFERENCES_KEY =
-  "studentHub.googleCalendarPreferences";
 
 const effortKeywordGroups = {
   high: [
@@ -50,17 +56,7 @@ const effortLabels = {
 };
 
 function loadGoogleCalendarPreferences() {
-  if (typeof window === "undefined") return {};
-
-  try {
-    const parsed = JSON.parse(
-      window.localStorage.getItem(GOOGLE_CALENDAR_PREFERENCES_KEY) || "{}"
-    );
-
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  return loadGoogleCalendarPreferencesFromStorage();
 }
 
 function getVisibleGoogleCalendarPreferences(preferences) {
@@ -346,6 +342,11 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
   const [googleCalendarPreferences, setGoogleCalendarPreferences] = useState(
     loadGoogleCalendarPreferences
   );
+  const [googleCalendarAccount, setGoogleCalendarAccount] = useState({
+    checking: true,
+    connected: false,
+    accountId: "",
+  });
   const [googleCalendarEvents, setGoogleCalendarEvents] = useState({
     loading: false,
     events: [],
@@ -366,8 +367,15 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     (event) => event.date === selectedDate
   );
   const visibleGoogleCalendarPreferences = useMemo(
-    () => getVisibleGoogleCalendarPreferences(googleCalendarPreferences),
-    [googleCalendarPreferences]
+    () =>
+      googleCalendarAccount.connected && googleCalendarAccount.accountId
+        ? getVisibleGoogleCalendarPreferences(googleCalendarPreferences)
+        : [],
+    [
+      googleCalendarAccount.accountId,
+      googleCalendarAccount.connected,
+      googleCalendarPreferences,
+    ]
   );
   const selectedGoogleCalendarIds = useMemo(
     () =>
@@ -391,6 +399,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
   const eventRangeStartKey = calendarDays[0]?.dateKey || "";
   const eventRangeEndKey = calendarDays[calendarDays.length - 1]?.dateKey || "";
   const googleCalendarRequestKey = [
+    googleCalendarAccount.accountId || "no-calendar-account",
     eventRangeStartKey,
     eventRangeEndKey,
     selectedGoogleCalendarIds.join("|"),
@@ -410,11 +419,52 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     googleEventOccursOnDate(event, selectedDate)
   );
 
+  function clearGoogleCalendarEventState(message = "") {
+    activeEventsRequestRef.current.controller?.abort();
+    activeEventsRequestRef.current = {
+      id: activeEventsRequestRef.current.id + 1,
+      key: "",
+      controller: null,
+    };
+    googleCalendarEventsCacheRef.current.clear();
+    setGoogleCalendarEvents({
+      loading: false,
+      events: [],
+      lastLoadedAt: "",
+      message,
+      error: "",
+      requestKey: "",
+    });
+  }
+
   useEffect(() => {
     function handleStorageChange(event) {
-      if (event.key !== GOOGLE_CALENDAR_PREFERENCES_KEY) return;
+      if (
+        event.key !== GOOGLE_CALENDAR_PREFERENCES_KEY &&
+        event.key !== GOOGLE_CALENDAR_ACCOUNT_KEY
+      ) {
+        return;
+      }
 
       setGoogleCalendarPreferences(loadGoogleCalendarPreferences());
+      if (event.key === GOOGLE_CALENDAR_ACCOUNT_KEY) {
+        const account = loadGoogleCalendarAccountMeta();
+
+        setGoogleCalendarAccount({
+          checking: false,
+          connected: Boolean(account?.accountId),
+          accountId: account?.accountId || "",
+        });
+      }
+      googleCalendarEventsCacheRef.current.clear();
+      setGoogleCalendarEvents((currentState) => ({
+        ...currentState,
+        events: [],
+        lastLoadedAt: "",
+        message: "",
+        error: "",
+        requestKey: "",
+      }));
     }
 
     window.addEventListener("storage", handleStorageChange);
@@ -428,6 +478,83 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     };
   }, []);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    let isActive = true;
+
+    async function checkCalendarAccountSession() {
+      try {
+        const response = await fetch("/api/google-calendar/session", {
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+          },
+          signal: controller.signal,
+        });
+        const result = await response.json().catch(() => null);
+        const accountId =
+          response.ok && result?.connected === true
+            ? getGoogleCalendarAccountId(result)
+            : "";
+
+        if (!isActive) return;
+
+        if (!accountId) {
+          reconcileGoogleCalendarAccountStorage("");
+          setGoogleCalendarAccount({
+            checking: false,
+            connected: false,
+            accountId: "",
+          });
+          setGoogleCalendarPreferences({});
+          clearGoogleCalendarEventState(
+            "Connect Google Calendar in Settings to show events."
+          );
+          return;
+        }
+
+        const accountScope =
+          reconcileGoogleCalendarAccountStorage(accountId);
+
+        setGoogleCalendarAccount({
+          checking: false,
+          connected: true,
+          accountId,
+        });
+
+        if (accountScope.cleared) {
+          setGoogleCalendarPreferences({});
+          clearGoogleCalendarEventState(
+            "Load calendars in Settings to show events."
+          );
+          return;
+        }
+
+        setGoogleCalendarPreferences(loadGoogleCalendarPreferences());
+      } catch (error) {
+        if (error?.name === "AbortError" || !isActive) return;
+
+        reconcileGoogleCalendarAccountStorage("");
+        setGoogleCalendarAccount({
+          checking: false,
+          connected: false,
+          accountId: "",
+        });
+        setGoogleCalendarPreferences({});
+        clearGoogleCalendarEventState(
+          "Connect Google Calendar in Settings to show events."
+        );
+      }
+    }
+
+    checkCalendarAccountSession();
+
+    return () => {
+      isActive = false;
+      controller.abort();
+    };
+  }, []);
+
   async function loadGoogleCalendarEvents({
     quiet = false,
     bypassCache = false,
@@ -435,6 +562,26 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     const requestKey = googleCalendarRequestKey;
 
     activeEventsRequestRef.current.controller?.abort();
+
+    if (googleCalendarAccount.checking) return;
+
+    if (!googleCalendarAccount.connected || !googleCalendarAccount.accountId) {
+      activeEventsRequestRef.current = {
+        id: activeEventsRequestRef.current.id + 1,
+        key: requestKey,
+        controller: null,
+      };
+      googleCalendarEventsCacheRef.current.clear();
+      setGoogleCalendarEvents({
+        loading: false,
+        events: [],
+        lastLoadedAt: "",
+        message: "Connect Google Calendar in Settings to show events.",
+        error: "",
+        requestKey,
+      });
+      return;
+    }
 
     if (selectedGoogleCalendarIds.length === 0) {
       activeEventsRequestRef.current = {
@@ -502,6 +649,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
         },
         signal: controller.signal,
         body: JSON.stringify({
+          accountId: googleCalendarAccount.accountId,
           selectedCalendarIds: selectedGoogleCalendarIds,
           timeMin: rangeStart.toISOString(),
           timeMax: rangeEnd.toISOString(),
@@ -529,21 +677,78 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               : result.message || "Calendar events are unavailable.",
           requestKey,
         }));
+        if (
+          result.status === "no_calendar_session" ||
+          result.status === "calendar_session_invalid_or_expired" ||
+          result.status === "calendar_session_reconnect_required" ||
+          result.status === "calendar_account_changed"
+        ) {
+          const nextAccountId =
+            result.status === "calendar_account_changed"
+              ? getGoogleCalendarAccountId(result)
+              : "";
+
+          reconcileGoogleCalendarAccountStorage(nextAccountId);
+          setGoogleCalendarAccount({
+            checking: false,
+            connected: Boolean(nextAccountId),
+            accountId: nextAccountId,
+          });
+          setGoogleCalendarPreferences({});
+          googleCalendarEventsCacheRef.current.clear();
+        }
+        return;
+      }
+
+      const responseAccountId = getGoogleCalendarAccountId(result);
+
+      if (
+        responseAccountId &&
+        responseAccountId !== googleCalendarAccount.accountId
+      ) {
+        reconcileGoogleCalendarAccountStorage(responseAccountId);
+        setGoogleCalendarAccount({
+          checking: false,
+          connected: true,
+          accountId: responseAccountId,
+        });
+        setGoogleCalendarPreferences({});
+        clearGoogleCalendarEventState(
+          "Calendar account changed. Load calendars in Settings again."
+        );
         return;
       }
 
       const loadedEvents = Array.isArray(result.events) ? result.events : [];
-      const eventsWithPreferences = loadedEvents.map((event) => {
-        const preference = googleCalendarPreferenceMap[event.calendarId] || {};
+      const selectedCalendarIdSet = new Set(selectedGoogleCalendarIds);
+      const eventsWithPreferences = loadedEvents.flatMap((event) => {
+        const calendarId =
+          typeof event?.calendarId === "string" ? event.calendarId : "";
+        const preference = googleCalendarPreferenceMap[calendarId];
 
-        return {
-          ...event,
-          calendarName:
-            event.calendarName ||
-            preference.calendarName ||
-            "Google Calendar",
-          duplicateRisk: preference.duplicateRisk || null,
-        };
+        if (!calendarId || !selectedCalendarIdSet.has(calendarId)) {
+          return [];
+        }
+
+        if (!preference) return [];
+
+        if (
+          event.accountId &&
+          event.accountId !== googleCalendarAccount.accountId
+        ) {
+          return [];
+        }
+
+        return [
+          {
+            ...event,
+            calendarName:
+              event.calendarName ||
+              preference.calendarName ||
+              "Google Calendar",
+            duplicateRisk: preference.duplicateRisk || null,
+          },
+        ];
       });
       const nextEventState = {
         loading: false,
@@ -584,7 +789,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
 
   useEffect(() => {
     loadGoogleCalendarEvents({ quiet: true });
-  }, [googleCalendarRequestKey]);
+  }, [googleCalendarAccount.checking, googleCalendarRequestKey]);
 
   function changeMonth(offset) {
     const nextMonth = new Date(

@@ -62,9 +62,10 @@ import {
   getExternalSourceKey,
 } from "./utils/appUtils.js";
 import { createTaskFromMockAssignment } from "./utils/classroomMockUtils.js";
-
-const GOOGLE_CALENDAR_PREFERENCES_KEY =
-  "studentHub.googleCalendarPreferences";
+import {
+  getBusyGoogleCalendarIdsFromStorage,
+  loadGoogleCalendarAccountMeta,
+} from "./utils/googleCalendarStorage.js";
 
 function resolveThemePreference(themePreference) {
   if (themePreference !== "system") return themePreference === "dark" ? "dark" : "light";
@@ -90,25 +91,7 @@ function createEmptyTaskDraft() {
 }
 
 function getBusyGoogleCalendarIds() {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const preferences = JSON.parse(
-      window.localStorage.getItem(GOOGLE_CALENDAR_PREFERENCES_KEY) || "{}"
-    );
-
-    if (!preferences || typeof preferences !== "object") return [];
-
-    return Object.values(preferences)
-      .filter(
-        (preference) =>
-          preference?.calendarId && preference.useAsBusyTime === true
-      )
-      .map((preference) => preference.calendarId)
-      .sort((left, right) => left.localeCompare(right));
-  } catch {
-    return [];
-  }
+  return getBusyGoogleCalendarIdsFromStorage();
 }
 
 function getPlanningDate() {
@@ -1483,8 +1466,11 @@ function App() {
 
   async function fetchPlanningBusyIntervals() {
     const busyCalendarIds = getBusyGoogleCalendarIds();
+    const googleCalendarAccount = loadGoogleCalendarAccountMeta();
 
-    if (busyCalendarIds.length === 0) return [];
+    if (busyCalendarIds.length === 0 || !googleCalendarAccount?.accountId) {
+      return [];
+    }
 
     const startMinutes = timeToMinutes(eveningPlannerDraft.startTime);
     const endMinutes = timeToMinutes(eveningPlannerDraft.endTime);
@@ -1502,6 +1488,7 @@ function App() {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        accountId: googleCalendarAccount.accountId,
         selectedCalendarIds: busyCalendarIds,
         timeMin: getPlanningDateTime(planningDate, startMinutes).toISOString(),
         timeMax: getPlanningDateTime(planningDate, endMinutes).toISOString(),

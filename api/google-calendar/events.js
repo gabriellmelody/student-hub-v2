@@ -93,7 +93,7 @@ function isSkippableCalendarFetchError(error) {
   );
 }
 
-function normalizeEvent(event, calendar) {
+function normalizeEvent(event, calendar, accountId = "") {
   const start = event?.start?.dateTime || event?.start?.date || "";
   const end = event?.end?.dateTime || event?.end?.date || start;
   const allDay = Boolean(event?.start?.date);
@@ -111,6 +111,7 @@ function normalizeEvent(event, calendar) {
     status: String(event?.status || ""),
     backgroundColor: calendar.backgroundColor,
     calendarColor: calendar.backgroundColor,
+    accountId,
   };
 }
 
@@ -148,6 +149,7 @@ async function fetchEventsForCalendar({
   calendar,
   timeMin,
   timeMax,
+  accountId,
 }) {
   const events = [];
   let pageToken = "";
@@ -190,7 +192,9 @@ async function fetchEventsForCalendar({
     if (Array.isArray(eventsJson?.items)) {
       eventsJson.items
         .filter((event) => event?.status !== "cancelled")
-        .forEach((event) => events.push(normalizeEvent(event, calendar)));
+        .forEach((event) =>
+          events.push(normalizeEvent(event, calendar, accountId))
+        );
     }
 
     pageToken = eventsJson?.nextPageToken || "";
@@ -204,21 +208,25 @@ async function fetchSelectedCalendarEvents({
   selectedCalendarIds,
   timeMin,
   timeMax,
+  accountId,
 }) {
   const calendarMap = await fetchCalendarMap(accessToken);
-  const selectedCalendars = selectedCalendarIds.map((calendarId) => {
-    return (
-      calendarMap.get(calendarId) || {
-        id: calendarId,
-        name: "Google Calendar",
-        backgroundColor: "",
+  let skippedCalendarCount = 0;
+  const selectedCalendars = selectedCalendarIds
+    .map((calendarId) => {
+      const calendar = calendarMap.get(calendarId);
+
+      if (!calendar) {
+        skippedCalendarCount += 1;
+        return null;
       }
-    );
-  });
+
+      return calendar;
+    })
+    .filter(Boolean);
 
   const successfulCalendars = [];
   const eventGroups = [];
-  let skippedCalendarCount = 0;
 
   for (const calendar of selectedCalendars) {
     try {
@@ -227,6 +235,7 @@ async function fetchSelectedCalendarEvents({
         calendar,
         timeMin,
         timeMax,
+        accountId,
       });
 
       successfulCalendars.push(calendar);
@@ -242,6 +251,7 @@ async function fetchSelectedCalendarEvents({
   }
 
   return {
+    requestedCalendarCount: selectedCalendarIds.length,
     selectedCalendars,
     successfulCalendars,
     skippedCalendarCount,
@@ -306,6 +316,8 @@ export default async function handler(request, response) {
         .filter(Boolean)
     )
   ).slice(0, MAX_SELECTED_CALENDARS);
+  const requestedAccountId =
+    typeof body.accountId === "string" ? body.accountId.trim() : "";
   const timeMin = typeof body.timeMin === "string" ? body.timeMin : "";
   const timeMax = typeof body.timeMax === "string" ? body.timeMax : "";
 
@@ -333,12 +345,31 @@ export default async function handler(request, response) {
     let activeSession = sessionResult.session;
     let eventsResult;
 
+    const activeAccountId =
+      typeof activeSession.account_id === "string"
+        ? activeSession.account_id
+        : "";
+
+    if (requestedAccountId && requestedAccountId !== activeAccountId) {
+      response.status(409).json({
+        ok: false,
+        status: "calendar_account_changed",
+        connected: true,
+        message: "Calendar account changed. Load calendars again.",
+        account: {
+          id: activeAccountId,
+        },
+      });
+      return;
+    }
+
     try {
       eventsResult = await fetchSelectedCalendarEvents({
         accessToken: activeSession.access_token,
         selectedCalendarIds,
         timeMin,
         timeMax,
+        accountId: activeSession.account_id || "",
       });
     } catch (error) {
       if (
@@ -367,18 +398,37 @@ export default async function handler(request, response) {
       }
 
       activeSession = refreshedSession.session;
+      const refreshedAccountId =
+        typeof activeSession.account_id === "string"
+          ? activeSession.account_id
+          : "";
+
+      if (requestedAccountId && requestedAccountId !== refreshedAccountId) {
+        response.status(409).json({
+          ok: false,
+          status: "calendar_account_changed",
+          connected: true,
+          message: "Calendar account changed. Load calendars again.",
+          account: {
+            id: refreshedAccountId,
+          },
+        });
+        return;
+      }
+
       eventsResult = await fetchSelectedCalendarEvents({
         accessToken: activeSession.access_token,
         selectedCalendarIds,
         timeMin,
         timeMax,
+        accountId: activeSession.account_id || "",
       });
     }
 
     const events = eventsResult.events;
 
     if (
-      eventsResult.selectedCalendars.length > 0 &&
+      eventsResult.requestedCalendarCount > 0 &&
       eventsResult.successfulCalendars.length === 0
     ) {
       response.status(502).json({
@@ -403,12 +453,18 @@ export default async function handler(request, response) {
       eventSummary: {
         count: events.length,
         calendarCount: eventsResult.successfulCalendars.length,
-        selectedCalendarCount: eventsResult.selectedCalendars.length,
+        selectedCalendarCount: eventsResult.requestedCalendarCount,
         skippedCalendarCount: eventsResult.skippedCalendarCount,
         timeMin,
         timeMax,
       },
       skippedCalendarCount: eventsResult.skippedCalendarCount,
+      account: {
+        id:
+          typeof activeSession.account_id === "string"
+            ? activeSession.account_id
+            : "",
+      },
       events,
     });
   } catch (error) {
