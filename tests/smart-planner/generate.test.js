@@ -167,9 +167,71 @@ test("the fourth generation is blocked before the provider is called", async () 
         assert.equal(response.statusCode, 429);
         assert.equal(response.payload.status, "daily_limit_reached");
         assert.equal(response.payload.remainingGenerations, 0);
+        assert.match(response.payload.message, /Basic planner/);
       }
     }
 
     assert.equal(providerCalls, 3);
+  });
+});
+
+test("provider failures preserve the previously confirmed allowance", async () => {
+  await withAllowedOrigin(async () => {
+    for (const providerStatus of [
+      "provider_request_invalid",
+      "provider_auth_failed",
+      "provider_permission_denied",
+      "rate_limited",
+      "provider_unavailable",
+      "timeout",
+    ]) {
+      let providerResult = providerPlan();
+      const handler = createSmartPlannerHandler({
+        env: ENV,
+        now: () => Date.parse("2026-07-30T10:00:00.000Z"),
+        ipBuckets: new Map(),
+        requestPlan: async () => providerResult,
+      });
+
+      const successfulResponse = createResponse();
+      await handler(validRequest(), successfulResponse);
+      const cookie = String(successfulResponse.headers.get("set-cookie")).split(";")[0];
+
+      providerResult = {
+        ok: false,
+        status: providerStatus,
+        message: "Use the Basic planner for now.",
+      };
+      const failedRequest = validRequest();
+      failedRequest.headers.cookie = cookie;
+      const failedResponse = createResponse();
+      await handler(failedRequest, failedResponse);
+
+      assert.equal(failedResponse.statusCode, 503);
+      assert.equal(failedResponse.payload.status, providerStatus);
+      assert.equal(failedResponse.payload.remainingGenerations, 2);
+      assert.equal(failedResponse.headers.has("set-cookie"), false);
+    }
+  });
+});
+
+test("server-rejected model output does not consume quota", async () => {
+  await withAllowedOrigin(async () => {
+    const handler = createSmartPlannerHandler({
+      env: ENV,
+      now: () => Date.parse("2026-07-30T10:00:00.000Z"),
+      ipBuckets: new Map(),
+      requestPlan: async () => ({
+        ok: true,
+        output: { ...providerPlan().output, summary: "" },
+      }),
+    });
+    const response = createResponse();
+    await handler(validRequest(), response);
+
+    assert.equal(response.statusCode, 502);
+    assert.equal(response.payload.status, "ai_invalid");
+    assert.equal(response.payload.remainingGenerations, 3);
+    assert.equal(response.headers.has("set-cookie"), false);
   });
 });

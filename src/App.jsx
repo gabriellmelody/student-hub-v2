@@ -72,6 +72,7 @@ import {
   formatPlannerPreviewTime,
   getDefaultSmartPlannerDraft,
   getSmartPlannerLocalContext,
+  shouldRequestSmartPlannerAi,
   timeStringToMinute,
 } from "./utils/smartPlannerUtils.js";
 
@@ -1718,8 +1719,11 @@ function App() {
       return;
     }
 
-    const useBasicForQuota =
-      !basic && smartPlannerQuota.remainingGenerations === 0;
+    const shouldRequestAi = shouldRequestSmartPlannerAi({
+      basic,
+      remainingGenerations: smartPlannerQuota.remainingGenerations,
+    });
+    const useBasicForQuota = !basic && !shouldRequestAi;
 
     smartPlannerRequestRef.current.controller?.abort();
     const controller = new AbortController();
@@ -1750,7 +1754,7 @@ function App() {
 
     if (smartPlannerRequestRef.current.id !== requestId) return;
 
-    if (basic || useBasicForQuota) {
+    if (!shouldRequestAi) {
       const resetLabel = smartPlannerQuota.resetAt
         ? new Date(smartPlannerQuota.resetAt).toLocaleString([], {
             dateStyle: "medium",

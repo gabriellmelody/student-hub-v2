@@ -8,7 +8,17 @@ const MAX_WARNINGS = 6;
 const MAX_REQUEST_BYTES = 64 * 1024;
 
 const PLAN_STYLES = new Set(["balanced", "lighter", "maximum"]);
-const TEMPORARY_ANTHROPIC_STATUSES = new Set([429, 500, 502, 503, 504, 529]);
+const PROVIDER_SCHEMA_UNSUPPORTED_KEYWORDS = new Set([
+  "minimum",
+  "maximum",
+  "exclusiveMinimum",
+  "exclusiveMaximum",
+  "multipleOf",
+  "minLength",
+  "maxLength",
+  "minItems",
+  "maxItems",
+]);
 
 export const SMART_PLANNER_OUTPUT_SCHEMA = {
   type: "object",
@@ -71,6 +81,22 @@ export const SMART_PLANNER_OUTPUT_SCHEMA = {
   },
 };
 
+function removeUnsupportedProviderConstraints(value) {
+  if (Array.isArray(value)) {
+    return value.map(removeUnsupportedProviderConstraints);
+  }
+  if (!value || typeof value !== "object") return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !PROVIDER_SCHEMA_UNSUPPORTED_KEYWORDS.has(key))
+      .map(([key, child]) => [key, removeUnsupportedProviderConstraints(child)])
+  );
+}
+
+export const ANTHROPIC_SMART_PLANNER_OUTPUT_SCHEMA =
+  removeUnsupportedProviderConstraints(SMART_PLANNER_OUTPUT_SCHEMA);
+
 export const SMART_PLANNER_SYSTEM_PROMPT = `You are Student Hub's realistic study-planning engine. Return only the requested structured JSON.
 
 Rules:
@@ -95,6 +121,13 @@ function text(value, maximumLength) {
 
 function isIntegerBetween(value, minimum, maximum) {
   return Number.isInteger(value) && value >= minimum && value <= maximum;
+}
+
+function isBoundedString(value, minimumLength, maximumLength, nullable = false) {
+  if (nullable && value === null) return true;
+  if (typeof value !== "string") return false;
+  const length = value.trim().length;
+  return length >= minimumLength && length <= maximumLength;
 }
 
 function normalizeOrigin(value) {
@@ -327,6 +360,10 @@ export function validateSmartPlannerOutput(rawOutput, input) {
     return { ok: false, status: "ai_invalid", message: "Smart Planner returned an invalid plan status." };
   }
 
+  if (!isBoundedString(rawOutput.summary, 1, 280)) {
+    return { ok: false, status: "ai_invalid", message: "Smart Planner returned an invalid summary." };
+  }
+
   const rawBlocks = Array.isArray(rawOutput.blocks) ? rawOutput.blocks : [];
   const rawOmitted = Array.isArray(rawOutput.omittedTasks) ? rawOutput.omittedTasks : [];
   const rawWarnings = Array.isArray(rawOutput.warnings) ? rawOutput.warnings : [];
@@ -343,6 +380,17 @@ export function validateSmartPlannerOutput(rawOutput, input) {
 
   for (const [index, block] of rawBlocks.entries()) {
     if (!block || typeof block !== "object") {
+      return { ok: false, status: "ai_invalid", message: "Smart Planner returned an invalid block." };
+    }
+
+    if (
+      !isBoundedString(block.type, 1, 12) ||
+      !isBoundedString(block.taskId, 0, 120, true) ||
+      !isBoundedString(block.title, 1, 180) ||
+      !isBoundedString(block.subject, 0, 80, true) ||
+      !isBoundedString(block.goal, 1, 240) ||
+      !isBoundedString(block.reason, 1, 240)
+    ) {
       return { ok: false, status: "ai_invalid", message: "Smart Planner returned an invalid block." };
     }
 
@@ -405,6 +453,17 @@ export function validateSmartPlannerOutput(rawOutput, input) {
       .map((block) => block.taskId)
   );
   for (const omitted of rawOmitted) {
+    if (
+      !omitted ||
+      typeof omitted !== "object" ||
+      !isBoundedString(omitted.taskId, 1, 120) ||
+      !isBoundedString(omitted.title, 1, 180) ||
+      !isBoundedString(omitted.reason, 1, 240) ||
+      !isBoundedString(omitted.suggestedNextStep, 1, 240)
+    ) {
+      return { ok: false, status: "ai_invalid", message: "Smart Planner returned an invalid omission." };
+    }
+
     const taskId = text(omitted?.taskId, 120);
     const task = taskMap.get(taskId);
     if (!task || omittedIds.has(taskId) || scheduledTaskIds.has(taskId)) continue;
@@ -438,6 +497,10 @@ export function validateSmartPlannerOutput(rawOutput, input) {
     };
   }
 
+  if (rawWarnings.some((warning) => !isBoundedString(warning, 0, 240))) {
+    return { ok: false, status: "ai_invalid", message: "Smart Planner returned an invalid warning." };
+  }
+
   return {
     ok: true,
     plan: {
@@ -462,6 +525,28 @@ async function readSafeJson(response) {
   }
 }
 
+function getResponseHeader(response, name) {
+  try {
+    return response?.headers?.get?.(name) || "";
+  } catch {
+    return "";
+  }
+}
+
+function logProviderFailure(response, responseJson, category) {
+  console.warn("Smart Planner provider request failed", {
+    category,
+    httpStatus: Number.isInteger(response?.status) ? response.status : null,
+    errorType: text(responseJson?.error?.type || "", 80) || null,
+    requestId:
+      text(
+        getResponseHeader(response, "request-id") ||
+          getResponseHeader(response, "anthropic-request-id"),
+        120
+      ) || null,
+  });
+}
+
 export async function requestAnthropicPlan(input) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 22000);
@@ -480,7 +565,7 @@ export async function requestAnthropicPlan(input) {
       effort: "medium",
       format: {
         type: "json_schema",
-        schema: SMART_PLANNER_OUTPUT_SCHEMA,
+        schema: ANTHROPIC_SMART_PLANNER_OUTPUT_SCHEMA,
       },
     },
   };
@@ -506,6 +591,7 @@ export async function requestAnthropicPlan(input) {
       try {
         return { ok: true, model, output: JSON.parse(outputText || "{}") };
       } catch {
+        logProviderFailure(response, responseJson, "ai_invalid");
         return {
           ok: false,
           status: "ai_invalid",
@@ -514,40 +600,63 @@ export async function requestAnthropicPlan(input) {
       }
     }
 
-    if (TEMPORARY_ANTHROPIC_STATUSES.has(response.status)) {
+    if (response.status === 400) {
+      logProviderFailure(response, responseJson, "provider_request_invalid");
       return {
         ok: false,
-        status: "temporary_error",
-        message: "Smart Planner is temporarily unavailable. Try again or use the Basic planner.",
+        status: "provider_request_invalid",
+        message: "Smart Planner could not process this request. Use the Basic planner for now.",
       };
     }
-    if (response.status === 401 || response.status === 403) {
+    if (response.status === 401) {
+      logProviderFailure(response, responseJson, "provider_auth_failed");
       return {
         ok: false,
-        status: "provider_permission",
+        status: "provider_auth_failed",
         message: "Smart Planner is not available with the current server setup.",
       };
     }
-    if (
-      response.status === 402 ||
-      responseJson?.error?.type === "billing_error" ||
-      responseJson?.error?.type === "insufficient_credits"
-    ) {
+    if (response.status === 403) {
+      logProviderFailure(response, responseJson, "provider_permission_denied");
       return {
         ok: false,
-        status: "provider_credits",
-        message: "Smart Planner is temporarily unavailable.",
+        status: "provider_permission_denied",
+        message: "Smart Planner is not available with the current server permissions.",
       };
     }
+    if (response.status === 404) {
+      logProviderFailure(response, responseJson, "model_unavailable");
+      return {
+        ok: false,
+        status: "model_unavailable",
+        message: "Smart Planner’s AI model is temporarily unavailable.",
+      };
+    }
+    if (response.status === 429) {
+      logProviderFailure(response, responseJson, "rate_limited");
+      return {
+        ok: false,
+        status: "rate_limited",
+        message: "Smart Planner is busy. Try again later or use the Basic planner.",
+      };
+    }
+    logProviderFailure(response, responseJson, "provider_unavailable");
     return {
       ok: false,
       status: "provider_unavailable",
       message: "Smart Planner is temporarily unavailable.",
     };
   } catch (error) {
-    return error?.name === "AbortError"
+    const category = error?.name === "AbortError" ? "timeout" : "provider_unavailable";
+    console.warn("Smart Planner provider request failed", {
+      category,
+      httpStatus: null,
+      errorType: null,
+      requestId: null,
+    });
+    return category === "timeout"
       ? { ok: false, status: "timeout", message: "Smart Planner took too long to respond." }
-      : { ok: false, status: "network_error", message: "Smart Planner could not be reached." };
+      : { ok: false, status: "provider_unavailable", message: "Smart Planner could not be reached." };
   } finally {
     clearTimeout(timeout);
   }

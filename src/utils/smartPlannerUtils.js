@@ -1,6 +1,13 @@
 export const SMART_PLANNER_MAX_TASKS = 20;
 export const SMART_PLANNER_MAX_BUSY_INTERVALS = 40;
 
+export function shouldRequestSmartPlannerAi({
+  basic = false,
+  remainingGenerations = null,
+} = {}) {
+  return basic !== true && remainingGenerations !== 0;
+}
+
 function padTimePart(value) {
   return String(value).padStart(2, "0");
 }

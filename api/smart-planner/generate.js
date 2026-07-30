@@ -141,6 +141,30 @@ export function createSmartPlannerHandler({
       });
     }
 
+    // Reserve against the signed snapshot, but commit the cookie only after a
+    // provider response passes Student Hub's strict validation.
+    const quotaReservation = consumeSmartPlannerQuota({
+      cookieHeader: request.headers?.cookie || "",
+      env,
+      now: requestTime,
+    });
+
+    if (!quotaReservation.allowed) {
+      if (quotaReservation.setCookie) {
+        response.setHeader("Set-Cookie", quotaReservation.setCookie);
+      }
+      const isDailyLimit = quotaReservation.status === "daily_limit_reached";
+      return sendJson(response, 429, {
+        ok: false,
+        configured: true,
+        status: isDailyLimit ? "daily_limit_reached" : "quota_cookie_invalid",
+        message: isDailyLimit
+          ? "Today’s Smart Planner limit has been reached. The Basic planner is still available."
+          : "Smart Planner usage could not be verified. The Basic planner is still available.",
+        ...quotaFields(quotaReservation),
+      });
+    }
+
     const ipSafeguard = checkIpSafeguard(
       request,
       requestTime,
@@ -157,27 +181,6 @@ export function createSmartPlannerHandler({
       });
     }
 
-    const quota = consumeSmartPlannerQuota({
-      cookieHeader: request.headers?.cookie || "",
-      env,
-      now: requestTime,
-    });
-
-    if (quota.setCookie) response.setHeader("Set-Cookie", quota.setCookie);
-
-    if (!quota.allowed) {
-      const isDailyLimit = quota.status === "daily_limit_reached";
-      return sendJson(response, 429, {
-        ok: false,
-        configured: true,
-        status: isDailyLimit ? "daily_limit_reached" : "quota_cookie_invalid",
-        message: isDailyLimit
-          ? "Today’s Smart Planner limit has been reached. The Basic planner is still available."
-          : "Smart Planner usage could not be verified. The Basic planner is still available.",
-        ...quotaFields(quota),
-      });
-    }
-
     // Count only requests that are about to reach Anthropic.
     recordIpAttempt(ipSafeguard);
     const providerResult = await requestPlan(validation.input);
@@ -188,7 +191,7 @@ export function createSmartPlannerHandler({
         configured: true,
         status: providerResult.status,
         message: providerResult.message,
-        ...quotaFields(quota),
+        ...quotaFields(quotaSnapshot),
       });
     }
 
@@ -203,8 +206,12 @@ export function createSmartPlannerHandler({
         configured: true,
         status: "ai_invalid",
         message: "Smart Planner could not build a safe plan this time.",
-        ...quotaFields(quota),
+        ...quotaFields(quotaSnapshot),
       });
+    }
+
+    if (quotaReservation.setCookie) {
+      response.setHeader("Set-Cookie", quotaReservation.setCookie);
     }
 
     return sendJson(response, 200, {
@@ -212,7 +219,7 @@ export function createSmartPlannerHandler({
       configured: true,
       status: "plan_ready",
       plan: planResult.plan,
-      ...quotaFields(quota),
+      ...quotaFields(quotaReservation),
     });
   };
 }

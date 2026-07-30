@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildSmartPlannerTaskPayload,
   getNextHalfHourStart,
+  shouldRequestSmartPlannerAi,
 } from "./smartPlannerUtils.js";
 
 function localTime(hours, minutes) {
@@ -78,4 +79,23 @@ test("preselects the 20 most relevant active tasks", () => {
     "urgent-overdue",
     "due-today",
   ]);
+});
+
+test("Basic planning makes no AI request and preserves displayed quota", () => {
+  const quota = { remainingGenerations: 2, resetAt: "2026-07-31T10:00:00.000Z" };
+  let smartPlannerApiRequests = 0;
+
+  if (shouldRequestSmartPlannerAi({ basic: true, ...quota })) {
+    smartPlannerApiRequests += 1;
+  }
+
+  assert.equal(smartPlannerApiRequests, 0);
+  assert.deepEqual(quota, {
+    remainingGenerations: 2,
+    resetAt: "2026-07-31T10:00:00.000Z",
+  });
+  assert.equal(
+    shouldRequestSmartPlannerAi({ basic: false, remainingGenerations: 0 }),
+    false
+  );
 });

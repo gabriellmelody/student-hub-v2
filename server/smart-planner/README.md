@@ -2,9 +2,11 @@
 
 Smart Planner uses `SMART_PLANNER_USAGE_SECRET` to sign the HttpOnly
 `student_hub_smart_planner_quota` cookie. `SMART_PLANNER_DAILY_LIMIT` defaults
-to 3 and is clamped between 1 and 10. The quota is consumed immediately before
-the one Anthropic request; validation failures, missing provider configuration,
-and the local Basic planner do not consume it.
+to 3 and is clamped between 1 and 10. The server checks and provisionally
+reserves quota before the one Anthropic request, but writes the incremented
+cookie only after a valid Smart plan is ready. Request/provider failures,
+rejected model output, missing provider configuration, and the local Basic
+planner do not consume it.
 
 This is browser-level beta protection, not account-grade enforcement. Clearing
 browser cookies starts a new quota because Student Hub does not have accounts
