@@ -171,6 +171,93 @@ test("internal validation enforces string, number, count, and timing limits", ()
   );
 });
 
+test("system instructions require realistic, distinct, student-friendly plan copy", () => {
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /goal must be realistically achievable within that block's supplied duration/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /For 5–15 minute blocks/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /Do not claim a substantial draft/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /A goal answers “What should the student accomplish/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /A reason answers “Why is this task scheduled here/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /It must not merely repeat the goal/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /Avoid robotic or corporate phrases/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /summary must be one concise natural sentence/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /Keep each field distinct/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /return an empty warnings array/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /grades are secondary planning signals/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /Planner context may clarify priorities and preferences/);
+  assert.match(SMART_PLANNER_SYSTEM_PROMPT, /Plan today only; never create a multi-day schedule/);
+});
+
+test("normalizes safe prose and removes empty or duplicate plan notes", () => {
+  const result = validateSmartPlannerOutput(
+    readyPlan({
+      summary: "  Start with the essay,   then review questions.  ",
+      blocks: [
+        {
+          ...readyPlan().blocks[0],
+          goal: " Draft the opening paragraph   and list evidence. ",
+          reason: " The essay is due soon,   so it needs a concrete start. ",
+        },
+      ],
+      warnings: [
+        "",
+        "   ",
+        "Start with the essay, then review questions.",
+        "Schedule another writing block   later.",
+        "Schedule another writing block later.",
+      ],
+    }),
+    input
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.plan.summary, "Start with the essay, then review questions.");
+  assert.deepEqual(result.plan.warnings, ["Schedule another writing block later."]);
+  assert.equal(result.plan.blocks[0].taskId, "task-1");
+  assert.equal(result.plan.blocks[0].startMinute, 900);
+  assert.equal(result.plan.blocks[0].endMinute, 945);
+  assert.equal(result.plan.blocks[0].durationMinutes, 45);
+  assert.equal(
+    result.plan.blocks[0].goal,
+    "Draft the opening paragraph and list evidence."
+  );
+  assert.equal(
+    result.plan.blocks[0].reason,
+    "The essay is due soon, so it needs a concrete start."
+  );
+});
+
+test("prose cleanup never makes structurally invalid model output acceptable", () => {
+  const invalidTask = validateSmartPlannerOutput(
+    readyPlan({
+      warnings: ["A note.", "A  note."],
+      blocks: [
+        {
+          ...readyPlan().blocks[0],
+          taskId: "invented-task",
+          goal: "  Make a rough section list.  ",
+        },
+      ],
+    }),
+    input
+  );
+  const invalidTiming = validateSmartPlannerOutput(
+    readyPlan({
+      warnings: ["", ""],
+      blocks: [
+        {
+          ...readyPlan().blocks[0],
+          startMinute: 992,
+          durationMinutes: 15,
+        },
+      ],
+    }),
+    input
+  );
+
+  assert.equal(invalidTask.ok, false);
+  assert.equal(invalidTiming.ok, false);
+});
+
 test("rejects requests containing more than 20 eligible tasks", async () => {
   const previous = process.env.SMART_PLANNER_ALLOWED_ORIGINS;
   process.env.SMART_PLANNER_ALLOWED_ORIGINS = "https://student.example";

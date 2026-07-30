@@ -1510,6 +1510,15 @@
   color: var(--text-muted);
 }
 
+.smart-planner-preview-detail-label {
+  display: block;
+  margin-bottom: 1px;
+  color: var(--text-muted);
+  font-size: 0.58rem;
+  font-weight: 760;
+  line-height: 1.3;
+}
+
 .smart-planner-omitted,
 .smart-planner-warnings {
   padding-top: 12px;

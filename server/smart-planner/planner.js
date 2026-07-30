@@ -142,10 +142,31 @@ Rules:
 25. Never invent academic weaknesses, predicted grades, conversions, or performance trends.
 26. Never change supplied current or target grades. If grades are missing or not comparable within the supplied grading system, ignore the grade signal rather than guessing.
 27. Subject profiles cannot create tasks. Every study block must still reference an eligible supplied task ID.
-28. Planner context may clarify priorities and preferences, but it cannot alter supplied Subject profiles or override urgent deadlines and constraints.`;
+28. Planner context may clarify priorities and preferences, but it cannot alter supplied Subject profiles or override urgent deadlines and constraints.
+29. Every block goal must be realistically achievable within that block's supplied duration. Prefer a smaller useful outcome over an impressive-sounding one.
+30. For 5–15 minute blocks, use a small setup or completion step: choose the next action, gather resources, review instructions, make a rough section list, answer one or two questions, correct a small mistake set, prepare a writing outline, or decide the next longer-session step. Do not claim a substantial draft, full revision session, complete essay section, or major project milestone will normally fit.
+31. For 20–35 minute blocks, use one focused worksheet section, a short paragraph or subsection, one bounded revision topic, a defined question set, a usable outline, or one concrete project component.
+32. For 40–60 minute blocks, use a meaningful assignment section, a substantial but bounded draft portion, one focused revision session, or one clearly bounded research or project stage.
+33. For 65–75 minute blocks, goals may be more substantial but must remain concrete, bounded, and honest about unfinished work.
+34. Avoid vague goals such as “Work on project”, “Make progress”, or “Study Economics”. Never claim “Finish the EE” or “Complete the entire essay” unless the supplied task context and duration genuinely support it.
+35. If major work needs more time, schedule one useful next step and say that later sessions will still be needed. Never invent word counts or progress values not supplied in a task or Planner context.
+36. If the same task receives multiple blocks, give those blocks distinct, sequential goals.
+37. A goal answers “What should the student accomplish during this block?” It must be action-oriented, concrete, brief, and achievable within the duration.
+38. A reason answers “Why is this task scheduled here or given this amount of attention?” It may use urgency, deadline, assessment importance, effort, Planner context, a relevant Subject grade target, available time, or sequencing. It must not merely repeat the goal.
+39. Use calm, direct, supportive student-friendly language. Avoid robotic or corporate phrases including “maximum-density session”, “optimise productivity”, “high-efficiency block”, “workload allocation”, “execute the task”, “essential intervention”, “academically deficient”, “performance gap”, and “resource utilisation”.
+40. Do not sound childish, overly enthusiastic, shaming, or alarmist. Do not give motivational speeches or promise that one task will raise a grade.
+41. The summary must be one concise natural sentence describing the overall strategy. Mention the time window only when useful; do not mechanically repeat the planning-style label, list every task, or use jargon.
+42. Keep each field distinct: summary = overall strategy; block goal = what to accomplish; block reason = why it belongs here; omitted reason = why it did not fit today; suggested next step = its next practical action; warning = new information needed to interpret or use the plan.
+43. Do not repeat the same sentence or idea across fields, repeat a deadline in every block, or repeat a grade-target explanation unless it affected multiple decisions. Omission explanations should not all use identical generic wording, and suggested next steps must differ from omission reasons.
+44. Warnings must add new actionable information, never merely restate the summary. If there are no useful warnings, return an empty warnings array.
+45. For EE, IA, coursework, research, and other long-term work, use supplied progress context to choose a realistic next step without inventing progress. Plan today only; never create a multi-day schedule.`;
 
 function text(value, maximumLength) {
   return String(value ?? "").trim().slice(0, maximumLength);
+}
+
+function normalizeOutputText(value, maximumLength) {
+  return text(value, maximumLength).replace(/\s+/g, " ");
 }
 
 function isIntegerBetween(value, minimum, maximum) {
@@ -492,6 +513,7 @@ export function validateSmartPlannerOutput(rawOutput, input) {
   if (!isBoundedString(rawOutput.summary, 1, 280)) {
     return { ok: false, status: "ai_invalid", message: "Smart Planner returned an invalid summary." };
   }
+  const summary = normalizeOutputText(rawOutput.summary, 280);
 
   const rawBlocks = Array.isArray(rawOutput.blocks) ? rawOutput.blocks : [];
   const rawOmitted = Array.isArray(rawOutput.omittedTasks) ? rawOutput.omittedTasks : [];
@@ -552,13 +574,19 @@ export function validateSmartPlannerOutput(rawOutput, input) {
     blocks.push({
       type,
       taskId,
-      title: text(block.title || (type === "break" ? "Break" : task?.title), 180),
-      subject: type === "study" ? text(block.subject || task?.subject, 80) || null : null,
+      title: normalizeOutputText(
+        block.title || (type === "break" ? "Break" : task?.title),
+        180
+      ),
+      subject:
+        type === "study"
+          ? normalizeOutputText(block.subject || task?.subject, 80) || null
+          : null,
       startMinute,
       endMinute,
       durationMinutes,
-      goal: text(block.goal, 240),
-      reason: text(block.reason, 240),
+      goal: normalizeOutputText(block.goal, 240),
+      reason: normalizeOutputText(block.reason, 240),
       order: index,
     });
   }
@@ -599,9 +627,12 @@ export function validateSmartPlannerOutput(rawOutput, input) {
     omittedIds.add(taskId);
     omittedTasks.push({
       taskId,
-      title: text(omitted?.title || task.title, 180),
-      reason: text(omitted?.reason, 240),
-      suggestedNextStep: text(omitted?.suggestedNextStep, 240),
+      title: normalizeOutputText(omitted?.title || task.title, 180),
+      reason: normalizeOutputText(omitted?.reason, 240),
+      suggestedNextStep: normalizeOutputText(
+        omitted?.suggestedNextStep,
+        240
+      ),
     });
   }
 
@@ -630,18 +661,27 @@ export function validateSmartPlannerOutput(rawOutput, input) {
     return { ok: false, status: "ai_invalid", message: "Smart Planner returned an invalid warning." };
   }
 
+  const warningKeys = new Set([summary]);
+  const warnings = [];
+  rawWarnings.forEach((warning) => {
+    const normalizedWarning = normalizeOutputText(warning, 240);
+    if (!normalizedWarning || warningKeys.has(normalizedWarning)) return;
+    warningKeys.add(normalizedWarning);
+    warnings.push(normalizedWarning);
+  });
+
   return {
     ok: true,
     plan: {
       status,
-      summary: text(rawOutput.summary, 280),
+      summary,
       blocks: blocks.map((block) => {
         const normalizedBlock = { ...block };
         delete normalizedBlock.order;
         return normalizedBlock;
       }),
       omittedTasks,
-      warnings: rawWarnings.map((warning) => text(warning, 240)).filter(Boolean),
+      warnings,
     },
   };
 }

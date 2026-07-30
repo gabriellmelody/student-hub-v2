@@ -26,8 +26,23 @@ function PreviewBlock({ block, index }) {
           <strong>{block.title || (block.type === "break" ? "Break" : "Study block")}</strong>
           {block.type === "study" && block.subject && <span>{block.subject}</span>}
         </div>
-        {block.tip && <p>{block.tip}</p>}
-        {block.reason && block.type === "study" && <small>{block.reason}</small>}
+        {block.tip &&
+          (block.type === "study" ? (
+            <p>
+              <span className="smart-planner-preview-detail-label">Goal</span>
+              {block.tip}
+            </p>
+          ) : (
+            <p>{block.tip}</p>
+          ))}
+        {block.reason && block.type === "study" && (
+          <small>
+            <span className="smart-planner-preview-detail-label">
+              Why this is in your plan
+            </span>
+            {block.reason}
+          </small>
+        )}
       </div>
       <span className="sr-only">Plan block {index + 1}</span>
     </li>
