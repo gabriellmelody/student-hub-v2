@@ -415,10 +415,75 @@
   }
 }
 
-@media (max-width: 600px) {
+@media (max-width: 700px) {
+  .subjects-page {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+  }
+
+  .subjects-page-header {
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 22px;
+    margin-bottom: 0;
+  }
+
+  .subjects-page-header-copy {
+    flex: 0 1 auto;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .subjects-overview {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin-bottom: 0;
+  }
+
+  .subject-overview-card {
+    min-height: 0;
+    grid-template-rows: auto auto auto;
+    gap: 9px;
+    padding: 13px 13px 13px 17px;
+  }
+
+  .subject-overview-next {
+    min-height: 0;
+  }
+
+  .subject-detail-panel {
+    overflow: visible;
+  }
+
+  .subject-scope-row {
+    overflow-x: auto;
+    padding: 8px 10px;
+    scrollbar-width: none;
+  }
+
+  .subject-scope-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .subject-scope-row button {
+    flex: 0 0 auto;
+  }
+
+  .subject-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .subject-history-section {
+    border-top: 1px solid var(--border);
+    border-left: 0;
+  }
+
   .subject-task-list,
   .subject-history-list {
-    max-height: 210px;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
   }
 
   .subjects-page-header,
@@ -429,9 +494,12 @@
 
   .subjects-page-header > button {
     align-self: flex-start;
+    width: auto;
+    max-width: 100%;
   }
 
   .subject-workload-summary {
+    min-width: 0;
     justify-content: flex-start;
   }
 

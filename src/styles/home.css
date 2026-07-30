@@ -1572,7 +1572,7 @@
 
 @media (max-width: 700px) {
   .home-fixed-dashboard {
-    gap: 12px;
+    gap: 10px;
   }
 
   .home-fixed-dashboard .page-header {
@@ -1591,11 +1591,11 @@
   .home-plan-zone,
   .home-progress-zone {
     display: grid;
-    gap: 11px;
+    gap: 9px;
     min-width: 0;
     border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
     border-radius: 20px;
-    padding: 14px;
+    padding: 12px;
     background: color-mix(in srgb, var(--surface) 76%, transparent);
     box-shadow: var(--shadow-card);
   }
@@ -1613,7 +1613,7 @@
   .home-progress-zone {
     order: 3;
     place-items: center;
-    padding-block: 12px 16px;
+    padding-block: 9px 12px;
   }
 
   .home-week-strip-panel {
@@ -1688,9 +1688,9 @@
 
   .home-week-strip-panel,
   .home-coming-up {
-    gap: 11px;
+    gap: 9px;
     border-radius: 20px;
-    padding: 14px;
+    padding: 12px;
   }
 
   .home-section-heading {
@@ -1712,10 +1712,10 @@
   .home-week-strip {
     display: flex;
     gap: 8px;
-    margin-inline: -14px;
+    margin-inline: -12px;
     overflow-x: auto;
     overscroll-behavior-x: contain;
-    padding: 1px 14px 8px;
+    padding: 1px 12px 7px;
     scrollbar-width: none;
   }
 
