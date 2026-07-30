@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildSmartPlannerTaskPayload,
+  buildSmartPlannerSubjectProfiles,
   formatSmartPlannerResetTime,
   getDefaultSmartPlannerDraft,
   getNextHalfHourStart,
@@ -100,6 +101,121 @@ test("preselects the 20 most relevant active tasks", () => {
   assert.deepEqual(selected.slice(0, 2).map((task) => task.id), [
     "urgent-overdue",
     "due-today",
+  ]);
+});
+
+test("builds grade profiles only for Subjects represented by eligible tasks", () => {
+  const subjects = [
+    {
+      id: "subject-economics",
+      name: "Economics",
+      courseSystem: "IB",
+      currentGrade: "6",
+      targetGrade: "7",
+    },
+    {
+      id: "subject-english",
+      name: "English",
+      courseSystem: "AP",
+      currentGrade: "B",
+      targetGrade: "A",
+    },
+  ];
+  const eligibleTasks = buildSmartPlannerTaskPayload(
+    [
+      { id: "econ-1", title: "Essay plan", subject: "  ECONOMICS  " },
+      { id: "econ-2", title: "Review graphs", subject: "economics" },
+      {
+        id: "english-done",
+        title: "Finished essay",
+        subject: "English",
+        completed: true,
+      },
+    ],
+    "2026-07-30"
+  );
+
+  assert.deepEqual(
+    buildSmartPlannerSubjectProfiles(subjects, eligibleTasks),
+    [
+      {
+        subjectId: "subject-economics",
+        subject: "Economics",
+        currentGrade: "6",
+        targetGrade: "7",
+        gradeSystem: "IB",
+      },
+    ]
+  );
+});
+
+test("deduplicates Subject profiles, prefers stable IDs, and caps the list at 12", () => {
+  const subjects = Array.from({ length: 14 }, (_, index) => ({
+    id: `subject-${index}`,
+    name: `Subject ${index}`,
+    courseSystem: index === 0 ? "GCSE" : "Other",
+    currentGrade: index === 0 ? " B " : "",
+    targetGrade: index === 0 ? " A " : "",
+  }));
+  const eligibleTasks = [
+    ...subjects.map((subject, index) => ({
+      id: `task-${index}`,
+      subject: index === 0 ? " subject   0 " : subject.name,
+    })),
+    { id: "duplicate", subject: "SUBJECT 0" },
+  ];
+
+  const profiles = buildSmartPlannerSubjectProfiles(subjects, eligibleTasks);
+
+  assert.equal(profiles.length, 12);
+  assert.equal(profiles.filter((profile) => profile.subjectId === "subject-0").length, 1);
+  assert.deepEqual(profiles[0], {
+    subjectId: "subject-0",
+    subject: "Subject 0",
+    currentGrade: "B",
+    targetGrade: "A",
+    gradeSystem: "GCSE",
+  });
+});
+
+test("preserves short non-comparable grades and accepts missing grade values", () => {
+  const profiles = buildSmartPlannerSubjectProfiles(
+    [
+      {
+        name: "Art",
+        courseSystem: "Other",
+        currentGrade: "Developing",
+        targetGrade: "",
+      },
+      {
+        id: "subject-ap",
+        name: "US History",
+        courseSystem: "AP",
+        currentGrade: "",
+        targetGrade: "5",
+      },
+    ],
+    [
+      { id: "task-art", subject: "Art" },
+      { id: "task-history", subject: "US History" },
+    ]
+  );
+
+  assert.deepEqual(profiles, [
+    {
+      subjectId: null,
+      subject: "Art",
+      currentGrade: "Developing",
+      targetGrade: "",
+      gradeSystem: "Other",
+    },
+    {
+      subjectId: "subject-ap",
+      subject: "US History",
+      currentGrade: "",
+      targetGrade: "5",
+      gradeSystem: "AP",
+    },
   ]);
 });
 

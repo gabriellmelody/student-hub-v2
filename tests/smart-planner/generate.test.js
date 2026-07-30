@@ -293,6 +293,42 @@ test("successful generation returns safe remaining quota metadata", async () => 
   });
 });
 
+test("one generation forwards Subject profiles once without returning grade data", async () => {
+  await withAllowedOrigin(async () => {
+    let providerCalls = 0;
+    let receivedInput = null;
+    const handler = createSmartPlannerHandler({
+      env: ENV,
+      now: () => Date.parse("2026-07-30T10:00:00.000Z"),
+      ipBuckets: new Map(),
+      requestPlan: async (input) => {
+        providerCalls += 1;
+        receivedInput = input;
+        return providerPlan();
+      },
+    });
+    const request = validRequest();
+    request.body.subjectProfiles = [
+      {
+        subjectId: "subject-economics",
+        subject: "Economics",
+        currentGrade: "6",
+        targetGrade: "7",
+        gradeSystem: "IB",
+      },
+    ];
+    const response = createResponse();
+    await handler(request, response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(providerCalls, 1);
+    assert.deepEqual(receivedInput.subjectProfiles, request.body.subjectProfiles);
+    assert.equal(Object.hasOwn(response.payload, "subjectProfiles"), false);
+    assert.equal(JSON.stringify(response.payload).includes("Economics"), false);
+    assert.equal(JSON.stringify(response.payload).includes('"currentGrade"'), false);
+  });
+});
+
 test("the fourth generation is blocked before the provider is called", async () => {
   await withAllowedOrigin(async () => {
     let providerCalls = 0;

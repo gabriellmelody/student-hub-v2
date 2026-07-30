@@ -1359,7 +1359,8 @@
   line-height: 1.45;
 }
 
-.smart-planner-quota {
+.smart-planner-quota,
+.smart-planner-grade-note {
   margin: -2px 0 0;
   color: var(--text-muted);
   font-size: 0.68rem;

@@ -68,6 +68,7 @@ import {
 } from "./utils/googleCalendarStorage.js";
 import {
   buildSmartPlannerTaskPayload,
+  buildSmartPlannerSubjectProfiles,
   formatLocalDate,
   formatPlannerPreviewTime,
   getDefaultSmartPlannerDraft,
@@ -1899,6 +1900,11 @@ function App() {
       return;
     }
 
+    const subjectProfiles = buildSmartPlannerSubjectProfiles(
+      subjects,
+      eligibleTasks
+    );
+
     try {
       const response = await fetch("/api/smart-planner/generate", {
         method: "POST",
@@ -1912,6 +1918,7 @@ function App() {
         body: JSON.stringify({
           ...context,
           tasks: eligibleTasks,
+          subjectProfiles,
           busyIntervals: busyIntervals.map((interval) => ({
             startMinute: interval.startMinutes,
             endMinute: interval.endMinutes,

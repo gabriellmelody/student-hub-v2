@@ -1,6 +1,15 @@
 export const SMART_PLANNER_MAX_TASKS = 20;
 export const SMART_PLANNER_MAX_BUSY_INTERVALS = 40;
 export const SMART_PLANNER_CONTEXT_MAX_LENGTH = 800;
+export const SMART_PLANNER_MAX_SUBJECT_PROFILES = 12;
+
+const SMART_PLANNER_GRADE_SYSTEMS = new Set([
+  "IB",
+  "AP",
+  "GCSE",
+  "A-level",
+  "Other",
+]);
 
 export function shouldRequestSmartPlannerAi({
   basic = false,
@@ -130,6 +139,10 @@ function truncate(value, length) {
   return String(value ?? "").trim().slice(0, length);
 }
 
+function normalizeSubjectKey(value) {
+  return truncate(value, 80).toLocaleLowerCase().replace(/\s+/g, " ");
+}
+
 function isInactiveClassroomTask(task) {
   return (
     task?.source === "classroom" &&
@@ -243,6 +256,48 @@ export function buildSmartPlannerTaskPayload(tasks, localDate) {
       completed: false,
     }))
     .filter((task) => task.id && task.title);
+}
+
+export function buildSmartPlannerSubjectProfiles(subjects, eligibleTasks) {
+  const subjectByName = new Map();
+
+  (Array.isArray(subjects) ? subjects : []).forEach((subject) => {
+    const nameKey = normalizeSubjectKey(subject?.name);
+    if (nameKey && !subjectByName.has(nameKey)) {
+      subjectByName.set(nameKey, subject);
+    }
+  });
+
+  const profiles = [];
+  const includedProfileKeys = new Set();
+
+  for (const task of Array.isArray(eligibleTasks) ? eligibleTasks : []) {
+    const subject = subjectByName.get(normalizeSubjectKey(task?.subject));
+    if (!subject) continue;
+
+    const subjectId = truncate(subject.id, 120) || null;
+    const subjectName = truncate(subject.name, 80);
+    const profileKey = subjectId
+      ? `id:${subjectId}`
+      : `name:${normalizeSubjectKey(subjectName)}`;
+    if (!subjectName || includedProfileKeys.has(profileKey)) continue;
+
+    const gradeSystem = truncate(subject.courseSystem, 16);
+    profiles.push({
+      subjectId,
+      subject: subjectName,
+      currentGrade: truncate(subject.currentGrade, 16),
+      targetGrade: truncate(subject.targetGrade, 16),
+      gradeSystem: SMART_PLANNER_GRADE_SYSTEMS.has(gradeSystem)
+        ? gradeSystem
+        : "Other",
+    });
+    includedProfileKeys.add(profileKey);
+
+    if (profiles.length >= SMART_PLANNER_MAX_SUBJECT_PROFILES) break;
+  }
+
+  return profiles;
 }
 
 export function getSmartPlannerLocalContext(draft, now = new Date()) {

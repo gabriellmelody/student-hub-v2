@@ -200,6 +200,10 @@ export default function SmartPlannerModal({
               </span>
             </label>
 
+            <p className="smart-planner-grade-note">
+              Current and target Subject grades can help Smart Planner balance your priorities.
+            </p>
+
             <p className="smart-planner-quota" role="status">
               {quotaLabel}
             </p>
