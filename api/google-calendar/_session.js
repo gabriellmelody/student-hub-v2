@@ -108,15 +108,49 @@ function serializeCookie(value, maxAgeSeconds) {
   return cookieParts.join("; ");
 }
 
-export function createCalendarSessionCookie(tokenResponse) {
-  return createCalendarSessionCookieFromTokenResponse(tokenResponse);
+export function createCalendarSessionCookie(
+  tokenResponse,
+  existingSession = null,
+  account = null
+) {
+  return createCalendarSessionCookieFromTokenResponse(
+    tokenResponse,
+    existingSession,
+    account
+  );
+}
+
+function getSessionAccountId(session) {
+  return typeof session?.account_id === "string" ? session.account_id : "";
 }
 
 export function createCalendarSessionCookieFromTokenResponse(
   tokenResponse,
-  existingSession = null
+  existingSession = null,
+  account = null
 ) {
   const now = Date.now();
+  const newAccountId =
+    typeof account?.accountId === "string"
+      ? account.accountId
+      : account === null && typeof existingSession?.account_id === "string"
+        ? existingSession.account_id
+        : "";
+  const accountEmail =
+    typeof account?.accountEmail === "string"
+      ? account.accountEmail
+      : account === null && typeof existingSession?.account_email === "string"
+        ? existingSession.account_email
+        : "";
+  const existingAccountId = getSessionAccountId(existingSession);
+  const accountChanged =
+    Boolean(existingSession) &&
+    (!existingAccountId || !newAccountId || existingAccountId !== newAccountId);
+  const sameAccount =
+    Boolean(existingSession) &&
+    Boolean(existingAccountId) &&
+    Boolean(newAccountId) &&
+    existingAccountId === newAccountId;
   const tokenExpiresIn = Number(tokenResponse.expires_in);
   const accessExpiresInSeconds =
     Number.isFinite(tokenExpiresIn) && tokenExpiresIn > 0
@@ -135,12 +169,14 @@ export function createCalendarSessionCookieFromTokenResponse(
   const refreshToken =
     typeof tokenResponse.refresh_token === "string"
       ? tokenResponse.refresh_token
-      : typeof existingSession?.refresh_token === "string"
+      : sameAccount && typeof existingSession?.refresh_token === "string"
         ? existingSession.refresh_token
         : null;
   const payload = {
     access_token: tokenResponse.access_token,
     ...(refreshToken ? { refresh_token: refreshToken } : {}),
+    ...(newAccountId ? { account_id: newAccountId } : {}),
+    ...(accountEmail ? { account_email: accountEmail } : {}),
     expires_at: accessExpiresAt,
     access_expires_at: accessExpiresAt,
     session_expires_at: sessionExpiresAt,
@@ -169,6 +205,13 @@ export function createCalendarSessionCookieFromTokenResponse(
     accessExpiresAt,
     sessionExpiresAt,
     hasRefreshToken: typeof refreshToken === "string",
+    refreshTokenPreserved:
+      typeof tokenResponse.refresh_token !== "string" &&
+      sameAccount &&
+      typeof existingSession?.refresh_token === "string",
+    accountChanged,
+    accountId: newAccountId,
+    accountEmail,
     session: payload,
   };
 }

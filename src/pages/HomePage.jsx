@@ -155,21 +155,11 @@ function HomePage({
           )}
         </div>
 
-        <div className="home-progress-zone">
-          <WeeklyProgressArc
-            completed={weeklyCompleted}
-            left={weeklyLeft}
-            overdueEarlier={earlierOverdueCount}
-            progress={weeklyProgress}
-            total={weeklyTotal}
-          />
-        </div>
-
         <div className="home-hero-zone home-plan-zone">
-          <p className="home-zone-label">Today’s Plan</p>
-          {hasPlan ? (
-            <>
-              {nextOpenBlock ? (
+          <div className="home-plan-copy">
+            <p className="home-zone-label">Today’s Plan</p>
+            {hasPlan ? (
+              nextOpenBlock ? (
                 <div className="home-plan-preview">
                   <span>{formatPlanBlockTime(nextOpenBlock)}</span>
                   {planRepeatsNextTask ? (
@@ -190,28 +180,32 @@ function HomePage({
                   <h3>Plan complete</h3>
                   <p>Nice work. You can still review or adjust it.</p>
                 </div>
-              )}
-              <button
-                type="button"
-                className="primary-button home-plan-action"
-                onClick={() => setActivePage("plan")}
-              >
-                Continue plan
-              </button>
-            </>
-          ) : (
-            <div className="home-empty-copy">
-              <h3>No plan yet.</h3>
-              <p>Create a realistic plan from your active tasks.</p>
-              <button
-                type="button"
-                className="primary-button home-plan-action"
-                onClick={openEveningPlanner}
-              >
-                Create plan
-              </button>
-            </div>
-          )}
+              )
+            ) : (
+              <div className="home-empty-copy">
+                <h3>No plan yet.</h3>
+                <p>Create a realistic plan from your active tasks.</p>
+              </div>
+            )}
+          </div>
+
+          <div className="home-progress-zone">
+            <WeeklyProgressArc
+              completed={weeklyCompleted}
+              left={weeklyLeft}
+              overdueEarlier={earlierOverdueCount}
+              progress={weeklyProgress}
+              total={weeklyTotal}
+            />
+          </div>
+
+          <button
+            type="button"
+            className="primary-button home-plan-action"
+            onClick={hasPlan ? () => setActivePage("plan") : openEveningPlanner}
+          >
+            {hasPlan ? "Continue plan" : "Create plan"}
+          </button>
         </div>
       </section>
 
@@ -399,8 +393,17 @@ function EarlierOverdueIndicator({ count }) {
   if (count <= 0) return null;
 
   return (
-    <em className="home-overdue-indicator">
-      {count} {count === 1 ? "overdue" : "overdue"} from earlier
+    <em
+      className="home-overdue-indicator"
+      title={`${count} ${count === 1 ? "overdue assignment" : "overdue assignments"} from earlier`}
+      aria-label={`${count} ${count === 1 ? "overdue assignment" : "overdue assignments"} from earlier`}
+    >
+      <span className="home-overdue-full">
+        {count} {count === 1 ? "overdue" : "overdue"} from earlier
+      </span>
+      <span className="home-overdue-short" aria-hidden="true">
+        {count} {count === 1 ? "overdue" : "overdue"}
+      </span>
     </em>
   );
 }

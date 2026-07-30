@@ -1,5 +1,14 @@
 import { getGoogleCalendarOAuthConfigStatus } from "./_config.js";
-import { createCalendarSessionCookie } from "./_session.js";
+import {
+  createCalendarSessionCookie,
+  createCalendarSessionCookieFromTokenResponse,
+  readCalendarSession,
+} from "./_session.js";
+import {
+  exchangeGoogleAuthorizationCode,
+  getGoogleAccountIdentity,
+  validatePopupCodeExchangeRequest,
+} from "../google-oauth-popup.js";
 
 function getCallbackParam(request, name) {
   if (request.query && typeof request.query[name] === "string") {
@@ -51,17 +60,109 @@ async function readSafeJson(fetchResponse) {
   }
 }
 
-function getSafeGoogleError(googleResponse, fallbackMessage) {
-  if (!googleResponse || typeof googleResponse !== "object") {
-    return fallbackMessage;
+async function handlePopupCodeExchange(request, response, config) {
+  const validation = await validatePopupCodeExchangeRequest(request);
+
+  if (!validation.ok) {
+    response.status(validation.statusCode).json({
+      ...validation.payload,
+      provider: "google-calendar",
+      configured: config.configured,
+      connected: false,
+    });
+    return;
   }
 
-  return (
-    googleResponse.error_description ||
-    googleResponse.error?.message ||
-    (typeof googleResponse.error === "string" ? googleResponse.error : "") ||
-    fallbackMessage
-  );
+  try {
+    const tokenResult = await exchangeGoogleAuthorizationCode({
+      code: validation.code,
+      clientId: process.env.GOOGLE_CLASSROOM_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLASSROOM_CLIENT_SECRET,
+      redirectUri: validation.redirectUri,
+    });
+
+    if (!tokenResult.ok) {
+      response.status(400).json({
+        ok: false,
+        status: "token_exchange_failed",
+        provider: "google-calendar",
+        configured: true,
+        connected: false,
+        message: "Google Calendar connection could not be completed.",
+      });
+      return;
+    }
+
+    if (typeof tokenResult.json?.access_token !== "string") {
+      response.status(502).json({
+        ok: false,
+        status: "token_exchange_failed",
+        provider: "google-calendar",
+        configured: true,
+        connected: false,
+        message: "Google Calendar connection returned an unexpected response.",
+      });
+      return;
+    }
+
+    const accountIdentity = await getGoogleAccountIdentity(tokenResult.json);
+
+    if (!accountIdentity) {
+      response.status(502).json({
+        ok: false,
+        status: "account_identity_unavailable",
+        provider: "google-calendar",
+        configured: true,
+        connected: false,
+        message:
+          "Google Calendar connected, but Student Hub could not confirm the Google account.",
+      });
+      return;
+    }
+
+    const existingSessionResult = readCalendarSession(request);
+    const sessionCookie = createCalendarSessionCookieFromTokenResponse(
+      tokenResult.json,
+      existingSessionResult.ok ? existingSessionResult.session : null,
+      accountIdentity
+    );
+
+    response.setHeader("Set-Cookie", sessionCookie.cookie);
+    response.status(200).json({
+      ok: true,
+      status: "calendar_popup_session_created",
+      provider: "google-calendar",
+      configured: true,
+      connected: true,
+      message: "Google Calendar connected for this browser.",
+      accountChanged: sessionCookie.accountChanged,
+      account: {
+        email: sessionCookie.accountEmail,
+      },
+      session: {
+        storedIn: "encrypted_http_only_cookie",
+        expiresAt: sessionCookie.expiresAt,
+        sessionExpiresAt: sessionCookie.sessionExpiresAt,
+        hasRefreshToken: sessionCookie.hasRefreshToken,
+        reconnectMayBeRequired: !sessionCookie.hasRefreshToken,
+      },
+    });
+  } catch (error) {
+    response.status(error?.message === "missing_session_secret" ? 501 : 502).json({
+      ok: false,
+      status:
+        error?.message === "missing_session_secret"
+          ? "calendar_session_not_configured"
+          : "token_exchange_failed",
+      provider: "google-calendar",
+      configured: true,
+      connected: false,
+      message:
+        error?.message === "missing_session_secret"
+          ? "Google OAuth worked, but Student Hub session encryption is not configured."
+          : "Google Calendar connection could not be completed.",
+    });
+  }
 }
 
 export default async function handler(request, response) {
@@ -76,6 +177,11 @@ export default async function handler(request, response) {
       requiredEnv: config.requiredEnv,
       message: "Google Calendar OAuth callback is not configured yet.",
     });
+    return;
+  }
+
+  if (request.method === "POST") {
+    await handlePopupCodeExchange(request, response, config);
     return;
   }
 
@@ -127,10 +233,7 @@ export default async function handler(request, response) {
         status: "token_exchange_failed",
         configured: true,
         message: "Google Calendar token exchange failed.",
-        googleError: getSafeGoogleError(
-          tokenJson,
-          "Google token endpoint rejected the authorization code."
-        ),
+        googleError: "Google rejected the authorization code.",
       });
       return;
     }
@@ -142,12 +245,30 @@ export default async function handler(request, response) {
         configured: true,
         message:
           "Google Calendar token exchange did not return an access token.",
-        googleError: "Token endpoint returned an unexpected response.",
+        googleError: "Google returned an unexpected response.",
       });
       return;
     }
 
-    const sessionCookie = createCalendarSessionCookie(tokenJson);
+    const accountIdentity = await getGoogleAccountIdentity(tokenJson);
+
+    if (!accountIdentity) {
+      sendCallbackResult(request, response, 502, {
+        ok: false,
+        status: "account_identity_unavailable",
+        configured: true,
+        message:
+          "Google OAuth worked, but Student Hub could not confirm the Google account.",
+      });
+      return;
+    }
+
+    const existingSessionResult = readCalendarSession(request);
+    const sessionCookie = createCalendarSessionCookie(
+      tokenJson,
+      existingSessionResult.ok ? existingSessionResult.session : null,
+      accountIdentity
+    );
 
     response.setHeader("Set-Cookie", sessionCookie.cookie);
 
@@ -156,10 +277,15 @@ export default async function handler(request, response) {
       status: "calendar_session_created",
       configured: true,
       message: "Google Calendar connected for this browser.",
+      accountChanged: sessionCookie.accountChanged,
+      account: {
+        email: sessionCookie.accountEmail,
+      },
       session: {
         storedIn: "encrypted_http_only_cookie",
         expiresAt: sessionCookie.expiresAt,
         hasRefreshToken: sessionCookie.hasRefreshToken,
+        reconnectMayBeRequired: !sessionCookie.hasRefreshToken,
       },
     });
   } catch (error) {

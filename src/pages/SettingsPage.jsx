@@ -44,6 +44,21 @@ const REAL_CLASSROOM_COURSE_SELECTIONS_KEY =
   "studentHub.realClassroomCourseSelections";
 const GOOGLE_CALENDAR_PREFERENCES_KEY =
   "studentHub.googleCalendarPreferences";
+const GOOGLE_IDENTITY_SERVICES_SRC = "https://accounts.google.com/gsi/client";
+const GOOGLE_OAUTH_BROWSER_CLIENT_ID =
+  import.meta.env.VITE_GOOGLE_CLASSROOM_CLIENT_ID ||
+  import.meta.env.VITE_GOOGLE_CLIENT_ID ||
+  import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID ||
+  "";
+const GOOGLE_CLASSROOM_POPUP_SCOPES = [
+  "https://www.googleapis.com/auth/classroom.courses.readonly",
+  "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
+  "https://www.googleapis.com/auth/classroom.student-submissions.me.readonly",
+];
+const GOOGLE_CALENDAR_POPUP_SCOPES = [
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  "https://www.googleapis.com/auth/calendar.events.readonly",
+];
 const REAL_CLASSROOM_SOURCE = "classroom";
 const CLASSROOM_STATUS_LABELS = {
   active: "Assigned",
@@ -73,6 +88,59 @@ const COMMON_CLASSROOM_SUBJECTS = [
   ["drama", "Drama"],
   ["design", "Design"],
 ];
+
+let googleIdentityServicesLoadPromise = null;
+
+function loadGoogleIdentityServicesScript() {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return Promise.reject(new Error("browser_unavailable"));
+  }
+
+  if (window.google?.accounts?.oauth2?.initCodeClient) {
+    return Promise.resolve(window.google);
+  }
+
+  if (googleIdentityServicesLoadPromise) {
+    return googleIdentityServicesLoadPromise;
+  }
+
+  googleIdentityServicesLoadPromise = new Promise((resolve, reject) => {
+    const existingScript = document.querySelector(
+      `script[src="${GOOGLE_IDENTITY_SERVICES_SRC}"]`
+    );
+
+    function handleLoad() {
+      if (window.google?.accounts?.oauth2?.initCodeClient) {
+        resolve(window.google);
+      } else {
+        reject(new Error("google_identity_unavailable"));
+      }
+    }
+
+    if (existingScript) {
+      existingScript.addEventListener("load", handleLoad, { once: true });
+      existingScript.addEventListener(
+        "error",
+        () => reject(new Error("google_identity_load_failed")),
+        { once: true }
+      );
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = GOOGLE_IDENTITY_SERVICES_SRC;
+    script.async = true;
+    script.defer = true;
+    script.onload = handleLoad;
+    script.onerror = () => reject(new Error("google_identity_load_failed"));
+    document.head.appendChild(script);
+  }).catch((error) => {
+    googleIdentityServicesLoadPromise = null;
+    throw error;
+  });
+
+  return googleIdentityServicesLoadPromise;
+}
 
 function getRealClassroomCourseId(course) {
   return course?.classroomCourseId || course?.externalId || "";
@@ -1321,6 +1389,21 @@ function IntegrationsSettings({
   const [syncMessage, setSyncMessage] = useState("");
   const [classroomCleanupMessage, setClassroomCleanupMessage] = useState("");
   const [successToast, setSuccessToast] = useState(null);
+  const [googleIdentityStatus, setGoogleIdentityStatus] = useState(() => ({
+    loading: Boolean(GOOGLE_OAUTH_BROWSER_CLIENT_ID),
+    ready: false,
+    error: GOOGLE_OAUTH_BROWSER_CLIENT_ID
+      ? ""
+      : "Google popup setup needs a browser client ID.",
+  }));
+  const [googleOAuthPopupState, setGoogleOAuthPopupState] = useState({
+    provider: null,
+    messageProvider: null,
+    message: "",
+    errorProvider: null,
+    error: "",
+    fallbackProvider: null,
+  });
   const [realClassroomSetup, setRealClassroomSetup] = useState({
     checking: false,
     result: null,
@@ -1472,6 +1555,8 @@ function IntegrationsSettings({
   const realClassroomSelectionsReadyRef = useRef(false);
   const realClassroomLinksReadyRef = useRef(false);
   const googleCalendarPreferencesReadyRef = useRef(false);
+  const realClassroomConnectButtonRef = useRef(null);
+  const googleCalendarConnectButtonRef = useRef(null);
   const realClassroomCleanup = {
     candidateCount: tasks.filter(
       (task) =>
@@ -1501,6 +1586,43 @@ function IntegrationsSettings({
       if (autoSaveTimerRef.current) {
         window.clearTimeout(autoSaveTimerRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!GOOGLE_OAUTH_BROWSER_CLIENT_ID) return undefined;
+
+    let isMounted = true;
+
+    setGoogleIdentityStatus({
+      loading: true,
+      ready: false,
+      error: "",
+    });
+
+    loadGoogleIdentityServicesScript()
+      .then(() => {
+        if (!isMounted) return;
+
+        setGoogleIdentityStatus({
+          loading: false,
+          ready: true,
+          error: "",
+        });
+      })
+      .catch(() => {
+        if (!isMounted) return;
+
+        setGoogleIdentityStatus({
+          loading: false,
+          ready: false,
+          error:
+            "Google popup setup could not load. Use redirect instead or try again.",
+        });
+      });
+
+    return () => {
+      isMounted = false;
     };
   }, []);
 
@@ -1750,6 +1872,253 @@ function IntegrationsSettings({
       ...currentConnection,
       linkedCourseCount: courseLinks.length,
     }));
+  }
+
+  function focusGoogleConnectButton(provider) {
+    window.setTimeout(() => {
+      if (provider === "classroom") {
+        realClassroomConnectButtonRef.current?.focus();
+      } else if (provider === "calendar") {
+        googleCalendarConnectButtonRef.current?.focus();
+      }
+    }, 0);
+  }
+
+  function getGooglePopupConfig(provider) {
+    if (provider === "classroom") {
+      return {
+        provider,
+        endpoint: "/api/google-classroom/callback",
+        scopes: GOOGLE_CLASSROOM_POPUP_SCOPES,
+        fallbackHref: "/api/google-classroom/connect",
+        successTitle: "Google Classroom connected",
+        successSummary: "Ready to manage classes",
+        checkingLabel: "Connecting Classroom...",
+      };
+    }
+
+    return {
+      provider: "calendar",
+      endpoint: "/api/google-calendar/callback",
+      scopes: GOOGLE_CALENDAR_POPUP_SCOPES,
+      fallbackHref: "/api/google-calendar/connect",
+      successTitle: "Google Calendar connected",
+      successSummary: "Ready to load calendars",
+      checkingLabel: "Connecting Calendar...",
+    };
+  }
+
+  function setGooglePopupMessage(provider, message) {
+    setGoogleOAuthPopupState({
+      provider: null,
+      messageProvider: provider,
+      message,
+      errorProvider: null,
+      error: "",
+      fallbackProvider: null,
+    });
+    focusGoogleConnectButton(provider);
+  }
+
+  function setGooglePopupError(provider, error, { fallback = true } = {}) {
+    setGoogleOAuthPopupState({
+      provider: null,
+      messageProvider: null,
+      message: "",
+      errorProvider: provider,
+      error,
+      fallbackProvider: fallback ? provider : null,
+    });
+    focusGoogleConnectButton(provider);
+  }
+
+  function clearProviderResultsAfterReconnect(provider) {
+    if (provider === "classroom") {
+      setRealClassroomCourses({
+        loading: false,
+        courses: [],
+        summary: null,
+        lastCheckedAt: "",
+        message: "Classroom connected. Load classes to review them.",
+        error: "",
+      });
+      setRealClassroomAssignmentPreview({
+        loading: false,
+        assignments: [],
+        summary: null,
+        lastPreviewedAt: "",
+        message: "",
+        error: "",
+        importResult: null,
+        importResultCopy: null,
+        selectedAssignmentIds: {},
+      });
+    } else {
+      setGoogleCalendarCalendars({
+        loading: false,
+        calendars: [],
+        summary: null,
+        lastCheckedAt: "",
+        message: "Google Calendar connected. Load calendars to review them.",
+        error: "",
+      });
+    }
+  }
+
+  async function refreshProviderSessionAfterPopup(provider) {
+    if (provider === "classroom") {
+      await checkRealClassroomSession();
+    } else {
+      await checkGoogleCalendarSession();
+    }
+  }
+
+  async function exchangeGooglePopupCode(provider, code) {
+    const config = getGooglePopupConfig(provider);
+    const response = await fetch(config.endpoint, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        "X-Requested-With": "XmlHttpRequest",
+      },
+      body: JSON.stringify({ code }),
+    });
+    const result = await response.json().catch(() => null);
+
+    if (!response.ok || result?.ok !== true) {
+      throw new Error(
+        result?.message || "Google connection could not be completed."
+      );
+    }
+
+    if (result.accountChanged === true) {
+      clearProviderResultsAfterReconnect(provider);
+    }
+    await refreshProviderSessionAfterPopup(provider);
+    setSuccessToast({
+      title: config.successTitle,
+      summary: config.successSummary,
+    });
+    setGoogleOAuthPopupState({
+      provider: null,
+      messageProvider: provider,
+      message: result.message || config.successTitle,
+      errorProvider: null,
+      error: "",
+      fallbackProvider: null,
+    });
+    focusGoogleConnectButton(provider);
+  }
+
+  function startGooglePopupConnection(provider) {
+    const config = getGooglePopupConfig(provider);
+
+    if (googleOAuthPopupState.provider) return;
+
+    if (!GOOGLE_OAUTH_BROWSER_CLIENT_ID) {
+      setGooglePopupError(
+        provider,
+        "Google popup setup needs a browser client ID. Use redirect instead.",
+        { fallback: true }
+      );
+      return;
+    }
+
+    if (!googleIdentityStatus.ready) {
+      setGooglePopupError(
+        provider,
+        googleIdentityStatus.error ||
+          "Google popup setup is still loading. Try again in a moment.",
+        { fallback: true }
+      );
+      return;
+    }
+
+    setGoogleOAuthPopupState({
+      provider,
+      messageProvider: null,
+      message: "",
+      errorProvider: null,
+      error: "",
+      fallbackProvider: null,
+    });
+
+    try {
+      const client = window.google.accounts.oauth2.initCodeClient({
+        client_id: GOOGLE_OAUTH_BROWSER_CLIENT_ID,
+        scope: config.scopes.join(" "),
+        ux_mode: "popup",
+        select_account: true,
+        include_granted_scopes: true,
+        callback: async (codeResponse) => {
+          if (codeResponse?.error) {
+            const cancelled = codeResponse.error === "access_denied";
+
+            if (cancelled) {
+              setGooglePopupMessage(
+                provider,
+                "Google connection was cancelled."
+              );
+            } else {
+              setGooglePopupError(
+                provider,
+                "Google connection could not be completed.",
+                { fallback: true }
+              );
+            }
+            return;
+          }
+
+          if (typeof codeResponse?.code !== "string") {
+            setGooglePopupError(
+              provider,
+              "Google did not return a connection code. Try again.",
+              { fallback: true }
+            );
+            return;
+          }
+
+          try {
+            await exchangeGooglePopupCode(provider, codeResponse.code);
+          } catch (error) {
+            setGooglePopupError(
+              provider,
+              error?.message || "Google connection could not be completed.",
+              { fallback: true }
+            );
+          }
+        },
+        error_callback: (popupError) => {
+          const errorType = popupError?.type || popupError?.error || "unknown";
+
+          if (errorType === "popup_closed") {
+            setGooglePopupMessage(provider, "Google connection was cancelled.");
+          } else if (errorType === "popup_failed_to_open") {
+            setGooglePopupError(
+              provider,
+              "Google popup was blocked. Use redirect instead.",
+              { fallback: true }
+            );
+          } else {
+            setGooglePopupError(
+              provider,
+              "Google popup could not start. Try again or use redirect instead.",
+              { fallback: true }
+            );
+          }
+        },
+      });
+
+      client.requestCode();
+    } catch {
+      setGooglePopupError(
+        provider,
+        "Google popup could not start. Try again or use redirect instead.",
+        { fallback: true }
+      );
+    }
   }
 
   async function checkRealClassroomSetup() {
@@ -2854,6 +3223,8 @@ function IntegrationsSettings({
               googleCalendarSession={googleCalendarSession}
               googleCalendarCalendars={googleCalendarCalendars}
               googleCalendarPreferences={googleCalendarPreferences}
+              googleIdentityStatus={googleIdentityStatus}
+              googleOAuthPopupState={googleOAuthPopupState}
               realClassroomLinkedSubjectCount={
                 Object.keys(realClassroomCourseSubjectLinks).length
               }
@@ -2864,10 +3235,13 @@ function IntegrationsSettings({
               onPreview={() => setShowMockPreview(true)}
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
+              onConnectGooglePopup={startGooglePopupConnection}
+              realClassroomConnectButtonRef={realClassroomConnectButtonRef}
               onManageRealClassroom={() =>
                 setRealClassroomManagerPageOpen(true)
               }
               onLoadGoogleCalendars={loadGoogleCalendars}
+              googleCalendarConnectButtonRef={googleCalendarConnectButtonRef}
               onManageGoogleCalendars={() =>
                 setGoogleCalendarManagerPageOpen(true)
               }
@@ -2986,6 +3360,8 @@ function IntegrationCard({
   googleCalendarSession,
   googleCalendarCalendars,
   googleCalendarPreferences,
+  googleIdentityStatus,
+  googleOAuthPopupState,
   onLink,
   onSync,
   onUnlink,
@@ -2993,8 +3369,11 @@ function IntegrationCard({
   onPreview,
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
+  onConnectGooglePopup,
+  realClassroomConnectButtonRef,
   onManageRealClassroom,
   onLoadGoogleCalendars,
+  googleCalendarConnectButtonRef,
   onManageGoogleCalendars,
 }) {
   const isClassroom = integration.id === "google-classroom";
@@ -3018,6 +3397,29 @@ function IntegrationCard({
     realClassroomCourses.courses,
     realClassroomCourseSelections
   );
+  const popupProvider = isRealClassroom
+    ? "classroom"
+    : isGoogleCalendar
+      ? "calendar"
+      : null;
+  const isPopupConnecting =
+    popupProvider && googleOAuthPopupState.provider === popupProvider;
+  const popupMessage =
+    popupProvider && googleOAuthPopupState.messageProvider === popupProvider
+      ? googleOAuthPopupState.message
+      : "";
+  const popupError =
+    popupProvider && googleOAuthPopupState.errorProvider === popupProvider
+      ? googleOAuthPopupState.error
+      : "";
+  const showRedirectFallback =
+    popupProvider &&
+    (googleOAuthPopupState.fallbackProvider === popupProvider ||
+      googleIdentityStatus.error);
+  const popupConnectDisabled =
+    Boolean(isPopupConnecting) ||
+    googleIdentityStatus.loading ||
+    (!googleIdentityStatus.ready && !googleIdentityStatus.error);
 
   return (
     <article className="integration-card">
@@ -3088,6 +3490,19 @@ function IntegrationCard({
           {syncMessage}
         </p>
       )}
+      {popupMessage && (
+        <p className="integration-card-message" aria-live="polite">
+          {popupMessage}
+        </p>
+      )}
+      {popupError && (
+        <p
+          className="integration-card-message integration-card-message-error"
+          role="alert"
+        >
+          {popupError}
+        </p>
+      )}
 
       <div className="integration-card-actions">
         {isClassroom && !isLinkedSample && (
@@ -3154,14 +3569,28 @@ function IntegrationCard({
                     ? "Manage Classroom"
                     : "Load classes"}
               </button>
-              <a
+              <button
+                type="button"
                 className="integration-oauth-prototype-link secondary"
-                href="/api/google-classroom/connect"
+                onClick={() => onConnectGooglePopup("classroom")}
+                disabled={popupConnectDisabled}
+                ref={realClassroomConnectButtonRef}
+                aria-busy={isPopupConnecting ? "true" : undefined}
               >
-                {realClassroomSession.connected
+                {isPopupConnecting
+                  ? "Connecting..."
+                  : realClassroomSession.connected
                   ? "Reconnect"
                   : "Connect Google Classroom"}
-              </a>
+              </button>
+              {showRedirectFallback && (
+                <a
+                  className="integration-setup-button secondary"
+                  href="/api/google-classroom/connect"
+                >
+                  Use redirect instead
+                </a>
+              )}
               <button
                 type="button"
                 className="integration-setup-button secondary"
@@ -3191,16 +3620,30 @@ function IntegrationCard({
                       : "Load calendars"}
                 </button>
               )}
-              <a
+              <button
+                type="button"
                 className={`integration-oauth-prototype-link ${
                   googleCalendarSession.connected ? "secondary" : ""
                 }`}
-                href="/api/google-calendar/connect"
+                onClick={() => onConnectGooglePopup("calendar")}
+                disabled={popupConnectDisabled}
+                ref={googleCalendarConnectButtonRef}
+                aria-busy={isPopupConnecting ? "true" : undefined}
               >
-                {googleCalendarSession.connected
+                {isPopupConnecting
+                  ? "Connecting..."
+                  : googleCalendarSession.connected
                   ? "Reconnect"
                   : "Connect Google Calendar"}
-              </a>
+              </button>
+              {showRedirectFallback && (
+                <a
+                  className="integration-setup-button secondary"
+                  href="/api/google-calendar/connect"
+                >
+                  Use redirect instead
+                </a>
+              )}
             </>
           ) : (
             <button type="button" className="integration-link-button" disabled>

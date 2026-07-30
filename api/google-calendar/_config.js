@@ -1,4 +1,6 @@
 export const GOOGLE_CALENDAR_REQUIRED_ENV = [
+  // Calendar intentionally reuses the shared Google OAuth Web Client envs
+  // while keeping its own redirect URI and provider-specific scopes.
   "GOOGLE_CLASSROOM_CLIENT_ID",
   "GOOGLE_CLASSROOM_CLIENT_SECRET",
   "GOOGLE_CALENDAR_REDIRECT_URI",

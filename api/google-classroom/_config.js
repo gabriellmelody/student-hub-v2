@@ -1,4 +1,6 @@
 export const GOOGLE_CLASSROOM_REQUIRED_ENV = [
+  // Student Hub currently uses one shared Google OAuth Web Client for Google
+  // school integrations. Keep these env names for deployment compatibility.
   "GOOGLE_CLASSROOM_CLIENT_ID",
   "GOOGLE_CLASSROOM_CLIENT_SECRET",
   "GOOGLE_CLASSROOM_REDIRECT_URI",

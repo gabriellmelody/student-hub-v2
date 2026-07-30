@@ -1116,6 +1116,25 @@
 }
 
 @media (max-width: 700px) {
+  .evening-planner-backdrop {
+    z-index: 1550;
+    align-items: end;
+    padding: 10px;
+  }
+
+  .evening-planner-modal {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    border-radius: 22px 22px 18px 18px;
+  }
+
+  .evening-plan-success-toast {
+    z-index: 1560;
+    right: 10px;
+    bottom: calc(82px + env(safe-area-inset-bottom, 0px));
+    width: calc(100vw - 20px);
+  }
+
   .plan-page {
     gap: 12px;
   }
@@ -1266,8 +1285,29 @@
 
   .plan-drag-handle,
   .plan-more-button {
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .plan-more-menu {
+    position: fixed;
+    top: auto;
+    right: 12px;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    left: 12px;
+    z-index: 1450;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    max-height: min(54dvh, 360px);
+    overflow-y: auto;
+    border-radius: 14px;
+  }
+
+  .plan-more-menu button {
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 0.78rem;
   }
 
   .plan-block-controls {
@@ -1298,9 +1338,23 @@
     flex-direction: column;
   }
 
+  .plan-duration-input input,
+  .manual-plan-block-fields input,
+  .manual-plan-block-fields select,
+  .evening-planner-fields input,
+  .evening-plan-options select {
+    min-width: 0;
+    font-size: 16px;
+  }
+
   .plan-editor-actions {
     width: 100%;
     margin-left: 0;
+  }
+
+  .plan-editor-actions button,
+  .manual-plan-block-actions button {
+    min-height: 44px;
   }
 
   .evening-planner-modal form {

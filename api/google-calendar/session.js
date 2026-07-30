@@ -38,5 +38,8 @@ export default async function handler(request, response) {
       sessionExpiresAt: session.session_expires_at || session.expires_at,
       scope: session.scope,
     },
+    account: {
+      email: typeof session.account_email === "string" ? session.account_email : "",
+    },
   });
 }

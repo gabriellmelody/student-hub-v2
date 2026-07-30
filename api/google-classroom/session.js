@@ -35,5 +35,8 @@ export default function handler(request, response) {
       expiresAt: session.expires_at,
       scope: session.scope,
     },
+    account: {
+      email: typeof session.account_email === "string" ? session.account_email : "",
+    },
   });
 }

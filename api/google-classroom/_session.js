@@ -107,33 +107,98 @@ function serializeCookie(value, maxAgeSeconds) {
   return cookieParts.join("; ");
 }
 
-export function createClassroomSessionCookie(tokenResponse) {
+export function createClassroomSessionCookie(
+  tokenResponse,
+  existingSession = null,
+  account = null
+) {
+  return createClassroomSessionCookieFromTokenResponse(
+    tokenResponse,
+    existingSession,
+    account
+  );
+}
+
+function getSessionAccountId(session) {
+  return typeof session?.account_id === "string" ? session.account_id : "";
+}
+
+export function createClassroomSessionCookieFromTokenResponse(
+  tokenResponse,
+  existingSession = null,
+  account = null
+) {
   const now = Date.now();
+  const newAccountId =
+    typeof account?.accountId === "string"
+      ? account.accountId
+      : account === null && typeof existingSession?.account_id === "string"
+        ? existingSession.account_id
+        : "";
+  const accountEmail =
+    typeof account?.accountEmail === "string"
+      ? account.accountEmail
+      : account === null && typeof existingSession?.account_email === "string"
+        ? existingSession.account_email
+        : "";
+  const existingAccountId = getSessionAccountId(existingSession);
+  const accountChanged =
+    Boolean(existingSession) &&
+    (!existingAccountId || !newAccountId || existingAccountId !== newAccountId);
+  const sameAccount =
+    Boolean(existingSession) &&
+    Boolean(existingAccountId) &&
+    Boolean(newAccountId) &&
+    existingAccountId === newAccountId;
   const tokenExpiresIn = Number(tokenResponse.expires_in);
   const expiresInSeconds =
     Number.isFinite(tokenExpiresIn) && tokenExpiresIn > 0
       ? Math.min(tokenExpiresIn, SESSION_MAX_AGE_SECONDS)
       : SESSION_MAX_AGE_SECONDS;
-  const createdAt = new Date(now).toISOString();
+  const createdAt =
+    typeof existingSession?.created_at === "string"
+      ? existingSession.created_at
+      : new Date(now).toISOString();
   const expiresAt = new Date(now + expiresInSeconds * 1000).toISOString();
+  const refreshToken =
+    typeof tokenResponse.refresh_token === "string"
+      ? tokenResponse.refresh_token
+      : sameAccount && typeof existingSession?.refresh_token === "string"
+        ? existingSession.refresh_token
+        : null;
   const payload = {
     access_token: tokenResponse.access_token,
-    ...(typeof tokenResponse.refresh_token === "string"
-      ? { refresh_token: tokenResponse.refresh_token }
-      : {}),
+    ...(refreshToken ? { refresh_token: refreshToken } : {}),
+    ...(newAccountId ? { account_id: newAccountId } : {}),
+    ...(accountEmail ? { account_email: accountEmail } : {}),
     expires_at: expiresAt,
-    scope: typeof tokenResponse.scope === "string" ? tokenResponse.scope : "",
+    scope:
+      typeof tokenResponse.scope === "string"
+        ? tokenResponse.scope
+        : typeof existingSession?.scope === "string"
+          ? existingSession.scope
+          : "",
     token_type:
       typeof tokenResponse.token_type === "string"
         ? tokenResponse.token_type
-        : "",
+        : typeof existingSession?.token_type === "string"
+          ? existingSession.token_type
+          : "",
     created_at: createdAt,
   };
 
   return {
     cookie: serializeCookie(encryptSessionPayload(payload), expiresInSeconds),
     expiresAt,
-    hasRefreshToken: typeof tokenResponse.refresh_token === "string",
+    hasRefreshToken: typeof refreshToken === "string",
+    refreshTokenPreserved:
+      typeof tokenResponse.refresh_token !== "string" &&
+      sameAccount &&
+      typeof existingSession?.refresh_token === "string",
+    accountChanged,
+    accountId: newAccountId,
+    accountEmail,
+    session: payload,
   };
 }
 

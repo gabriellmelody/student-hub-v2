@@ -717,6 +717,22 @@
     gap: 12px;
   }
 
+  .calendar-add-task-form {
+    padding: 12px;
+    margin-bottom: 12px;
+  }
+
+  .calendar-form-grid input,
+  .calendar-form-grid select {
+    min-width: 0;
+    font-size: 16px;
+  }
+
+  .calendar-form-actions button,
+  .calendar-effort-row button {
+    min-height: 44px;
+  }
+
   .calendar-month-panel,
   .calendar-detail-panel {
     padding: 12px;

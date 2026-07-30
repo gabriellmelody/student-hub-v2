@@ -995,6 +995,10 @@
   color: var(--text-muted);
 }
 
+.integration-card-message-error {
+  color: var(--urgent);
+}
+
 .integration-real-classroom-note {
   display: grid;
   gap: 3px;
@@ -4456,6 +4460,31 @@
 }
 
 @media (max-width: 720px) {
+  .data-confirmation-backdrop {
+    z-index: 1550;
+    align-items: end;
+    padding: 10px;
+  }
+
+  .data-confirmation {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    overflow-y: auto;
+    padding: 14px;
+    border-radius: 18px;
+  }
+
+  .data-confirmation-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .data-confirmation-actions button {
+    min-height: 44px;
+    width: 100%;
+  }
+
   .settings-provider-subpage {
     gap: 12px;
   }
@@ -4476,6 +4505,34 @@
 
   .settings-hub-card small {
     max-width: none;
+  }
+
+  .theme-toggle button,
+  .theme-palette-card,
+  .theme-colour-actions button,
+  .quick-links-custom-form input,
+  .quick-links-custom-form select,
+  .quick-link-powerschool-field input,
+  .quick-link-powerschool-field select,
+  .subject-form-grid input,
+  .subject-form-grid select,
+  .subject-colour-field input,
+  .subject-profile-actions button,
+  .subject-form-actions button {
+    min-height: 44px;
+  }
+
+  .quick-links-custom-form input,
+  .quick-links-custom-form select,
+  .quick-link-powerschool-field input,
+  .quick-link-powerschool-field select,
+  .subject-form-grid input,
+  .subject-form-grid select,
+  .real-classroom-subject-link select,
+  .google-calendar-manager-page input,
+  .google-calendar-manager-page select {
+    min-width: 0;
+    font-size: 16px;
   }
 
   .quick-links-panel-intro,
@@ -4515,6 +4572,12 @@
     right: 12px;
     bottom: calc(78px + env(safe-area-inset-bottom));
     max-width: calc(100vw - 24px);
+  }
+
+  .classroom-success-toast {
+    z-index: 1560;
+    top: calc(68px + env(safe-area-inset-top, 0px));
+    width: calc(100vw - 24px);
   }
 
   .integration-control-panel {
@@ -4651,6 +4714,7 @@
   .real-classroom-course-actions button,
   .real-classroom-selection-actions button,
   .real-classroom-assignment-filters button {
+    min-height: 44px;
     width: 100%;
   }
 
@@ -4665,6 +4729,7 @@
   }
 
   .real-classroom-import-panel button {
+    min-height: 44px;
     width: 100%;
   }
 
@@ -4710,6 +4775,7 @@
   }
 
   .google-calendar-manager-actions button {
+    min-height: 44px;
     width: 100%;
   }
 
@@ -4727,7 +4793,7 @@
   }
 
   .google-calendar-switch {
-    min-height: 42px;
+    min-height: 44px;
     padding: 8px 10px;
   }
 

@@ -1,5 +1,14 @@
 import { getGoogleClassroomOAuthConfigStatus } from "./_config.js";
-import { createClassroomSessionCookie } from "./_session.js";
+import {
+  createClassroomSessionCookie,
+  createClassroomSessionCookieFromTokenResponse,
+  readClassroomSession,
+} from "./_session.js";
+import {
+  exchangeGoogleAuthorizationCode,
+  getGoogleAccountIdentity,
+  validatePopupCodeExchangeRequest,
+} from "../google-oauth-popup.js";
 
 function getCallbackParam(request, name) {
   if (request.query && typeof request.query[name] === "string") {
@@ -56,19 +65,6 @@ async function readSafeJson(fetchResponse) {
   }
 }
 
-function getSafeGoogleError(googleResponse, fallbackMessage) {
-  if (!googleResponse || typeof googleResponse !== "object") {
-    return fallbackMessage;
-  }
-
-  return (
-    googleResponse.error_description ||
-    googleResponse.error?.message ||
-    (typeof googleResponse.error === "string" ? googleResponse.error : "") ||
-    fallbackMessage
-  );
-}
-
 function normalizeClassroomCourse(course, lastSyncedAt) {
   return {
     source: "classroom",
@@ -84,8 +80,112 @@ function normalizeClassroomCourse(course, lastSyncedAt) {
   };
 }
 
+async function handlePopupCodeExchange(request, response, config) {
+  const validation = await validatePopupCodeExchangeRequest(request);
+
+  if (!validation.ok) {
+    response.status(validation.statusCode).json({
+      ...validation.payload,
+      provider: "google-classroom",
+      configured: config.configured,
+      connected: false,
+    });
+    return;
+  }
+
+  try {
+    const tokenResult = await exchangeGoogleAuthorizationCode({
+      code: validation.code,
+      clientId: process.env.GOOGLE_CLASSROOM_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLASSROOM_CLIENT_SECRET,
+      redirectUri: validation.redirectUri,
+    });
+
+    if (!tokenResult.ok) {
+      response.status(400).json({
+        ok: false,
+        status: "token_exchange_failed",
+        provider: "google-classroom",
+        configured: true,
+        connected: false,
+        message: "Google Classroom connection could not be completed.",
+      });
+      return;
+    }
+
+    if (typeof tokenResult.json?.access_token !== "string") {
+      response.status(502).json({
+        ok: false,
+        status: "token_exchange_failed",
+        provider: "google-classroom",
+        configured: true,
+        connected: false,
+        message: "Google Classroom connection returned an unexpected response.",
+      });
+      return;
+    }
+
+    const accountIdentity = await getGoogleAccountIdentity(tokenResult.json);
+
+    if (!accountIdentity) {
+      response.status(502).json({
+        ok: false,
+        status: "account_identity_unavailable",
+        provider: "google-classroom",
+        configured: true,
+        connected: false,
+        message:
+          "Google Classroom connected, but Student Hub could not confirm the Google account.",
+      });
+      return;
+    }
+
+    const existingSessionResult = readClassroomSession(request);
+    const sessionCookie = createClassroomSessionCookieFromTokenResponse(
+      tokenResult.json,
+      existingSessionResult.ok ? existingSessionResult.session : null,
+      accountIdentity
+    );
+
+    response.setHeader("Set-Cookie", sessionCookie.cookie);
+    response.status(200).json({
+      ok: true,
+      status: "classroom_popup_session_created",
+      provider: "google-classroom",
+      configured: true,
+      connected: true,
+      message: "Google Classroom connected for this browser.",
+      accountChanged: sessionCookie.accountChanged,
+      account: {
+        email: sessionCookie.accountEmail,
+      },
+      session: {
+        storedIn: "encrypted_http_only_cookie",
+        expiresAt: sessionCookie.expiresAt,
+        hasRefreshToken: sessionCookie.hasRefreshToken,
+        reconnectMayBeRequired: !sessionCookie.hasRefreshToken,
+      },
+    });
+  } catch (error) {
+    response.status(error?.message === "missing_session_secret" ? 501 : 502).json({
+      ok: false,
+      status:
+        error?.message === "missing_session_secret"
+          ? "classroom_session_not_configured"
+          : "token_exchange_failed",
+      provider: "google-classroom",
+      configured: true,
+      connected: false,
+      message:
+        error?.message === "missing_session_secret"
+          ? "Google OAuth worked, but Student Hub session encryption is not configured."
+          : "Google Classroom connection could not be completed.",
+    });
+  }
+}
+
 export default async function handler(request, response) {
-  // Safe OAuth proof only: exchange server-side, read courses once, discard tokens.
+  // Redirect fallback and popup exchange both create encrypted HttpOnly sessions.
   const config = getGoogleClassroomOAuthConfigStatus();
 
   if (!config.configured) {
@@ -99,6 +199,11 @@ export default async function handler(request, response) {
       nextStep:
         "Add the required environment variables in Vercel before implementing the callback.",
     });
+    return;
+  }
+
+  if (request.method === "POST") {
+    await handlePopupCodeExchange(request, response, config);
     return;
   }
 
@@ -145,10 +250,7 @@ export default async function handler(request, response) {
           status: "token_exchange_failed",
           configured: true,
           message: "Google OAuth token exchange failed.",
-          googleError: getSafeGoogleError(
-            tokenJson,
-            "Google token endpoint rejected the authorization code."
-          ),
+          googleError: "Google rejected the authorization code.",
           nextStep:
             "Start the authorization flow again or review the OAuth configuration.",
         });
@@ -161,7 +263,7 @@ export default async function handler(request, response) {
           status: "token_exchange_failed",
           configured: true,
           message: "Google OAuth token exchange did not return an access token.",
-          googleError: "Token endpoint returned an unexpected response.",
+          googleError: "Google returned an unexpected response.",
           nextStep:
             "Try the authorization flow again after checking the OAuth configuration.",
         });
@@ -170,7 +272,27 @@ export default async function handler(request, response) {
 
       requestStage = "session_create";
 
-      const sessionCookie = createClassroomSessionCookie(tokenJson);
+      const accountIdentity = await getGoogleAccountIdentity(tokenJson);
+
+      if (!accountIdentity) {
+        sendCallbackResult(request, response, 502, {
+          ok: false,
+          status: "account_identity_unavailable",
+          configured: true,
+          message:
+            "Google OAuth worked, but Student Hub could not confirm the Google account.",
+          nextStep:
+            "Try connecting again after checking the OAuth consent configuration.",
+        });
+        return;
+      }
+
+      const existingSessionResult = readClassroomSession(request);
+      const sessionCookie = createClassroomSessionCookie(
+        tokenJson,
+        existingSessionResult.ok ? existingSessionResult.session : null,
+        accountIdentity
+      );
 
       response.setHeader("Set-Cookie", sessionCookie.cookie);
 
@@ -194,10 +316,7 @@ export default async function handler(request, response) {
           configured: true,
           message:
             "Google OAuth worked, but Student Hub could not read Classroom courses.",
-          googleError: getSafeGoogleError(
-            coursesJson,
-            "Google Classroom courses endpoint returned an unexpected response."
-          ),
+          googleError: "Google Classroom courses could not be read.",
           nextStep:
             "Check Classroom permissions, scopes, and whether the selected Google account has Classroom access.",
         });
@@ -219,10 +338,15 @@ export default async function handler(request, response) {
           courses.length > 0
             ? "Google Classroom connection session was created securely for MVP testing."
             : "Google Classroom session was created, but no active courses were found for this account.",
+        accountChanged: sessionCookie.accountChanged,
+        account: {
+          email: sessionCookie.accountEmail,
+        },
         session: {
           storedIn: "encrypted_http_only_cookie",
           expiresAt: sessionCookie.expiresAt,
           hasRefreshToken: sessionCookie.hasRefreshToken,
+          reconnectMayBeRequired: !sessionCookie.hasRefreshToken,
         },
         courseSummary: {
           count: courses.length,

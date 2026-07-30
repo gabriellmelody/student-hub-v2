@@ -566,8 +566,8 @@ button {
     bottom: calc(76px + env(safe-area-inset-bottom, 0px));
     left: 8px;
     display: grid;
-    grid-template-rows: auto minmax(0, auto);
-    max-height: min(72dvh, 620px);
+    grid-template-rows: auto minmax(0, 1fr);
+    max-height: min(76dvh, calc(100dvh - 94px - env(safe-area-inset-bottom, 0px)));
     overflow: hidden;
     border: 1px solid var(--border-strong);
     border-radius: 24px;
@@ -621,7 +621,7 @@ button {
     gap: 12px;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 12px 14px 16px;
+    padding: 12px 14px calc(16px + env(safe-area-inset-bottom, 0px));
   }
 
   .mobile-more-section {
