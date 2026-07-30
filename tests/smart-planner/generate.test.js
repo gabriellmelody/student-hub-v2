@@ -130,13 +130,17 @@ test("successful generation returns safe remaining quota metadata", async () => 
       },
     });
     const response = createResponse();
-    await handler(validRequest(), response);
+    const request = validRequest();
+    request.body.plannerContext = "Temporary EE progress details";
+    await handler(request, response);
 
     assert.equal(response.statusCode, 200);
     assert.equal(response.payload.remainingGenerations, 2);
     assert.match(response.payload.resetAt, /^2026-07-31T10:00:00\.000Z$/);
     assert.equal(providerCalls, 1);
     assert.match(response.headers.get("set-cookie"), /HttpOnly/);
+    assert.equal(JSON.stringify(response.payload).includes("Temporary EE progress details"), false);
+    assert.equal(Object.hasOwn(response.payload, "plannerContext"), false);
   });
 });
 

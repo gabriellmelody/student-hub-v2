@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildSmartPlannerTaskPayload,
+  getDefaultSmartPlannerDraft,
   getNextHalfHourStart,
+  normalizeSmartPlannerContext,
   shouldRequestSmartPlannerAi,
 } from "./smartPlannerUtils.js";
 
@@ -85,7 +87,13 @@ test("Basic planning makes no AI request and preserves displayed quota", () => {
   const quota = { remainingGenerations: 2, resetAt: "2026-07-31T10:00:00.000Z" };
   let smartPlannerApiRequests = 0;
 
-  if (shouldRequestSmartPlannerAi({ basic: true, ...quota })) {
+  if (
+    shouldRequestSmartPlannerAi({
+      basic: true,
+      plannerContext: "Temporary context must stay local.",
+      ...quota,
+    })
+  ) {
     smartPlannerApiRequests += 1;
   }
 
@@ -98,4 +106,28 @@ test("Basic planning makes no AI request and preserves displayed quota", () => {
     shouldRequestSmartPlannerAi({ basic: false, remainingGenerations: 0 }),
     false
   );
+});
+
+test("Planner context is trimmed, bounded, and fresh for each modal open", () => {
+  assert.equal(normalizeSmartPlannerContext("  steady EE progress  "), "steady EE progress");
+  assert.equal(normalizeSmartPlannerContext("x".repeat(900)).length, 800);
+
+  const firstOpen = getDefaultSmartPlannerDraft({ now: localTime(14, 5) });
+  firstOpen.plannerContext = "Temporary details";
+  const reopened = getDefaultSmartPlannerDraft({ now: localTime(14, 5) });
+
+  assert.equal(reopened.plannerContext, "");
+  assert.equal(firstOpen.plannerContext, "Temporary details");
+});
+
+test("editing context alone creates no API request or quota change", () => {
+  const quota = { remainingGenerations: 3, resetAt: "" };
+  const draft = getDefaultSmartPlannerDraft({ now: localTime(14, 5) });
+  let smartPlannerApiRequests = 0;
+
+  draft.plannerContext = "Prioritise my existing EE task.";
+
+  assert.equal(smartPlannerApiRequests, 0);
+  assert.equal(quota.remainingGenerations, 3);
+  assert.equal(draft.plannerContext, "Prioritise my existing EE task.");
 });

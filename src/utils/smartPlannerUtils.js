@@ -1,11 +1,18 @@
 export const SMART_PLANNER_MAX_TASKS = 20;
 export const SMART_PLANNER_MAX_BUSY_INTERVALS = 40;
+export const SMART_PLANNER_CONTEXT_MAX_LENGTH = 800;
 
 export function shouldRequestSmartPlannerAi({
   basic = false,
   remainingGenerations = null,
 } = {}) {
   return basic !== true && remainingGenerations !== 0;
+}
+
+export function normalizeSmartPlannerContext(value) {
+  return typeof value === "string"
+    ? value.trim().slice(0, SMART_PLANNER_CONTEXT_MAX_LENGTH)
+    : "";
 }
 
 function padTimePart(value) {
@@ -48,6 +55,7 @@ export function getDefaultSmartPlannerDraft({
       endTime: "",
       planStyle: "balanced",
       useCalendar: calendarAvailable,
+      plannerContext: "",
       noTimeLeftToday: true,
     };
   }
@@ -59,6 +67,7 @@ export function getDefaultSmartPlannerDraft({
     endTime: formatMinuteOfDay(finishMinute),
     planStyle: "balanced",
     useCalendar: calendarAvailable,
+    plannerContext: "",
     noTimeLeftToday: finishMinute - start.minute < 15,
   };
 }
@@ -199,6 +208,7 @@ export function getSmartPlannerLocalContext(draft, now = new Date()) {
     timeZone: truncate(timeZone, 80),
     utcOffsetMinutes: -now.getTimezoneOffset(),
     planningStyle: draft.planStyle,
+    plannerContext: normalizeSmartPlannerContext(draft.plannerContext),
   };
 }
 

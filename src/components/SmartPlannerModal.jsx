@@ -1,5 +1,8 @@
 import { useEffect, useRef } from "react";
-import { formatPlannerPreviewTime } from "../utils/smartPlannerUtils.js";
+import {
+  formatPlannerPreviewTime,
+  SMART_PLANNER_CONTEXT_MAX_LENGTH,
+} from "../utils/smartPlannerUtils.js";
 
 const PLAN_STYLE_OPTIONS = [
   ["balanced", "Balanced", "Realistic progress with breaks"],
@@ -178,6 +181,22 @@ export default function SmartPlannerModal({
                     ? "Uses calendars marked Block study time."
                     : "No Calendar busy-time data is available."}
                 </small>
+              </span>
+            </label>
+
+            <label className="smart-planner-context-field">
+              <span>Anything Smart Planner should know?</span>
+              <small>Add progress, priorities or details that are not shown on your tasks.</small>
+              <textarea
+                rows="3"
+                maxLength={SMART_PLANNER_CONTEXT_MAX_LENGTH}
+                value={draft.plannerContext || ""}
+                onChange={(event) => updateDraft("plannerContext", event.target.value)}
+                placeholder="My EE is 1,000 of 4,000 words and needs steady progress. I also want to finish the overdue worksheet today."
+                disabled={loading}
+              />
+              <span className="smart-planner-context-count" aria-live="polite">
+                {(draft.plannerContext || "").length}/{SMART_PLANNER_CONTEXT_MAX_LENGTH}
               </span>
             </label>
 
