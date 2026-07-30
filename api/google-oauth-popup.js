@@ -185,30 +185,6 @@ export async function validatePopupCodeExchangeRequest(
   };
 }
 
-function getIdentityFromIdToken(tokenResponse) {
-  const idToken = tokenResponse?.id_token;
-
-  if (typeof idToken !== "string") return null;
-
-  const [, payloadValue] = idToken.split(".");
-
-  if (!payloadValue) return null;
-
-  try {
-    const payload = JSON.parse(Buffer.from(payloadValue, "base64url").toString("utf8"));
-    const accountId = typeof payload.sub === "string" ? payload.sub : "";
-
-    if (!accountId) return null;
-
-    return {
-      accountId,
-      accountEmail: typeof payload.email === "string" ? payload.email : "",
-    };
-  } catch {
-    return null;
-  }
-}
-
 function normalizeAccountIdentity(identity) {
   const accountId = String(identity?.sub || identity?.accountId || "").trim();
 
@@ -221,12 +197,6 @@ function normalizeAccountIdentity(identity) {
 }
 
 export async function getGoogleAccountIdentity(tokenResponse) {
-  const idTokenIdentity = normalizeAccountIdentity(
-    getIdentityFromIdToken(tokenResponse)
-  );
-
-  if (idTokenIdentity) return idTokenIdentity;
-
   const accessToken = tokenResponse?.access_token;
 
   if (typeof accessToken !== "string" || accessToken.length === 0) {
@@ -234,7 +204,7 @@ export async function getGoogleAccountIdentity(tokenResponse) {
   }
 
   const userInfoResponse = await fetch(
-    "https://www.googleapis.com/oauth2/v3/userinfo",
+    "https://openidconnect.googleapis.com/v1/userinfo",
     {
       headers: {
         Accept: "application/json",

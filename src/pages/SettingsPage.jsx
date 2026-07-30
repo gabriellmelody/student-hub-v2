@@ -51,11 +51,15 @@ const GOOGLE_OAUTH_BROWSER_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_OAUTH_CLIENT_ID ||
   "";
 const GOOGLE_CLASSROOM_POPUP_SCOPES = [
+  "openid",
+  "email",
   "https://www.googleapis.com/auth/classroom.courses.readonly",
   "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
   "https://www.googleapis.com/auth/classroom.student-submissions.me.readonly",
 ];
 const GOOGLE_CALENDAR_POPUP_SCOPES = [
+  "openid",
+  "email",
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   "https://www.googleapis.com/auth/calendar.events.readonly",
 ];

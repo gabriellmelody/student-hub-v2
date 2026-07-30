@@ -115,7 +115,7 @@ async function handlePopupCodeExchange(request, response, config) {
         configured: true,
         connected: false,
         message:
-          "Google Calendar connected, but Student Hub could not confirm the Google account.",
+          "Google did not share the account identity Student Hub needs. Reconnect and allow the requested account information.",
       });
       return;
     }
@@ -258,7 +258,7 @@ export default async function handler(request, response) {
         status: "account_identity_unavailable",
         configured: true,
         message:
-          "Google OAuth worked, but Student Hub could not confirm the Google account.",
+          "Google did not share the account identity Student Hub needs. Reconnect and allow the requested account information.",
       });
       return;
     }
