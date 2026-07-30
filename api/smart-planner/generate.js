@@ -4,11 +4,11 @@ import {
   requestAnthropicPlan,
   validateSmartPlannerOutput,
   validateSmartPlannerRequest,
-} from "./_planner.js";
+} from "../../server/smart-planner/planner.js";
 import {
   consumeSmartPlannerQuota,
   readSmartPlannerQuota,
-} from "./_quota.js";
+} from "../../server/smart-planner/quota.js";
 
 const BURST_WINDOW_MS = 60 * 1000;
 const BURST_MAX_ATTEMPTS = 6;

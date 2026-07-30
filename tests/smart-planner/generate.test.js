@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSmartPlannerHandler } from "./generate.js";
+import { createSmartPlannerHandler } from "../../api/smart-planner/generate.js";
 
 const ENV = {
   NODE_ENV: "production",

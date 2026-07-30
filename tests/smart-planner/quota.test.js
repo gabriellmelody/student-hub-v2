@@ -5,7 +5,7 @@ import {
   consumeSmartPlannerQuota,
   getSmartPlannerDailyLimit,
   readSmartPlannerQuota,
-} from "./_quota.js";
+} from "../../server/smart-planner/quota.js";
 
 const NOW = Date.parse("2026-07-30T10:00:00.000Z");
 const ENV = {

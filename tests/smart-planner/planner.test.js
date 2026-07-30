@@ -7,7 +7,7 @@ import {
   requestAnthropicPlan,
   validateSmartPlannerOutput,
   validateSmartPlannerRequest,
-} from "./_planner.js";
+} from "../../server/smart-planner/planner.js";
 
 const input = {
   startMinute: 900,
