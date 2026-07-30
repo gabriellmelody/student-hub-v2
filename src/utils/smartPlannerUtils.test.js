@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildSmartPlannerTaskPayload,
+  formatSmartPlannerResetTime,
   getDefaultSmartPlannerDraft,
   getNextHalfHourStart,
   normalizeSmartPlannerContext,
@@ -47,6 +48,25 @@ test("does not roll a current-day plan into tomorrow", () => {
     minute: null,
     time: "",
   });
+});
+
+test("formats Smart Planner reset times in the browser's local day", () => {
+  const now = localTime(14, 0);
+
+  assert.equal(
+    formatSmartPlannerResetTime(localTime(18, 30), now, "en-US"),
+    "Resets today at 6:30 PM"
+  );
+  assert.equal(
+    formatSmartPlannerResetTime(new Date(2026, 6, 31, 9, 5), now, "en-US"),
+    "Resets tomorrow at 9:05 AM"
+  );
+  assert.equal(
+    formatSmartPlannerResetTime(new Date(2026, 7, 3, 16, 0), now, "en-US"),
+    "Resets Aug 3 at 4:00 PM"
+  );
+  assert.equal(formatSmartPlannerResetTime(null, now, "en-US"), "");
+  assert.equal(formatSmartPlannerResetTime("not-a-date", now, "en-US"), "");
 });
 
 test("preselects the 20 most relevant active tasks", () => {

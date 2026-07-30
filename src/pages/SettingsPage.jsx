@@ -44,6 +44,7 @@ import {
   getGoogleCalendarAccountId,
   reconcileGoogleCalendarAccountStorage,
 } from "../utils/googleCalendarStorage.js";
+import { formatSmartPlannerResetTime } from "../utils/smartPlannerUtils.js";
 
 const REAL_CLASSROOM_COURSE_SELECTIONS_KEY =
   "studentHub.realClassroomCourseSelections";
@@ -580,6 +581,9 @@ function SettingsPage({
   initialView = "hub",
   classroomCallbackStatus = null,
   googleCalendarCallbackStatus = null,
+  smartPlannerStatus,
+  onRefreshSmartPlannerStatus,
+  onOpenSmartPlanner,
   navigationRequest = 0,
 }) {
   const [settingsView, setSettingsView] = useState(() => initialView || "hub");
@@ -1332,9 +1336,12 @@ function SettingsPage({
           restoreArchivedClassroomTasks={restoreArchivedClassroomTasks}
           updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
           classroomCallbackStatus={classroomCallbackStatus}
-            googleCalendarCallbackStatus={googleCalendarCallbackStatus}
-            navigationRequest={navigationRequest}
-          />
+          googleCalendarCallbackStatus={googleCalendarCallbackStatus}
+          smartPlannerStatus={smartPlannerStatus}
+          onRefreshSmartPlannerStatus={onRefreshSmartPlannerStatus}
+          onOpenSmartPlanner={onOpenSmartPlanner}
+          navigationRequest={navigationRequest}
+        />
       ) : settingsView === "quickLinks" ? (
         <QuickLinksSettings
           quickLinksPreferences={quickLinksPreferences}
@@ -1359,6 +1366,9 @@ function IntegrationsSettings({
   updateMockClassroomCourseSubject,
   classroomCallbackStatus,
   googleCalendarCallbackStatus,
+  smartPlannerStatus,
+  onRefreshSmartPlannerStatus,
+  onOpenSmartPlanner,
   navigationRequest = 0,
 }) {
   const sampleCourses = buildMockClassroomPreview(mockClassroomData);
@@ -1587,6 +1597,10 @@ function IntegrationsSettings({
     ).length,
     message: classroomCleanupMessage,
   };
+
+  useEffect(() => {
+    onRefreshSmartPlannerStatus?.();
+  }, [onRefreshSmartPlannerStatus]);
 
   useEffect(() => {
     return () => {
@@ -3330,6 +3344,9 @@ function IntegrationsSettings({
               onManageGoogleCalendars={() =>
                 setGoogleCalendarManagerPageOpen(true)
               }
+              smartPlannerStatus={smartPlannerStatus}
+              onRefreshSmartPlannerStatus={onRefreshSmartPlannerStatus}
+              onOpenSmartPlanner={onOpenSmartPlanner}
             />
           ))}
         </div>
@@ -3460,10 +3477,14 @@ function IntegrationCard({
   onLoadGoogleCalendars,
   googleCalendarConnectButtonRef,
   onManageGoogleCalendars,
+  smartPlannerStatus,
+  onRefreshSmartPlannerStatus,
+  onOpenSmartPlanner,
 }) {
   const isClassroom = integration.id === "google-classroom";
   const isRealClassroom = integration.id === "real-google-classroom";
   const isGoogleCalendar = integration.id === "google-calendar";
+  const isSmartPlanner = integration.id === "ai-planner";
   const isLinkedSample = isClassroom && classroomConnection.linked;
   const status = isClassroom
     ? isLinkedSample
@@ -3477,7 +3498,20 @@ function IntegrationCard({
       ? googleCalendarSession.connected
         ? "linked"
         : "not-linked"
-      : integration.status;
+      : isSmartPlanner
+        ? smartPlannerStatus?.error
+          ? "unavailable"
+          : smartPlannerStatus?.loading
+            ? "checking"
+            : smartPlannerStatus?.status === "ready"
+              ? "ready"
+              : smartPlannerStatus?.status === "daily_limit_reached"
+                ? "daily-limit-reached"
+                : smartPlannerStatus?.status === "unavailable" ||
+                    smartPlannerStatus?.status === "configuration_error"
+                  ? "unavailable"
+                  : "checking"
+        : integration.status;
   const { includedCount } = getRealClassroomCourseCounts(
     realClassroomCourses.courses,
     realClassroomCourseSelections
@@ -3510,7 +3544,7 @@ function IntegrationCard({
     <article className="integration-card">
       <div className="integration-card-heading">
         <span className="integration-provider-mark" aria-hidden="true">
-          {integration.id === "ai-planner" ? "AI" : "G"}
+          {isSmartPlanner ? "AI" : "G"}
         </span>
         <div>
           <h3>{integration.name}</h3>
@@ -3519,7 +3553,7 @@ function IntegrationCard({
         <span
           className={`integration-status integration-status-${status}`}
         >
-          {integrationStatusLabels[status]}
+          {integrationStatusLabels[status] || "Checking"}
         </span>
       </div>
 
@@ -3553,6 +3587,9 @@ function IntegrationCard({
           calendarState={googleCalendarCalendars}
           preferences={googleCalendarPreferences}
         />
+      )}
+      {isSmartPlanner && (
+        <SmartPlannerIntegrationStatus status={smartPlannerStatus} />
       )}
       {isLinkedSample && (
         <dl className="integration-sync-meta" aria-label="Sample sync status">
@@ -3730,6 +3767,24 @@ function IntegrationCard({
                 </a>
               )}
             </>
+          ) : isSmartPlanner ? (
+            <>
+              <button
+                type="button"
+                className="integration-oauth-prototype-link"
+                onClick={onOpenSmartPlanner}
+              >
+                Open Smart Planner
+              </button>
+              <button
+                type="button"
+                className="integration-setup-button secondary"
+                onClick={onRefreshSmartPlannerStatus}
+                disabled={smartPlannerStatus?.loading}
+              >
+                {smartPlannerStatus?.loading ? "Refreshing..." : "Refresh status"}
+              </button>
+            </>
           ) : (
             <button type="button" className="integration-link-button" disabled>
               {integrationStatusLabels[status]}
@@ -3738,6 +3793,52 @@ function IntegrationCard({
         )}
       </div>
     </article>
+  );
+}
+
+function SmartPlannerIntegrationStatus({ status }) {
+  const dailyLimit = Number.isInteger(status?.dailyLimit)
+    ? status.dailyLimit
+    : 3;
+  const remaining = Number.isInteger(status?.remainingGenerations)
+    ? Math.max(0, status.remainingGenerations)
+    : null;
+  const resetLabel = formatSmartPlannerResetTime(status?.resetAt);
+  const isLimitReached = status?.status === "daily_limit_reached";
+  const isUnavailable =
+    status?.status === "unavailable" ||
+    status?.status === "configuration_error" ||
+    Boolean(status?.error);
+
+  let detail = `${dailyLimit} AI plans available every 24 hours`;
+  let support = "Basic Planner is always available.";
+
+  if (status?.loading && status?.status === "unknown") {
+    detail = "Checking Smart Planner availability...";
+  } else if (isLimitReached) {
+    detail = `0 of ${dailyLimit} AI plans remaining`;
+    support = "Basic Planner is still available.";
+  } else if (isUnavailable) {
+    detail = "Smart Planner is temporarily unavailable.";
+    support = "Basic Planner is still available.";
+  } else if (
+    remaining !== null &&
+    !(status?.status === "ready" && !status?.resetAt && remaining === dailyLimit)
+  ) {
+    detail = `${remaining} of ${dailyLimit} AI plans remaining`;
+  }
+
+  return (
+    <div
+      className="smart-planner-integration-status"
+      role="status"
+      aria-live="polite"
+      aria-busy={status?.loading ? "true" : "false"}
+    >
+      <strong>{detail}</strong>
+      {resetLabel && !isUnavailable && <span>{resetLabel}</span>}
+      <small>{support}</small>
+    </div>
   );
 }
 

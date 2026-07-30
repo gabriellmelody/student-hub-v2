@@ -53,6 +53,20 @@ function validRequest() {
   };
 }
 
+function statusRequest(cookie = "") {
+  return {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-student-hub-request": "smart-planner",
+      "x-forwarded-for": "203.0.113.5",
+      origin: "https://student.example",
+      ...(cookie ? { cookie } : {}),
+    },
+    body: { action: "status" },
+  };
+}
+
 function providerPlan() {
   return {
     ok: true,
@@ -103,6 +117,141 @@ test("invalid requests do not consume quota", async () => {
   assert.equal(response.statusCode, 405);
   assert.equal(response.headers.has("set-cookie"), false);
   assert.equal(providerCalls, 0);
+});
+
+test("status mode reports the full allowance without calling the provider", async () => {
+  await withAllowedOrigin(async () => {
+    let providerCalls = 0;
+    const handler = createSmartPlannerHandler({
+      env: ENV,
+      requestPlan: async () => {
+        providerCalls += 1;
+        return providerPlan();
+      },
+    });
+    const response = createResponse();
+    await handler(statusRequest(), response);
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.payload, {
+      ok: true,
+      configured: true,
+      status: "ready",
+      remainingGenerations: 3,
+      dailyLimit: 3,
+      resetAt: null,
+      basicPlannerAvailable: true,
+    });
+    assert.equal(providerCalls, 0);
+    assert.equal(response.headers.has("set-cookie"), false);
+  });
+});
+
+test("repeated status checks read quota without consuming it", async () => {
+  await withAllowedOrigin(async () => {
+    let providerCalls = 0;
+    const handler = createSmartPlannerHandler({
+      env: ENV,
+      requestPlan: async () => {
+        providerCalls += 1;
+        return providerPlan();
+      },
+    });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const response = createResponse();
+      await handler(statusRequest(), response);
+      assert.equal(response.payload.remainingGenerations, 3);
+      assert.equal(response.payload.resetAt, null);
+      assert.equal(response.headers.has("set-cookie"), false);
+    }
+    assert.equal(providerCalls, 0);
+  });
+});
+
+test("status mode reports existing and exhausted signed quota", async () => {
+  await withAllowedOrigin(async () => {
+    let providerCalls = 0;
+    let cookie = "";
+    const now = Date.parse("2026-07-30T10:00:00.000Z");
+    const handler = createSmartPlannerHandler({
+      env: ENV,
+      now: () => now,
+      ipBuckets: new Map(),
+      requestPlan: async () => {
+        providerCalls += 1;
+        return providerPlan();
+      },
+    });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const request = validRequest();
+      request.headers.cookie = cookie;
+      const response = createResponse();
+      await handler(request, response);
+      cookie = String(response.headers.get("set-cookie")).split(";")[0];
+
+      const statusResponse = createResponse();
+      await handler(statusRequest(cookie), statusResponse);
+      assert.equal(statusResponse.payload.remainingGenerations, 2 - attempt);
+      assert.equal(statusResponse.payload.dailyLimit, 3);
+      assert.equal(
+        statusResponse.payload.status,
+        attempt === 2 ? "daily_limit_reached" : "ready"
+      );
+      assert.equal(statusResponse.payload.resetAt, "2026-07-31T10:00:00.000Z");
+      assert.equal(statusResponse.headers.has("set-cookie"), false);
+    }
+
+    assert.equal(providerCalls, 3);
+  });
+});
+
+test("status mode reports missing server configuration safely", async () => {
+  await withAllowedOrigin(async () => {
+    const missingKeyResponse = createResponse();
+    await createSmartPlannerHandler({
+      env: { ...ENV, ANTHROPIC_API_KEY: "" },
+    })(statusRequest(), missingKeyResponse);
+
+    assert.equal(missingKeyResponse.payload.status, "unavailable");
+    assert.equal(missingKeyResponse.payload.configured, false);
+    assert.equal(missingKeyResponse.payload.basicPlannerAvailable, true);
+
+    const missingSecretResponse = createResponse();
+    await createSmartPlannerHandler({
+      env: { ...ENV, SMART_PLANNER_USAGE_SECRET: "" },
+    })(statusRequest(), missingSecretResponse);
+
+    assert.equal(missingSecretResponse.payload.status, "configuration_error");
+    assert.equal(missingSecretResponse.payload.configured, false);
+    assert.equal(missingSecretResponse.payload.basicPlannerAvailable, true);
+    assert.equal(missingSecretResponse.headers.has("set-cookie"), false);
+  });
+});
+
+test("status mode handles a tampered quota cookie without exposing it", async () => {
+  await withAllowedOrigin(async () => {
+    let providerCalls = 0;
+    const handler = createSmartPlannerHandler({
+      env: ENV,
+      requestPlan: async () => {
+        providerCalls += 1;
+        return providerPlan();
+      },
+    });
+    const response = createResponse();
+    const cookie = "student_hub_smart_planner_quota=tampered.payload";
+    await handler(statusRequest(cookie), response);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.payload.status, "configuration_error");
+    assert.equal(response.payload.remainingGenerations, 0);
+    assert.equal(response.payload.resetAt, null);
+    assert.equal(response.headers.has("set-cookie"), false);
+    assert.equal(JSON.stringify(response.payload).includes("tampered"), false);
+    assert.equal(providerCalls, 0);
+  });
 });
 
 test("missing Anthropic configuration does not consume quota", async () => {

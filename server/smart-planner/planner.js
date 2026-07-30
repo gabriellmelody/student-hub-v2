@@ -264,7 +264,7 @@ function normalizeBusyIntervals(intervals, startMinute, finishMinute) {
   }, []);
 }
 
-export async function validateSmartPlannerRequest(request) {
+export async function validateSmartPlannerRequest(request, { allowStatus = false } = {}) {
   if (request.method !== "POST") {
     return { ok: false, statusCode: 405, status: "method_not_allowed", message: "Smart Planner uses POST requests." };
   }
@@ -302,6 +302,10 @@ export async function validateSmartPlannerRequest(request) {
 
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, statusCode: 400, status: "invalid_request", message: "Smart Planner needs valid planning details." };
+  }
+
+  if (allowStatus && body.action === "status") {
+    return { ok: true, action: "status" };
   }
 
   const localDate = text(body.localDate, 10);

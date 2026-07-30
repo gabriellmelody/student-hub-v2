@@ -960,6 +960,30 @@
   color: var(--safe);
 }
 
+.integration-status-ready {
+  border-color: var(--effort-low-border);
+  background: var(--effort-low-bg);
+  color: var(--safe);
+}
+
+.integration-status-checking {
+  border-color: var(--border-strong);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+
+.integration-status-daily-limit-reached {
+  border-color: var(--effort-medium-border);
+  background: var(--effort-medium-bg);
+  color: var(--text-secondary);
+}
+
+.integration-status-unavailable {
+  border-color: var(--border-strong);
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+}
+
 .integration-status-planned-later {
   border-style: dashed;
 }
@@ -993,6 +1017,29 @@
 
 .integration-helper {
   color: var(--text-muted);
+}
+
+.smart-planner-integration-status {
+  display: grid;
+  gap: 3px;
+  margin-top: 9px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.smart-planner-integration-status strong {
+  color: var(--text-secondary);
+  font-size: 0.69rem;
+  line-height: 1.35;
+}
+
+.smart-planner-integration-status span,
+.smart-planner-integration-status small {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  line-height: 1.4;
 }
 
 .integration-card-message-error {

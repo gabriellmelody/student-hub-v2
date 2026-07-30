@@ -91,7 +91,44 @@ function recordIpAttempt(safeguard) {
 function quotaFields(quota) {
   return {
     remainingGenerations: quota.remainingGenerations,
+    dailyLimit: quota.limit,
     resetAt: quota.resetAt,
+  };
+}
+
+function getSmartPlannerStatus({ env, quota }) {
+  if (!env.ANTHROPIC_API_KEY) {
+    return {
+      ok: true,
+      configured: false,
+      status: "unavailable",
+      remainingGenerations: quota.remainingGenerations,
+      dailyLimit: quota.limit,
+      resetAt: quota.resetAt,
+      basicPlannerAvailable: true,
+    };
+  }
+
+  if (!quota.configured || quota.invalidCookie) {
+    return {
+      ok: true,
+      configured: false,
+      status: "configuration_error",
+      remainingGenerations: quota.remainingGenerations,
+      dailyLimit: quota.limit,
+      resetAt: quota.resetAt,
+      basicPlannerAvailable: true,
+    };
+  }
+
+  return {
+    ok: true,
+    configured: true,
+    status: quota.allowed ? "ready" : "daily_limit_reached",
+    remainingGenerations: quota.remainingGenerations,
+    dailyLimit: quota.limit,
+    resetAt: quota.resetAt,
+    basicPlannerAvailable: true,
   };
 }
 
@@ -102,7 +139,9 @@ export function createSmartPlannerHandler({
   ipBuckets = ipAttemptBuckets,
 } = {}) {
   return async function handler(request, response) {
-    const validation = await validateSmartPlannerRequest(request);
+    const validation = await validateSmartPlannerRequest(request, {
+      allowStatus: true,
+    });
 
     if (!validation.ok) {
       return sendJson(response, validation.statusCode, {
@@ -111,6 +150,20 @@ export function createSmartPlannerHandler({
         status: validation.status,
         message: validation.message,
       });
+    }
+
+    if (validation.action === "status") {
+      const quotaSnapshot = readSmartPlannerQuota({
+        cookieHeader: request.headers?.cookie || "",
+        env,
+        now: now(),
+      });
+
+      return sendJson(
+        response,
+        200,
+        getSmartPlannerStatus({ env, quota: quotaSnapshot })
+      );
     }
 
     if (!env.ANTHROPIC_API_KEY) {

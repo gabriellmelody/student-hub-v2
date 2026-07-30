@@ -5,6 +5,10 @@ export const integrationStatusLabels = {
   "coming-soon": "Coming soon",
   "planned-later": "Planned later",
   beta: "Beta",
+  checking: "Checking",
+  ready: "Ready",
+  "daily-limit-reached": "AI limit reached",
+  unavailable: "Temporarily unavailable",
 };
 
 export const integrationCatalog = [
@@ -49,12 +53,12 @@ export const integrationCatalog = [
   },
   {
     id: "ai-planner",
-    name: "AI Planner",
+    name: "Smart Planner AI",
     provider: "Student Hub",
     description:
-      "Suggest study steps from tasks and subjects later.",
-    status: "coming-soon",
-    enabled: false,
+      "Build a focused study plan from your active tasks.",
+    status: "checking",
+    enabled: true,
     canLink: false,
     canUnlink: false,
     source: "future",

@@ -78,6 +78,54 @@ export function formatLocalDate(date = new Date()) {
   )}`;
 }
 
+export function formatSmartPlannerResetTime(
+  resetAt,
+  now = new Date(),
+  locale
+) {
+  if (!resetAt) return "";
+
+  const resetDate = new Date(resetAt);
+  const currentDate = new Date(now);
+  if (
+    !Number.isFinite(resetDate.getTime()) ||
+    !Number.isFinite(currentDate.getTime())
+  ) {
+    return "";
+  }
+
+  const dayStart = new Date(
+    currentDate.getFullYear(),
+    currentDate.getMonth(),
+    currentDate.getDate()
+  );
+  const resetDayStart = new Date(
+    resetDate.getFullYear(),
+    resetDate.getMonth(),
+    resetDate.getDate()
+  );
+  const dayDifference = Math.round(
+    (resetDayStart.getTime() - dayStart.getTime()) / (24 * 60 * 60 * 1000)
+  );
+  const time = resetDate.toLocaleTimeString(locale, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  if (dayDifference === 0) return `Resets today at ${time}`;
+  if (dayDifference === 1) return `Resets tomorrow at ${time}`;
+
+  const date = resetDate.toLocaleDateString(locale, {
+    month: "short",
+    day: "numeric",
+    year:
+      resetDate.getFullYear() === currentDate.getFullYear()
+        ? undefined
+        : "numeric",
+  });
+  return `Resets ${date} at ${time}`;
+}
+
 function truncate(value, length) {
   return String(value ?? "").trim().slice(0, length);
 }

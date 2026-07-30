@@ -159,9 +159,10 @@ export function readSmartPlannerQuota({
       status: "quota_cookie_invalid",
       limit,
       remainingGenerations: 0,
-      resetAt: new Date(now + SMART_PLANNER_QUOTA_WINDOW_MS).toISOString(),
+      resetAt: null,
       state: null,
       invalidCookie: true,
+      hasQuotaCookie: true,
     };
   }
 
@@ -173,9 +174,10 @@ export function readSmartPlannerQuota({
       decoded.state.attemptsUsed < limit ? "quota_available" : "daily_limit_reached",
     limit,
     remainingGenerations: Math.max(0, limit - decoded.state.attemptsUsed),
-    resetAt: new Date(resetAtMs).toISOString(),
+    resetAt: decoded.hadCookie ? new Date(resetAtMs).toISOString() : null,
     state: decoded.state,
     invalidCookie: false,
+    hasQuotaCookie: decoded.hadCookie,
   };
 }
 

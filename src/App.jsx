@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import "./App.css";
 import {
   AccountMenu,
@@ -302,11 +302,119 @@ function App() {
   const [smartPlannerLoading, setSmartPlannerLoading] = useState(false);
   const [smartPlannerQuota, setSmartPlannerQuota] = useState({
     remainingGenerations: null,
-    resetAt: "",
+    dailyLimit: 3,
+    resetAt: null,
+    configured: null,
+    status: "unknown",
+    loading: false,
+    error: "",
   });
   const smartPlannerRequestRef = useRef({ id: 0, controller: null });
+  const smartPlannerStatusRequestRef = useRef(null);
   const [eveningPlanSuccess, setEveningPlanSuccess] = useState(null);
   const eveningPlanSuccessTimerRef = useRef(null);
+
+  const applySmartPlannerQuotaResponse = useCallback((result) => {
+    if (!result || typeof result !== "object") return;
+
+    setSmartPlannerQuota((current) => {
+      const remainingGenerations = Number.isInteger(result.remainingGenerations)
+        ? Math.max(0, result.remainingGenerations)
+        : current.remainingGenerations;
+      const dailyLimit = Number.isInteger(result.dailyLimit)
+        ? Math.max(1, result.dailyLimit)
+        : current.dailyLimit;
+      const safeStatuses = new Set([
+        "ready",
+        "daily_limit_reached",
+        "unavailable",
+        "configuration_error",
+      ]);
+      let status = safeStatuses.has(result.status)
+        ? result.status
+        : current.status;
+
+      if (result.status === "plan_ready") {
+        status = remainingGenerations === 0 ? "daily_limit_reached" : "ready";
+      }
+
+      return {
+        ...current,
+        remainingGenerations,
+        dailyLimit,
+        resetAt:
+          typeof result.resetAt === "string" || result.resetAt === null
+            ? result.resetAt
+            : current.resetAt,
+        configured:
+          typeof result.configured === "boolean"
+            ? result.configured
+            : current.configured,
+        status,
+        error: "",
+      };
+    });
+  }, []);
+
+  const refreshSmartPlannerStatus = useCallback(({ forceFresh = false } = {}) => {
+    if (smartPlannerStatusRequestRef.current) {
+      if (forceFresh) {
+        return smartPlannerStatusRequestRef.current.then(() =>
+          refreshSmartPlannerStatus()
+        );
+      }
+      return smartPlannerStatusRequestRef.current;
+    }
+
+    setSmartPlannerQuota((current) => ({
+      ...current,
+      loading: true,
+      error: "",
+    }));
+
+    const pendingRequest = (async () => {
+      try {
+        const response = await fetch("/api/smart-planner/generate", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "X-Student-Hub-Request": "smart-planner",
+          },
+          body: JSON.stringify({ action: "status" }),
+        });
+        const result = await response.json().catch(() => null);
+
+        if (!response.ok || result?.ok !== true) {
+          throw new Error("status_unavailable");
+        }
+
+        applySmartPlannerQuotaResponse(result);
+        setSmartPlannerQuota((current) => ({
+          ...current,
+          loading: false,
+          error: "",
+        }));
+        return result;
+      } catch {
+        setSmartPlannerQuota((current) => ({
+          ...current,
+          loading: false,
+          error: "Smart Planner status could not be refreshed.",
+        }));
+        return null;
+      }
+    })();
+
+    smartPlannerStatusRequestRef.current = pendingRequest;
+    pendingRequest.finally(() => {
+      if (smartPlannerStatusRequestRef.current === pendingRequest) {
+        smartPlannerStatusRequestRef.current = null;
+      }
+    });
+    return pendingRequest;
+  }, [applySmartPlannerQuotaResponse]);
 
   function setThemeColors(nextThemeColors, options = {}) {
     const normalizedThemeColors = normalizeThemeColors(nextThemeColors);
@@ -1814,14 +1922,12 @@ function App() {
 
       if (smartPlannerRequestRef.current.id !== requestId) return;
 
-      if (Number.isInteger(result?.remainingGenerations)) {
-        setSmartPlannerQuota({
-          remainingGenerations: Math.max(0, result.remainingGenerations),
-          resetAt: typeof result.resetAt === "string" ? result.resetAt : "",
-        });
-      }
+      applySmartPlannerQuotaResponse(result);
 
       if (!response.ok || result?.ok !== true || !result.plan) {
+        if (result?.status === "daily_limit_reached") {
+          void refreshSmartPlannerStatus({ forceFresh: true });
+        }
         buildBasicPlannerPreview(
           busyIntervals,
           `${result?.message || "Smart Planner is unavailable."} Here’s a Basic plan instead.`
@@ -1848,6 +1954,7 @@ function App() {
           ),
       });
       setSmartPlannerError("");
+      void refreshSmartPlannerStatus({ forceFresh: true });
     } catch (error) {
       if (error?.name === "AbortError") return;
       if (smartPlannerRequestRef.current.id !== requestId) return;
@@ -2464,6 +2571,9 @@ function App() {
             googleCalendarCallbackStatus={
               initialNavigation.googleCalendarCallbackStatus
             }
+            smartPlannerStatus={smartPlannerQuota}
+            onRefreshSmartPlannerStatus={refreshSmartPlannerStatus}
+            onOpenSmartPlanner={openSmartPlanner}
             navigationRequest={settingsNavigationRequest}
           />
         )}
