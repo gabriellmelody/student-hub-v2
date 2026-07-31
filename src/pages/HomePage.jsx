@@ -113,7 +113,10 @@ function HomePage({
         aria-label="Student Hub overview"
         {...glowSurfaceProps}
       >
-        <div className="home-hero-zone home-next-zone">
+        <div
+          className="home-hero-zone home-next-zone"
+          data-tour="home-overview"
+        >
           <p className="home-zone-label">Next up</p>
           {nextTask ? (
             <>

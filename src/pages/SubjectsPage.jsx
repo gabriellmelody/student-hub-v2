@@ -101,6 +101,7 @@ function SubjectsPage({
         <button
           type="button"
           className="secondary-button"
+          data-tour="subject-add"
           aria-label="Manage subjects in Settings"
           onClick={() =>
             typeof openSettings === "function"
@@ -119,6 +120,7 @@ function SubjectsPage({
           <button
             type="button"
             className="primary-button"
+            data-tour="subject-empty-add"
             onClick={() =>
               typeof openSettings === "function"
                 ? openSettings("subjects")
@@ -130,7 +132,11 @@ function SubjectsPage({
         </section>
       ) : (
         <>
-          <section className="subjects-overview" aria-label="Subject overview">
+          <section
+            className="subjects-overview"
+            aria-label="Subject overview"
+            data-tour="subjects-overview"
+          >
             {subjects.map((subject) => {
               const summary = getSubjectSummary(subject);
               const isSelected = selectedScope === subject.id;
@@ -156,10 +162,14 @@ function SubjectsPage({
                   </span>
                   <span className="subject-overview-grades">
                     <small>Current</small>
-                    <strong>{subject.currentGrade || "Not set"}</strong>
+                    <strong data-tour="subject-current-grade">
+                      {subject.currentGrade || "Not set"}
+                    </strong>
                     <i aria-hidden="true">→</i>
                     <small>Target</small>
-                    <strong>{subject.targetGrade || "Not set"}</strong>
+                    <strong data-tour="subject-target-grade">
+                      {subject.targetGrade || "Not set"}
+                    </strong>
                   </span>
                   <span className="subject-overview-counts">
                     <span>

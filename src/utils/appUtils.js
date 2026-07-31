@@ -195,6 +195,7 @@ export const STUDENT_HUB_STORAGE_KEYS = [
   REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   "student-hub-hours",
   "student-hub-start-time",
+  "student-hub-guided-tours",
 ];
 
 function normalizeQuickLinkLabel(value, fallback = "School link") {

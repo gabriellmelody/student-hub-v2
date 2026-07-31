@@ -28,7 +28,7 @@ function getMobilePageTitle(activePage, settingsView) {
   if (activePage === "settings") {
     if (settingsView === "integrations") return "Integrations";
     if (settingsView === "appearance") return "Appearance";
-    if (settingsView === "help") return "Help / FAQ";
+    if (settingsView === "help") return "Help & tours";
     return "Settings";
   }
 
@@ -264,7 +264,7 @@ function MobileMoreSheet({
             </button>
             <button type="button" onClick={() => navigateSettings("help")}>
               <span aria-hidden="true">?</span>
-              <strong>Help / FAQ</strong>
+              <strong>Help & tours</strong>
             </button>
             <button
               type="button"
@@ -661,7 +661,7 @@ function AccountMenu({
                     onClick={() => chooseItem(() => openSettings("help"))}
                   >
                     <span aria-hidden="true">?</span>
-                    <span>Help / FAQ</span>
+                    <span>Help & tours</span>
                     <span aria-hidden="true">›</span>
                   </button>
                   <div className="sidebar-account-menu-divider" />

@@ -495,6 +495,7 @@ function PlanPage({
             <button
               type="button"
               className="small-button plan-primary-create-button"
+              data-tour="smart-planner-open"
               onClick={openSmartPlanner}
             >
               Smart Planner

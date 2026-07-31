@@ -112,6 +112,7 @@ function TasksPage({
           <button
             className="primary-button task-add-trigger"
             type="button"
+            data-tour="todo-add-task"
             onClick={() => setShowAddTask(true)}
           >
             + Add task

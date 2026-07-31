@@ -877,7 +877,10 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
       </header>
 
       <div className="calendar-layout">
-        <section className="panel calendar-month-panel">
+        <section
+          className="panel calendar-month-panel"
+          data-tour="calendar-overview"
+        >
           <div className="calendar-toolbar">
             <div>
               <p className="section-label">Month</p>
@@ -1167,7 +1170,10 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
             </form>
           )}
 
-          <section className="calendar-detail-section">
+          <section
+            className="calendar-detail-section"
+            data-tour="calendar-task-deadlines"
+          >
             <div className="calendar-detail-section-heading">
               <h4>Tasks due</h4>
             </div>
@@ -1255,8 +1261,22 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
             )}
           </section>
 
-          <section className="calendar-detail-section">
-            <div className="calendar-detail-section-heading">
+          <section
+            className="calendar-detail-section"
+            data-tour={
+              selectedGoogleCalendarIds.length > 0
+                ? "calendar-google-events"
+                : undefined
+            }
+          >
+            <div
+              className="calendar-detail-section-heading"
+              data-tour={
+                selectedGoogleCalendarIds.length > 0
+                  ? "calendar-busy-time"
+                  : undefined
+              }
+            >
               <h4>Schedule</h4>
               <button
                 type="button"

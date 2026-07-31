@@ -64,6 +64,7 @@ export default function SmartPlannerModal({
   onPlanWithoutAi,
   onEditSettings,
   onUsePlan,
+  guidedTourActive = false,
 }) {
   const headingRef = useRef(null);
   const returnFocusRef = useRef(null);
@@ -74,17 +75,17 @@ export default function SmartPlannerModal({
   }, []);
 
   useEffect(() => {
-    headingRef.current?.focus();
-  }, [preview]);
+    if (!guidedTourActive) headingRef.current?.focus();
+  }, [guidedTourActive, preview]);
 
   useEffect(() => {
     function closeOnEscape(event) {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape" && !guidedTourActive) onClose();
     }
 
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+  }, [guidedTourActive, onClose]);
 
   function updateDraft(field, value) {
     setDraft((currentDraft) => ({ ...currentDraft, [field]: value }));
@@ -138,7 +139,7 @@ export default function SmartPlannerModal({
 
         {!preview ? (
           <form className="smart-planner-setup" onSubmit={submit}>
-            <div className="smart-planner-time-fields">
+            <div className="smart-planner-time-fields" data-tour="smart-planner-time">
               <label>
                 <span>Start time</span>
                 <input
@@ -161,7 +162,11 @@ export default function SmartPlannerModal({
               </label>
             </div>
 
-            <fieldset className="smart-planner-style-fieldset" disabled={loading}>
+            <fieldset
+              className="smart-planner-style-fieldset"
+              data-tour="smart-planner-style"
+              disabled={loading}
+            >
               <legend>Planning style</legend>
               <div className="smart-planner-style-options">
                 {PLAN_STYLE_OPTIONS.map(([value, label, helper]) => (
@@ -199,7 +204,7 @@ export default function SmartPlannerModal({
               </span>
             </label>
 
-            <label className="smart-planner-context-field">
+            <label className="smart-planner-context-field" data-tour="smart-planner-context">
               <span>Anything Smart Planner should know?</span>
               <small>Add progress, priorities or details that are not shown on your tasks.</small>
               <textarea
@@ -219,7 +224,7 @@ export default function SmartPlannerModal({
               Current and target Subject grades can help Smart Planner balance your priorities.
             </p>
 
-            <p className="smart-planner-quota" role="status">
+            <p className="smart-planner-quota" data-tour="smart-planner-status" role="status">
               {quotaLabel}
             </p>
 
@@ -245,7 +250,7 @@ export default function SmartPlannerModal({
               </p>
             )}
 
-            <footer className="smart-planner-actions">
+            <footer className="smart-planner-actions" data-tour="smart-planner-actions">
               <button type="button" className="secondary" onClick={onClose} disabled={loading}>
                 Cancel
               </button>

@@ -10,6 +10,7 @@ import {
   RightRail,
 } from "./components/AppChrome.jsx";
 import SmartPlannerModal from "./components/SmartPlannerModal.jsx";
+import GuidedTour from "./components/GuidedTour.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import HomePage from "./pages/HomePage.jsx";
 import OnboardingFlow from "./pages/Onboarding.jsx";
@@ -76,6 +77,20 @@ import {
   shouldRequestSmartPlannerAi,
   timeStringToMinute,
 } from "./utils/smartPlannerUtils.js";
+import useGuidedTour from "./hooks/useGuidedTour.js";
+import { getGuidedTourDefinition } from "./data/guidedTours.js";
+import {
+  claimGuidedTourStartup,
+  removeTourRequestFromUrl,
+  resolveForcedTourRequest,
+  shouldCloseTourOpenedModal,
+} from "./utils/guidedTourUtils.js";
+import {
+  isGuidedTourEligible,
+  loadGuidedTourProgress,
+  saveGuidedTourOutcome,
+  shouldAutomaticallyStartGettingStarted,
+} from "./utils/guidedTourStorage.js";
 
 function resolveThemePreference(themePreference) {
   if (themePreference !== "system") return themePreference === "dark" ? "dark" : "light";
@@ -314,6 +329,24 @@ function App() {
   const smartPlannerStatusRequestRef = useRef(null);
   const [eveningPlanSuccess, setEveningPlanSuccess] = useState(null);
   const eveningPlanSuccessTimerRef = useRef(null);
+  const smartPlannerTourOpenedModalRef = useRef(false);
+  const guidedTour = useGuidedTour({
+    onExit: ({ tour, status }) => {
+      if (tour?.persistOutcome !== false) {
+        saveGuidedTourOutcome(tour, status);
+      }
+
+      if (
+        tour?.id === "smart-planner" &&
+        shouldCloseTourOpenedModal(smartPlannerTourOpenedModalRef.current)
+      ) {
+        smartPlannerTourOpenedModalRef.current = false;
+        closeSmartPlanner();
+      }
+    },
+  });
+  const startGuidedTour = guidedTour.startTour;
+  const guidedTourRequestHandledRef = useRef(false);
 
   const applySmartPlannerQuotaResponse = useCallback((result) => {
     if (!result || typeof result !== "object") return;
@@ -442,6 +475,27 @@ function App() {
 
   const [newTask, setNewTask] = useState(createEmptyTaskDraft);
 
+  const calendarBusyTimeIsAvailable = useCallback(
+    () =>
+      getBusyGoogleCalendarIds().length > 0 &&
+      Boolean(loadGoogleCalendarAccountMeta()?.accountId),
+    []
+  );
+
+  const openSmartPlanner = useCallback(() => {
+    const calendarAvailable = calendarBusyTimeIsAvailable();
+
+    setEveningPlanSuccess(null);
+    setSmartPlannerDraft(
+      getDefaultSmartPlannerDraft({ calendarAvailable })
+    );
+    setSmartPlannerError("");
+    setSmartPlannerPreview(null);
+    setSmartPlannerNeedsReplace(false);
+    setSmartPlannerLoading(false);
+    setSmartPlannerOpen(true);
+  }, [calendarBusyTimeIsAvailable]);
+
   useEffect(() => {
     if (
       typeof window !== "undefined" &&
@@ -480,6 +534,159 @@ function App() {
 
     return () => window.removeEventListener("resize", closeMobileMoreOnDesktop);
   }, []);
+
+  useEffect(() => {
+    if (guidedTourRequestHandledRef.current) return;
+
+    const forcedRequest = resolveForcedTourRequest(
+      window.location.search,
+      getGuidedTourDefinition
+    );
+    const requestedTourId = forcedRequest.id;
+    const requestedTour = forcedRequest.tour;
+    const blockingUiOpen = Boolean(
+      mobileMoreOpen || eveningPlanSuccess || showAddTask
+    );
+
+    if (requestedTourId) {
+      if (!requestedTour) {
+        claimGuidedTourStartup(guidedTourRequestHandledRef);
+        window.history.replaceState(
+          window.history.state,
+          "",
+          removeTourRequestFromUrl(window.location.href)
+        );
+        return;
+      }
+
+      if (
+        !studentProfile.onboardingCompleted ||
+        blockingUiOpen ||
+        (smartPlannerOpen && requestedTour.id !== "smart-planner")
+      ) {
+        return;
+      }
+
+      let tourToStart = requestedTour;
+
+      if (requestedTour.id === "smart-planner") {
+        const plannerWasAlreadyOpen = smartPlannerOpen;
+        smartPlannerTourOpenedModalRef.current = false;
+        tourToStart = {
+          ...requestedTour,
+          steps: requestedTour.steps.map((step, index) =>
+            index === 0
+              ? {
+                  ...step,
+                  beforeShow: () => {
+                    if (!plannerWasAlreadyOpen) {
+                      smartPlannerTourOpenedModalRef.current = true;
+                      openSmartPlanner();
+                    }
+                  },
+                }
+              : step
+          ),
+        };
+      }
+
+      if (!claimGuidedTourStartup(guidedTourRequestHandledRef)) return;
+      window.history.replaceState(
+        window.history.state,
+        "",
+        removeTourRequestFromUrl(window.location.href)
+      );
+      startGuidedTour(tourToStart);
+      return;
+    }
+
+    const gettingStartedTour = getGuidedTourDefinition("getting-started");
+    const eligible = isGuidedTourEligible(
+      gettingStartedTour,
+      loadGuidedTourProgress()
+    );
+
+    if (
+      !shouldAutomaticallyStartGettingStarted({
+        onboardingCompleted: studentProfile.onboardingCompleted,
+        blockingUiOpen: blockingUiOpen || smartPlannerOpen,
+        oauthCallbackActive: Boolean(
+          initialNavigation.classroomCallbackStatus ||
+            initialNavigation.googleCalendarCallbackStatus
+        ),
+        tourAlreadyActive: guidedTour.isTourActive,
+        eligible,
+      })
+    ) {
+      if (studentProfile.onboardingCompleted && !eligible) {
+        claimGuidedTourStartup(guidedTourRequestHandledRef);
+      }
+      return;
+    }
+
+    if (!claimGuidedTourStartup(guidedTourRequestHandledRef)) return;
+    startGuidedTour(gettingStartedTour);
+  }, [
+    eveningPlanSuccess,
+    guidedTour.isTourActive,
+    initialNavigation.classroomCallbackStatus,
+    initialNavigation.googleCalendarCallbackStatus,
+    mobileMoreOpen,
+    openSmartPlanner,
+    showAddTask,
+    smartPlannerOpen,
+    startGuidedTour,
+    studentProfile.onboardingCompleted,
+  ]);
+
+  const navigateGuidedTour = useCallback((page, nextSettingsView) => {
+    setMobileMoreOpen(false);
+    if (page === "settings" && nextSettingsView) {
+      setSettingsView(nextSettingsView);
+      setSettingsNavigationRequest((request) => request + 1);
+    }
+    setActivePage(page);
+  }, []);
+
+  const replayGuidedTour = useCallback(
+    (tourId, starterElement) => {
+      if (guidedTour.isTourActive) return false;
+
+      const requestedTour = getGuidedTourDefinition(tourId);
+      if (!requestedTour) return false;
+
+      let tourToStart = requestedTour;
+
+      if (requestedTour.id === "smart-planner") {
+        const plannerWasAlreadyOpen = smartPlannerOpen;
+        smartPlannerTourOpenedModalRef.current = false;
+        tourToStart = {
+          ...requestedTour,
+          steps: requestedTour.steps.map((step, index) =>
+            index === 0
+              ? {
+                  ...step,
+                  beforeShow: () => {
+                    if (!plannerWasAlreadyOpen) {
+                      smartPlannerTourOpenedModalRef.current = true;
+                      openSmartPlanner();
+                    }
+                  },
+                }
+              : step
+          ),
+        };
+      }
+
+      return startGuidedTour(tourToStart, starterElement);
+    },
+    [
+      guidedTour.isTourActive,
+      openSmartPlanner,
+      smartPlannerOpen,
+      startGuidedTour,
+    ]
+  );
 
   const rightRailWidgets = getWidgetsForArea(
     widgetConfig,
@@ -1584,27 +1791,6 @@ function App() {
     setActivePage("plan");
   }
 
-  function calendarBusyTimeIsAvailable() {
-    return (
-      getBusyGoogleCalendarIds().length > 0 &&
-      Boolean(loadGoogleCalendarAccountMeta()?.accountId)
-    );
-  }
-
-  function openSmartPlanner() {
-    const calendarAvailable = calendarBusyTimeIsAvailable();
-
-    setEveningPlanSuccess(null);
-    setSmartPlannerDraft(
-      getDefaultSmartPlannerDraft({ calendarAvailable })
-    );
-    setSmartPlannerError("");
-    setSmartPlannerPreview(null);
-    setSmartPlannerNeedsReplace(false);
-    setSmartPlannerLoading(false);
-    setSmartPlannerOpen(true);
-  }
-
   function closeSmartPlanner() {
     smartPlannerRequestRef.current.controller?.abort();
     smartPlannerRequestRef.current = {
@@ -1616,6 +1802,13 @@ function App() {
     setSmartPlannerPreview(null);
     setSmartPlannerNeedsReplace(false);
     setSmartPlannerLoading(false);
+  }
+
+  function closeSmartPlannerFromUi() {
+    if (guidedTour.activeTour?.id === "smart-planner") {
+      guidedTour.skipTour();
+    }
+    closeSmartPlanner();
   }
 
   async function fetchPlanningBusyIntervals(draft, signal) {
@@ -2581,6 +2774,7 @@ function App() {
             smartPlannerStatus={smartPlannerQuota}
             onRefreshSmartPlannerStatus={refreshSmartPlannerStatus}
             onOpenSmartPlanner={openSmartPlanner}
+            onReplayTour={replayGuidedTour}
             navigationRequest={settingsNavigationRequest}
           />
         )}
@@ -2629,11 +2823,12 @@ function App() {
           needsReplace={smartPlannerNeedsReplace}
           hasLockedBlocks={planBlocks.some((block) => block.locked === true)}
           calendarAvailable={calendarBusyTimeIsAvailable()}
-          onClose={closeSmartPlanner}
+          onClose={closeSmartPlannerFromUi}
           onGenerate={() => generateSmartPlannerPreview()}
           onPlanWithoutAi={() => generateSmartPlannerPreview({ basic: true })}
           onEditSettings={editSmartPlannerSettings}
           onUsePlan={useSmartPlannerPreview}
+          guidedTourActive={guidedTour.activeTour?.id === "smart-planner"}
         />
       )}
 
@@ -2644,6 +2839,25 @@ function App() {
           onClose={() => setEveningPlanSuccess(null)}
         />
       )}
+
+      <GuidedTour
+        activePage={activePage}
+        activeSettingsView={settingsView}
+        activeStepIndex={guidedTour.activeStepIndex}
+        activeTour={guidedTour.activeTour}
+        blocked={
+          mobileMoreOpen ||
+          showAddTask ||
+          Boolean(eveningPlanSuccess) ||
+          (smartPlannerOpen && guidedTour.activeTour?.id !== "smart-planner")
+        }
+        finishTour={guidedTour.finishTour}
+        isTourActive={guidedTour.isTourActive}
+        nextStep={guidedTour.nextStep}
+        onNavigate={navigateGuidedTour}
+        previousStep={guidedTour.previousStep}
+        skipTour={guidedTour.skipTour}
+      />
     </main>
   );
 }

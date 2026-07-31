@@ -21,11 +21,8 @@ import {
   normalizeQuickLinkUrl,
   quickLinkPresets,
 } from "../utils/appUtils.js";
-import {
-  helpCategories,
-  helpContent,
-  helpStatusLabels,
-} from "../data/helpContent.js";
+import { helpTopics, getHelpTopic } from "../data/helpGuides.js";
+import { getGuidedTourDefinition } from "../data/guidedTours.js";
 import { mockClassroomData } from "../data/mockClassroomData.js";
 import {
   integrationCatalog,
@@ -42,12 +39,31 @@ import {
 import {
   GOOGLE_CALENDAR_PREFERENCES_KEY,
   getGoogleCalendarAccountId,
+  loadGoogleCalendarAccountMeta,
   reconcileGoogleCalendarAccountStorage,
 } from "../utils/googleCalendarStorage.js";
 import { formatSmartPlannerResetTime } from "../utils/smartPlannerUtils.js";
+import {
+  SUPPORT_FIELD_LIMITS,
+  buildSafeDiagnosticDetails,
+  buildSupportMailto,
+  buildSupportMessage,
+  copySupportMessage,
+  getGuidedTourDisplayStatus,
+  normalizeSupportEmail,
+  resetGuidedTourProgress,
+  validateSupportDraft,
+} from "../utils/helpSupportUtils.js";
+import { loadGuidedTourProgress } from "../utils/guidedTourStorage.js";
 
 const REAL_CLASSROOM_COURSE_SELECTIONS_KEY =
   "studentHub.realClassroomCourseSelections";
+const STUDENT_HUB_SUPPORT_EMAIL = normalizeSupportEmail(
+  import.meta.env.VITE_STUDENT_HUB_SUPPORT_EMAIL || ""
+);
+const STUDENT_HUB_BUILD_ID =
+  String(import.meta.env.VITE_STUDENT_HUB_BUILD_ID || "").trim() ||
+  "Beta build";
 const GOOGLE_IDENTITY_SERVICES_SRC = "https://accounts.google.com/gsi/client";
 const GOOGLE_OAUTH_BROWSER_CLIENT_ID =
   import.meta.env.VITE_GOOGLE_CLASSROOM_CLIENT_ID ||
@@ -584,6 +600,7 @@ function SettingsPage({
   smartPlannerStatus,
   onRefreshSmartPlannerStatus,
   onOpenSmartPlanner,
+  onReplayTour,
   navigationRequest = 0,
 }) {
   const [settingsView, setSettingsView] = useState(() => initialView || "hub");
@@ -755,9 +772,10 @@ function SettingsPage({
       description: "Manage local Student Hub data and workspace defaults.",
     },
     help: {
-      eyebrow: "Settings / Help",
-      title: "Help / FAQ",
-      description: "Quick answers for getting comfortable with Student Hub.",
+      eyebrow: "Settings / Help & tours",
+      title: "Help & tours",
+      description:
+        "Learn how Student Hub works, replay guided tours or report a problem.",
     },
     integrations: {
       eyebrow: "Settings / Integrations",
@@ -839,8 +857,8 @@ function SettingsPage({
             onClick={() => setSettingsView("help")}
           >
             <span>
-              <strong>Help / FAQ</strong>
-              <small>Short answers and current feature status</small>
+              <strong>Help & tours</strong>
+              <small>Guides, tour replays, feedback, and support</small>
             </span>
             <span className="settings-hub-arrow" aria-hidden="true">
               →
@@ -1348,7 +1366,15 @@ function SettingsPage({
           setQuickLinksPreferences={setQuickLinksPreferences}
         />
       ) : (
-        <HelpSettings />
+        <HelpSettings
+          theme={theme}
+          classroomConnected={
+            classroomCallbackStatus?.result === "connected" ? true : undefined
+          }
+          calendarConnected={Boolean(loadGoogleCalendarAccountMeta()?.accountId)}
+          smartPlannerStatus={smartPlannerStatus}
+          onReplayTour={onReplayTour}
+        />
       )}
     </div>
   );
@@ -3288,7 +3314,10 @@ function IntegrationsSettings({
         onDismiss={dismissIntegrationAutoSaveError}
       />
 
-      <section className="panel integration-control-panel">
+      <section
+        className="panel integration-control-panel"
+        data-tour="integrations-overview"
+      >
         <div className="integration-control-intro">
           <div>
             <p className="settings-group-label">Connections</p>
@@ -3541,7 +3570,10 @@ function IntegrationCard({
     (!googleIdentityStatus.ready && !googleIdentityStatus.error);
 
   return (
-    <article className="integration-card">
+    <article
+      className="integration-card"
+      data-tour={isSmartPlanner ? "smart-planner-status" : undefined}
+    >
       <div className="integration-card-heading">
         <span className="integration-provider-mark" aria-hidden="true">
           {isSmartPlanner ? "AI" : "G"}
@@ -6175,68 +6207,613 @@ function QuickLinksSettings({
   );
 }
 
-function HelpSettings() {
+function HelpSettings({
+  theme,
+  classroomConnected,
+  calendarConnected,
+  smartPlannerStatus,
+  onReplayTour,
+}) {
+  const [selectedTopicId, setSelectedTopicId] = useState(null);
+  const [supportMode, setSupportMode] = useState(null);
+  const [tourProgress, setTourProgress] = useState(loadGuidedTourProgress);
+  const [resetConfirmationOpen, setResetConfirmationOpen] = useState(false);
+  const [notice, setNotice] = useState("");
+  const pageHeadingRef = useRef(null);
+  const resetDialogRef = useRef(null);
+  const resetLauncherRef = useRef(null);
+  const selectedTopic = getHelpTopic(selectedTopicId);
+  const gettingStartedTour = getGuidedTourDefinition("getting-started");
+  const gettingStartedStatus = getGuidedTourDisplayStatus(
+    gettingStartedTour,
+    tourProgress
+  );
+
+  useEffect(() => {
+    if (selectedTopic || supportMode) {
+      pageHeadingRef.current?.focus();
+    }
+  }, [selectedTopic, supportMode]);
+
+  useEffect(() => {
+    if (!resetConfirmationOpen) return undefined;
+
+    const dialog = resetDialogRef.current;
+    const focusable = dialog?.querySelectorAll(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    );
+    const firstFocusable = focusable?.[0];
+    const lastFocusable = focusable?.[focusable.length - 1];
+    firstFocusable?.focus();
+
+    function handleDialogKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setResetConfirmationOpen(false);
+        requestAnimationFrame(() => resetLauncherRef.current?.focus());
+        return;
+      }
+
+      if (event.key !== "Tab" || !firstFocusable || !lastFocusable) return;
+
+      if (event.shiftKey && document.activeElement === firstFocusable) {
+        event.preventDefault();
+        lastFocusable.focus();
+      } else if (!event.shiftKey && document.activeElement === lastFocusable) {
+        event.preventDefault();
+        firstFocusable.focus();
+      }
+    }
+
+    document.addEventListener("keydown", handleDialogKeyDown);
+    return () => document.removeEventListener("keydown", handleDialogKeyDown);
+  }, [resetConfirmationOpen]);
+
+  function closeResetConfirmation() {
+    setResetConfirmationOpen(false);
+    requestAnimationFrame(() => resetLauncherRef.current?.focus());
+  }
+
+  function confirmTourReset() {
+    resetGuidedTourProgress();
+    setTourProgress(loadGuidedTourProgress());
+    setNotice(
+      "Tour progress reset. Getting started can appear again on a future eligible visit."
+    );
+    closeResetConfirmation();
+  }
+
+  function replayTour(tourId, starterElement) {
+    if (!tourId || !onReplayTour) return;
+    onReplayTour(tourId, starterElement);
+  }
+
+  if (selectedTopic) {
+    const topicTour = selectedTopic.tourId
+      ? getGuidedTourDefinition(selectedTopic.tourId)
+      : null;
+
+    return (
+      <div className="help-settings help-guide-page">
+        <button
+          type="button"
+          className="settings-back-button"
+          onClick={() => setSelectedTopicId(null)}
+        >
+          ← Back to Help & tours
+        </button>
+
+        <article className="panel help-guide">
+          <header className="help-guide-header">
+            <div>
+              <p className="settings-group-label">Guide</p>
+              <h2 ref={pageHeadingRef} tabIndex="-1">
+                {selectedTopic.title}
+              </h2>
+              <p>{selectedTopic.summary}</p>
+            </div>
+            {topicTour && (
+              <button
+                type="button"
+                className="small-button secondary"
+                onClick={(event) =>
+                  replayTour(selectedTopic.tourId, event.currentTarget)
+                }
+              >
+                Replay {selectedTopic.title} tour
+              </button>
+            )}
+          </header>
+
+          <div className="help-guide-sections">
+            {selectedTopic.sections.map((section) => (
+              <section className="help-guide-section" key={section.title}>
+                <h3>{section.title}</h3>
+                {section.paragraphs?.map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+                {section.bullets && (
+                  <ul>
+                    {section.bullets.map((bullet) => (
+                      <li key={bullet}>{bullet}</li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+            ))}
+          </div>
+        </article>
+      </div>
+    );
+  }
+
+  if (supportMode) {
+    return (
+      <HelpSupportForm
+        mode={supportMode}
+        theme={theme}
+        classroomConnected={classroomConnected}
+        calendarConnected={calendarConnected}
+        smartPlannerStatus={smartPlannerStatus}
+        headingRef={pageHeadingRef}
+        onBack={() => setSupportMode(null)}
+      />
+    );
+  }
+
   return (
     <div className="help-settings">
-      <section className="panel help-panel">
-        <div className="help-local-summary">
+      <section className="panel help-tour-summary">
+        <div className="help-tour-summary-copy">
+          <span
+            className={`help-tour-status help-tour-status-${gettingStartedStatus
+              .toLowerCase()
+              .replace(" ", "-")}`}
+          >
+            {gettingStartedStatus}
+          </span>
           <div>
-            <p className="settings-group-label">Local for now</p>
-            <h3>Your workspace stays on this device</h3>
+            <p className="settings-group-label">Getting-started tour</p>
+            <h2>Start with the essentials</h2>
             <p>
-              There are no accounts yet. Google Classroom and AI are not
-              connected, and clearing browser site data may remove your work.
+              A short walkthrough of tasks, Subjects, Calendar and planning.
             </p>
           </div>
-          <span>Browser saved</span>
+        </div>
+        <div className="help-tour-summary-actions">
+          <button
+            type="button"
+            className="primary-button"
+            onClick={(event) =>
+              replayTour("getting-started", event.currentTarget)
+            }
+          >
+            Replay getting-started tour
+          </button>
+          <button
+            ref={resetLauncherRef}
+            type="button"
+            className="help-quiet-action"
+            onClick={() => {
+              setNotice("");
+              setResetConfirmationOpen(true);
+            }}
+          >
+            Reset all tour progress
+          </button>
+        </div>
+      </section>
+
+      {notice && (
+        <p className="help-notice" role="status">
+          {notice}
+        </p>
+      )}
+
+      <section aria-labelledby="help-guides-title">
+        <div className="help-section-heading">
+          <div>
+            <p className="settings-group-label">Guides</p>
+            <h2 id="help-guides-title">Learn Student Hub</h2>
+          </div>
+          <p>Short, practical help for each part of your workspace.</p>
         </div>
 
-        <div className="help-faq-sections">
-          {helpCategories.map((category) => {
-            const categoryItems = helpContent.filter(
-              (item) => item.category === category.id
-            );
+        <div className="help-topic-grid">
+          {helpTopics.map((topic) => {
+            const topicTour = topic.tourId
+              ? getGuidedTourDefinition(topic.tourId)
+              : null;
+            const topicStatus = topicTour
+              ? getGuidedTourDisplayStatus(topicTour, tourProgress)
+              : "";
 
             return (
-              <section className="help-faq-section" key={category.id}>
-                <div className="help-faq-section-heading">
-                  <h3>{category.label}</h3>
-                  <p>{category.description}</p>
+              <article className="help-topic-card" key={topic.id}>
+                <div className="help-topic-card-copy">
+                  <div className="help-topic-title-row">
+                    <h3>{topic.title}</h3>
+                    {topicStatus && (
+                      <span className="help-tour-status">{topicStatus}</span>
+                    )}
+                  </div>
+                  <p>{topic.summary}</p>
                 </div>
-
-                <div className="help-faq-list">
-                  {categoryItems.map((item) => (
-                    <details className="help-faq-item" key={item.id}>
-                      <summary>
-                        <span className="help-faq-title">{item.title}</span>
-                        <span
-                          className={`help-status help-status-${item.status}`}
-                        >
-                          {helpStatusLabels[item.status]}
-                        </span>
-                        <span className="help-faq-expand" aria-hidden="true">
-                          +
-                        </span>
-                      </summary>
-                      <div className="help-faq-answer">
-                        <p>{item.summary}</p>
-                        {item.details && <p>{item.details}</p>}
-                      </div>
-                    </details>
-                  ))}
+                <div className="help-topic-actions">
+                  <button
+                    type="button"
+                    className="small-button secondary"
+                    aria-label={`Read ${topic.title} guide`}
+                    onClick={() => setSelectedTopicId(topic.id)}
+                  >
+                    Read guide
+                  </button>
+                  {topicTour ? (
+                    <button
+                      type="button"
+                      className="help-replay-action"
+                      aria-label={`Replay ${topic.title} tour`}
+                      onClick={(event) =>
+                        replayTour(topic.tourId, event.currentTarget)
+                      }
+                    >
+                      Replay tour
+                    </button>
+                  ) : (
+                    <span className="help-included-note">
+                      Included in Getting started
+                    </span>
+                  )}
                 </div>
-              </section>
+              </article>
             );
           })}
         </div>
+      </section>
 
-        <div className="help-video-empty">
-          <div>
-            <strong>Video guides</strong>
-            <p>Short walkthroughs are not available yet.</p>
-          </div>
-          <span>Coming soon</span>
+      <section className="panel help-support-card">
+        <div>
+          <p className="settings-group-label">Feedback & problems</p>
+          <h2>Tell us what is confusing, broken or missing.</h2>
+          <p>
+            Nothing is sent automatically. You can copy your message or open
+            your email app.
+          </p>
         </div>
+        <div className="help-support-card-actions">
+          <button
+            type="button"
+            className="small-button secondary"
+            onClick={() => setSupportMode("feedback")}
+          >
+            Send feedback
+          </button>
+          <button
+            type="button"
+            className="small-button secondary"
+            onClick={() => setSupportMode("problem")}
+          >
+            Report a problem
+          </button>
+        </div>
+      </section>
+
+      {resetConfirmationOpen && (
+        <div
+          className="data-confirmation-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeResetConfirmation();
+          }}
+        >
+          <section
+            ref={resetDialogRef}
+            className="data-confirmation"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="help-reset-title"
+            aria-describedby="help-reset-description"
+          >
+            <div>
+              <h3 id="help-reset-title">Reset all tour progress?</h3>
+              <p id="help-reset-description">
+                This clears only guided-tour progress. Tasks, plans, Subjects,
+                themes and connections stay unchanged.
+              </p>
+            </div>
+            <div className="data-confirmation-actions">
+              <button
+                type="button"
+                className="data-cancel-button"
+                onClick={closeResetConfirmation}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="data-confirm-button"
+                onClick={confirmTourReset}
+              >
+                Reset tour progress
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HelpSupportForm({
+  mode,
+  theme,
+  classroomConnected,
+  calendarConnected,
+  smartPlannerStatus,
+  headingRef,
+  onBack,
+}) {
+  const [draft, setDraft] = useState({
+    feedbackType: "Idea",
+    message: "",
+    whatHappened: "",
+    expected: "",
+    steps: "",
+    replyEmail: "",
+  });
+  const [includeDiagnostics, setIncludeDiagnostics] = useState(
+    mode === "problem"
+  );
+  const [validationMessage, setValidationMessage] = useState("");
+  const [copyStatus, setCopyStatus] = useState("");
+  const plannerAllowance = Number.isInteger(
+    smartPlannerStatus?.remainingGenerations
+  )
+    ? smartPlannerStatus.remainingGenerations
+    : undefined;
+  const diagnostics = buildSafeDiagnosticDetails({
+    appVersion: STUDENT_HUB_BUILD_ID,
+    currentPage: "Settings / Help & tours",
+    userAgent:
+      typeof navigator === "undefined" ? "" : navigator.userAgent,
+    viewportWidth: typeof window === "undefined" ? 0 : window.innerWidth,
+    viewportHeight: typeof window === "undefined" ? 0 : window.innerHeight,
+    theme,
+    online: typeof navigator === "undefined" ? undefined : navigator.onLine,
+    classroomConnected,
+    calendarConnected,
+    smartPlannerStatus: smartPlannerStatus?.status,
+    remainingAllowance: plannerAllowance,
+  });
+  const supportMessage = buildSupportMessage({
+    mode,
+    draft,
+    diagnostics,
+    includeDiagnostics: mode === "problem" && includeDiagnostics,
+  });
+  const isProblem = mode === "problem";
+
+  function updateDraft(field, value) {
+    setDraft((current) => ({ ...current, [field]: value }));
+    setValidationMessage("");
+    setCopyStatus("");
+  }
+
+  function validate() {
+    const message = validateSupportDraft(mode, draft);
+    setValidationMessage(message);
+    return !message;
+  }
+
+  async function copyMessage() {
+    if (!validate()) return;
+
+    const copied = await copySupportMessage(supportMessage);
+    setCopyStatus(
+      copied
+        ? isProblem
+          ? "Problem report copied."
+          : "Feedback message copied."
+        : "Could not copy automatically. Select the message and copy it manually."
+    );
+  }
+
+  async function copyDiagnostics() {
+    const copied = await copySupportMessage(diagnostics);
+    setCopyStatus(
+      copied
+        ? "Diagnostic details copied."
+        : "Could not copy diagnostic details automatically."
+    );
+  }
+
+  function openEmailApp() {
+    if (!validate()) return;
+
+    const mailto = buildSupportMailto({
+      supportEmail: STUDENT_HUB_SUPPORT_EMAIL,
+      mode,
+      draft,
+      diagnostics,
+      includeDiagnostics: isProblem && includeDiagnostics,
+    });
+
+    if (mailto) window.location.href = mailto;
+  }
+
+  return (
+    <div className="help-settings help-support-page">
+      <button type="button" className="settings-back-button" onClick={onBack}>
+        ← Back to Help & tours
+      </button>
+
+      <section className="panel help-support-form-panel">
+        <header className="help-support-form-header">
+          <p className="settings-group-label">Feedback & problems</p>
+          <h2 ref={headingRef} tabIndex="-1">
+            {isProblem ? "Report a problem" : "Send feedback"}
+          </h2>
+          <p>
+            {isProblem
+              ? "Describe what went wrong. You choose what to copy or email."
+              : "Share an idea or tell us what could be clearer."}
+          </p>
+        </header>
+
+        <form
+          className="help-support-form"
+          onSubmit={(event) => event.preventDefault()}
+        >
+          {!isProblem ? (
+            <>
+              <label>
+                <span>Feedback type</span>
+                <select
+                  value={draft.feedbackType}
+                  onChange={(event) =>
+                    updateDraft("feedbackType", event.target.value)
+                  }
+                >
+                  <option>Idea</option>
+                  <option>Confusing experience</option>
+                  <option>General feedback</option>
+                </select>
+              </label>
+              <label>
+                <span>Message</span>
+                <textarea
+                  value={draft.message}
+                  maxLength={SUPPORT_FIELD_LIMITS.feedbackMessage}
+                  rows="7"
+                  onChange={(event) =>
+                    updateDraft("message", event.target.value)
+                  }
+                  required
+                />
+                <small>
+                  {draft.message.length}/{SUPPORT_FIELD_LIMITS.feedbackMessage}
+                </small>
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                <span>What happened?</span>
+                <textarea
+                  value={draft.whatHappened}
+                  maxLength={SUPPORT_FIELD_LIMITS.problemDescription}
+                  rows="5"
+                  onChange={(event) =>
+                    updateDraft("whatHappened", event.target.value)
+                  }
+                  required
+                />
+              </label>
+              <label>
+                <span>What did you expect?</span>
+                <textarea
+                  value={draft.expected}
+                  maxLength={SUPPORT_FIELD_LIMITS.expectedOutcome}
+                  rows="4"
+                  onChange={(event) =>
+                    updateDraft("expected", event.target.value)
+                  }
+                />
+              </label>
+              <label>
+                <span>Steps to reproduce</span>
+                <textarea
+                  value={draft.steps}
+                  maxLength={SUPPORT_FIELD_LIMITS.reproductionSteps}
+                  rows="5"
+                  onChange={(event) =>
+                    updateDraft("steps", event.target.value)
+                  }
+                />
+              </label>
+            </>
+          )}
+
+          <label>
+            <span>Reply email <small>(optional)</small></span>
+            <input
+              type="email"
+              value={draft.replyEmail}
+              maxLength={SUPPORT_FIELD_LIMITS.replyEmail}
+              autoComplete="email"
+              onChange={(event) =>
+                updateDraft("replyEmail", event.target.value)
+              }
+            />
+          </label>
+
+          {isProblem && (
+            <section className="help-diagnostics">
+              <label className="help-diagnostics-toggle">
+                <input
+                  type="checkbox"
+                  checked={includeDiagnostics}
+                  onChange={(event) =>
+                    setIncludeDiagnostics(event.target.checked)
+                  }
+                />
+                <span>Include diagnostic details</span>
+              </label>
+              {includeDiagnostics && (
+                <>
+                  <p>Only the information shown below will be included.</p>
+                  <pre
+                    tabIndex="0"
+                    aria-label="Diagnostic details preview"
+                  >
+                    {diagnostics}
+                  </pre>
+                  <button
+                    type="button"
+                    className="small-button secondary help-copy-diagnostics"
+                    onClick={copyDiagnostics}
+                  >
+                    Copy diagnostic details
+                  </button>
+                </>
+              )}
+            </section>
+          )}
+
+          {validationMessage && (
+            <p className="help-form-message error" role="alert">
+              {validationMessage}
+            </p>
+          )}
+          <p className="help-form-message" aria-live="polite">
+            {copyStatus}
+          </p>
+
+          {!STUDENT_HUB_SUPPORT_EMAIL && (
+            <p className="help-email-unavailable">
+              Email feedback is not configured yet. You can still copy your
+              message.
+            </p>
+          )}
+
+          <div className="help-support-actions">
+            <button
+              type="button"
+              className="small-button secondary"
+              onClick={copyMessage}
+            >
+              {isProblem ? "Copy report" : "Copy message"}
+            </button>
+            {STUDENT_HUB_SUPPORT_EMAIL && (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={openEmailApp}
+              >
+                Open email app
+              </button>
+            )}
+          </div>
+        </form>
       </section>
     </div>
   );
