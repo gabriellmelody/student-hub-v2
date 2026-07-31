@@ -22,6 +22,30 @@
     <meta property="og:type" content="website" />
     <meta property="og:image" content="/icons/daylo-512.png" />
     <title>DayLo — Student Hub</title>
+    <script>
+      (() => {
+        let preference = "light";
+
+        try {
+          const savedTheme = localStorage.getItem("student-hub-theme");
+          preference =
+            savedTheme === "dark" || savedTheme === "system"
+              ? savedTheme
+              : "light";
+        } catch {
+          preference = "light";
+        }
+
+        const resolvedTheme =
+          preference === "system"
+            ? window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light"
+            : preference;
+
+        document.documentElement.dataset.theme = resolvedTheme;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

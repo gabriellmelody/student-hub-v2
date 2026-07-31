@@ -1,0 +1,159 @@
+.daylo-splash-active {
+  overflow: hidden;
+}
+
+.daylo-opening-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100dvh;
+  min-height: 100svh;
+  padding: max(24px, env(safe-area-inset-top))
+    max(24px, env(safe-area-inset-right))
+    max(24px, env(safe-area-inset-bottom))
+    max(24px, env(safe-area-inset-left));
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--app-bg, #0b1524);
+  touch-action: none;
+  isolation: isolate;
+  animation: daylo-splash-lifecycle 1650ms linear both;
+}
+
+.daylo-opening-splash__lockup {
+  display: grid;
+  justify-items: center;
+  gap: clamp(10px, 1.5vmin, 16px);
+  width: clamp(142px, 18vw, 204px);
+  max-height: min(60dvh, 260px);
+}
+
+.daylo-opening-splash__mark {
+  display: block;
+  width: clamp(94px, 12vw, 132px);
+  height: auto;
+  overflow: visible;
+}
+
+.daylo-opening-splash__arch,
+.daylo-opening-splash__sun,
+.daylo-opening-splash__horizon {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
+}
+
+.daylo-opening-splash__horizon {
+  opacity: 0;
+  transform: translateY(7px) scale(0.96);
+  animation: daylo-splash-horizon-in 300ms 20ms
+    cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.daylo-opening-splash__arch {
+  opacity: 0;
+  transform: translateY(3px) scaleX(0.74) scaleY(0.88);
+  animation: daylo-splash-arch-in 470ms 180ms
+    cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.daylo-opening-splash__sun {
+  opacity: 0;
+  transform: translateY(10px) scale(0.9);
+  animation: daylo-splash-sun-in 430ms 420ms
+    cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.daylo-opening-splash__wordmark {
+  display: block;
+  width: 100%;
+  height: auto;
+  opacity: 0;
+  transform: translateY(5px);
+  animation: daylo-splash-wordmark-in 450ms 700ms
+    cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  will-change: transform, opacity;
+}
+
+:root[data-theme="dark"] .daylo-opening-splash__wordmark {
+  filter: brightness(0) invert(1);
+}
+
+@keyframes daylo-splash-horizon-in {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes daylo-splash-arch-in {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes daylo-splash-sun-in {
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes daylo-splash-wordmark-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes daylo-splash-lifecycle {
+  0%,
+  84% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (max-width: 430px) {
+  .daylo-opening-splash__lockup {
+    width: clamp(136px, 44vw, 178px);
+  }
+
+  .daylo-opening-splash__mark {
+    width: clamp(92px, 30vw, 116px);
+  }
+}
+
+@media (max-height: 480px) and (orientation: landscape) {
+  .daylo-opening-splash__lockup {
+    gap: 6px;
+    width: 132px;
+  }
+
+  .daylo-opening-splash__mark {
+    width: 82px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .daylo-opening-splash {
+    animation-duration: 420ms;
+  }
+
+  .daylo-opening-splash__arch,
+  .daylo-opening-splash__sun,
+  .daylo-opening-splash__horizon,
+  .daylo-opening-splash__wordmark {
+    opacity: 1;
+    transform: none;
+    animation: none;
+    will-change: auto;
+  }
+}
