@@ -4,6 +4,9 @@ import "./index.css";
 import App from "./App.jsx";
 import DayLoSplash from "./components/DayLoSplash.jsx";
 import { dayloSplashSession } from "./utils/dayloSplashSession.js";
+import { inject } from '@vercel/analytics';
+
+inject();
 
 const showOpeningSplash = dayloSplashSession.shouldShow();
 
