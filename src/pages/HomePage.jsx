@@ -1,7 +1,6 @@
 import { useState } from "react";
 import {
   getDaysLeft,
-  formatDateKey,
   parseDateKey,
   getUrgencyLabel,
   getUrgencyClass,
@@ -11,9 +10,13 @@ import {
 } from "../utils/appUtils.js";
 import RevealOnScroll from "../components/RevealOnScroll.jsx";
 import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
+import {
+  attachHomeWeekDateData,
+  formatHomeWeekRange,
+  getRollingHomeWeek,
+} from "../utils/homeWeekUtils.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const HOME_INTRO_SESSION_KEY = "studentHubHomeIntroPlayed";
 
 function HomePage({
@@ -26,27 +29,11 @@ function HomePage({
 }) {
   const [playHomeIntro] = useState(shouldPlayHomeIntro);
   const today = getStartOfDay(new Date());
-  const todayKey = formatDateKey(today);
   const weekStart = getMonday(today);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
-
-  const weekDays = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + index);
-    const dateKey = formatDateKey(date);
-    const dueTasks = tasks.filter(
-      (task) => !task.completed && task.dueDate === dateKey
-    );
-
-    return {
-      date,
-      dateKey,
-      label: WEEKDAY_LABELS[index],
-      count: dueTasks.length,
-      isToday: dateKey === todayKey,
-    };
-  });
+  const homeWeek = getRollingHomeWeek(today);
+  const weekDays = attachHomeWeekDateData(homeWeek.days, { tasks });
 
   const weeklyTasks = tasks.filter((task) => {
     if (!task.dueDate) return false;
@@ -224,7 +211,7 @@ function HomePage({
         <div className="home-section-heading">
           <div>
             <p className="home-zone-label">This week</p>
-            <h3>{formatWeekRange(weekStart, weekEnd)}</h3>
+            <h3>{formatHomeWeekRange(homeWeek.start, homeWeek.end)}</h3>
           </div>
           <button
             type="button"
@@ -478,19 +465,6 @@ function formatDueTiming(dateKey) {
 function formatPlanBlockTime(block) {
   if (!block?.start || !block?.end) return `${block?.duration || 0} min`;
   return `${block.start}–${block.end}`;
-}
-
-function formatWeekRange(start, end) {
-  const startText = start.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-  const endText = end.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-
-  return `${startText}–${endText}`;
 }
 
 function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
