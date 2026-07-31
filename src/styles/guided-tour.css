@@ -5,6 +5,11 @@
   width: 100dvw;
   height: 100dvh;
   overflow: hidden;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.guided-tour-layer.allows-target-interaction {
   pointer-events: none;
 }
 

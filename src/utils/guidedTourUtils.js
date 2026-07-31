@@ -422,34 +422,21 @@ export function targetNeedsTourScroll(
     rightInset = 0,
     bottomInset = 16,
     leftInset = 0,
-  }
+  },
+  padding = 0
 ) {
   const visibleLeft = left + leftInset;
   const visibleTop = top + topInset;
   const visibleRight = left + width - rightInset;
   const visibleBottom = top + height - bottomInset;
-  const visibleWidth = Math.max(
-    0,
-    Math.min(targetRect.right, visibleRight) -
-      Math.max(targetRect.left, visibleLeft)
-  );
-  const visibleHeight = Math.max(
-    0,
-    Math.min(targetRect.bottom, visibleBottom) -
-      Math.max(targetRect.top, visibleTop)
-  );
-  const usefulWidth = Math.max(0, visibleRight - visibleLeft);
-  const usefulHeight = Math.max(0, visibleBottom - visibleTop);
-  const requiredWidth = Math.min(
-    targetRect.width,
-    Math.max(32, usefulWidth * 0.35)
-  );
-  const requiredHeight = Math.min(
-    targetRect.height,
-    Math.max(32, usefulHeight * 0.35)
-  );
+  const safePadding = Math.max(0, Number(padding) || 0);
 
-  return visibleWidth < requiredWidth || visibleHeight < requiredHeight;
+  return (
+    targetRect.left - safePadding < visibleLeft ||
+    targetRect.top - safePadding < visibleTop ||
+    targetRect.right + safePadding > visibleRight ||
+    targetRect.bottom + safePadding > visibleBottom
+  );
 }
 
 export function getTourScrollBehavior(reducedMotion) {
@@ -464,6 +451,80 @@ export function getFocusableTourElements(container) {
       'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
     )
   ).filter((element) => !element.hidden && element.getAttribute("aria-hidden") !== "true");
+}
+
+export function getTourFocusTrapTarget({
+  focusableElements = [],
+  activeElement = null,
+  shiftKey = false,
+  focusIsInside = false,
+}) {
+  if (focusableElements.length === 0) return null;
+
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements[focusableElements.length - 1];
+
+  if (!focusIsInside) return shiftKey ? lastElement : firstElement;
+  if (shiftKey && activeElement === firstElement) return lastElement;
+  if (!shiftKey && activeElement === lastElement) return firstElement;
+  return null;
+}
+
+export function blockGuidedTourBackground(element) {
+  if (!element?.setAttribute) return () => {};
+
+  const hadInertAttribute = element.hasAttribute?.("inert") || false;
+  const previousAriaHidden = element.getAttribute?.("aria-hidden") ?? null;
+
+  element.setAttribute("inert", "");
+  element.setAttribute("aria-hidden", "true");
+
+  return () => {
+    if (!hadInertAttribute) element.removeAttribute?.("inert");
+    if (previousAriaHidden === null) {
+      element.removeAttribute?.("aria-hidden");
+    } else {
+      element.setAttribute("aria-hidden", previousAriaHidden);
+    }
+  };
+}
+
+export function getTourTargetPaddingBlockers(spotlightRect, targetRect) {
+  if (!spotlightRect || !targetRect) return [];
+
+  const targetLeft = Math.max(spotlightRect.left, targetRect.left);
+  const targetTop = Math.max(spotlightRect.top, targetRect.top);
+  const targetRight = Math.min(spotlightRect.right, targetRect.right);
+  const targetBottom = Math.min(spotlightRect.bottom, targetRect.bottom);
+  const middleHeight = Math.max(0, targetBottom - targetTop);
+  const blockers = [
+    {
+      left: spotlightRect.left,
+      top: spotlightRect.top,
+      width: spotlightRect.width,
+      height: Math.max(0, targetTop - spotlightRect.top),
+    },
+    {
+      left: spotlightRect.left,
+      top: targetBottom,
+      width: spotlightRect.width,
+      height: Math.max(0, spotlightRect.bottom - targetBottom),
+    },
+    {
+      left: spotlightRect.left,
+      top: targetTop,
+      width: Math.max(0, targetLeft - spotlightRect.left),
+      height: middleHeight,
+    },
+    {
+      left: targetRight,
+      top: targetTop,
+      width: Math.max(0, spotlightRect.right - targetRight),
+      height: middleHeight,
+    },
+  ];
+
+  return blockers.filter((blocker) => blocker.width > 0 && blocker.height > 0);
 }
 
 export function restoreTourFocus(

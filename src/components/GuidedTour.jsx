@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
+  blockGuidedTourBackground,
   computeTourCardPosition,
   findTourTarget,
   getFocusableTourElements,
   getSpotlightRect,
+  getTourFocusTrapTarget,
   getTourNavigationRequest,
   getTourScrollBehavior,
+  getTourTargetPaddingBlockers,
   getTourViewportMetrics,
   isTourTooltipReady,
   isTourExitKey,
@@ -17,6 +20,16 @@ import {
 
 const MOBILE_BREAKPOINT = 700;
 const TARGET_WAIT_TIMEOUT_MS = 2400;
+
+function getTargetBorderRadius(target, padding) {
+  const computedRadius = Number.parseFloat(
+    window.getComputedStyle(target).borderTopLeftRadius
+  );
+
+  return Number.isFinite(computedRadius)
+    ? Math.max(8, computedRadius + padding)
+    : 14;
+}
 
 function usePrefersReducedMotion() {
   const [reducedMotion, setReducedMotion] = useState(() =>
@@ -139,6 +152,8 @@ export default function GuidedTour({
   const [renderState, setRenderState] = useState({
     status: "locating",
     spotlightRect: null,
+    targetRect: null,
+    spotlightRadius: 14,
   });
   const [cardPosition, setCardPosition] = useState(null);
   const [showLoading, setShowLoading] = useState(false);
@@ -166,16 +181,24 @@ export default function GuidedTour({
     }
 
     const viewport = getViewportMetrics(safeAreaProbeRef.current);
+    const spotlightPadding = activeStep?.spotlightPadding ?? 8;
+    const targetRect = target.getBoundingClientRect();
     const spotlightRect = getSpotlightRect(
-      target.getBoundingClientRect(),
-      activeStep?.spotlightPadding ?? 8,
+      targetRect,
+      spotlightPadding,
       viewport
     );
+    const spotlightRadius = getTargetBorderRadius(target, spotlightPadding);
 
     const card = cardRef.current;
 
     if (!card) {
-      setRenderState({ status: "measuring", spotlightRect });
+      setRenderState({
+        status: "measuring",
+        spotlightRect,
+        targetRect,
+        spotlightRadius,
+      });
       return;
     }
 
@@ -201,9 +224,16 @@ export default function GuidedTour({
     );
     setRenderState((current) =>
       current.status === "ready" &&
-      tourGeometryMatches(current.spotlightRect, spotlightRect)
+      tourGeometryMatches(current.spotlightRect, spotlightRect) &&
+      tourGeometryMatches(current.targetRect, targetRect) &&
+      Math.abs((current.spotlightRadius || 0) - spotlightRadius) <= 0.5
         ? current
-        : { status: "ready", spotlightRect }
+        : {
+            status: "ready",
+            spotlightRect,
+            targetRect,
+            spotlightRadius,
+          }
     );
   }, [activeStep, stepKey]);
 
@@ -301,8 +331,9 @@ export default function GuidedTour({
 
       targetRef.current = target;
       const targetRect = target.getBoundingClientRect();
+      const spotlightPadding = activeStep?.spotlightPadding ?? 8;
 
-      if (targetNeedsTourScroll(targetRect, viewport)) {
+      if (targetNeedsTourScroll(targetRect, viewport, spotlightPadding)) {
         target.scrollIntoView({
           behavior: getTourScrollBehavior(reducedMotion),
           block: "center",
@@ -317,13 +348,16 @@ export default function GuidedTour({
       if (controller.signal.aborted || !target.isConnected) return;
 
       const viewportAfterScroll = getViewportMetrics(safeAreaProbeRef.current);
+      const settledTargetRect = target.getBoundingClientRect();
       setRenderState({
         status: "measuring",
         spotlightRect: getSpotlightRect(
-          target.getBoundingClientRect(),
-          activeStep?.spotlightPadding ?? 8,
+          settledTargetRect,
+          spotlightPadding,
           viewportAfterScroll
         ),
+        targetRect: settledTargetRect,
+        spotlightRadius: getTargetBorderRadius(target, spotlightPadding),
       });
       targetObserver = new MutationObserver(() => {
         if (!target.isConnected || !findTourTarget(activeStep, {
@@ -333,9 +367,16 @@ export default function GuidedTour({
           setCardPosition(
             getCenteredCardPosition(getViewportMetrics(safeAreaProbeRef.current))
           );
+          return;
         }
+        scheduleGeometry();
       });
-      targetObserver.observe(document.body, { subtree: true, childList: true });
+      targetObserver.observe(document.body, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: ["class", "hidden", "style"],
+      });
     }
 
     prepareStep();
@@ -359,6 +400,7 @@ export default function GuidedTour({
     onNavigate,
     reducedMotion,
     stepKey,
+    scheduleGeometry,
     updateGeometry,
   ]);
 
@@ -371,13 +413,21 @@ export default function GuidedTour({
     if (!isTourActive || renderState.status !== "ready") return undefined;
 
     const frame = requestAnimationFrame(scheduleGeometry);
+    let cancelled = false;
     const resizeObserver =
       typeof ResizeObserver === "undefined"
         ? null
         : new ResizeObserver(scheduleGeometry);
     const visualViewport = window.visualViewport;
+    const settleTimers = [80, 240, 600].map((delay) =>
+      window.setTimeout(scheduleGeometry, delay)
+    );
 
-    if (targetRef.current) resizeObserver?.observe(targetRef.current);
+    let observedElement = targetRef.current;
+    while (observedElement && observedElement !== document.body) {
+      resizeObserver?.observe(observedElement);
+      observedElement = observedElement.parentElement;
+    }
     if (cardRef.current) resizeObserver?.observe(cardRef.current);
 
     window.addEventListener("resize", scheduleGeometry);
@@ -385,15 +435,22 @@ export default function GuidedTour({
     window.addEventListener("scroll", scheduleGeometry, true);
     visualViewport?.addEventListener("resize", scheduleGeometry);
     visualViewport?.addEventListener("scroll", scheduleGeometry);
+    document.fonts?.addEventListener?.("loadingdone", scheduleGeometry);
+    document.fonts?.ready?.then(() => {
+      if (!cancelled) scheduleGeometry();
+    });
 
     return () => {
+      cancelled = true;
       cancelAnimationFrame(frame);
+      settleTimers.forEach((timer) => window.clearTimeout(timer));
       resizeObserver?.disconnect();
       window.removeEventListener("resize", scheduleGeometry);
       window.removeEventListener("orientationchange", scheduleGeometry);
       window.removeEventListener("scroll", scheduleGeometry, true);
       visualViewport?.removeEventListener("resize", scheduleGeometry);
       visualViewport?.removeEventListener("scroll", scheduleGeometry);
+      document.fonts?.removeEventListener?.("loadingdone", scheduleGeometry);
       if (geometryFrameRef.current !== null) {
         cancelAnimationFrame(geometryFrameRef.current);
         geometryFrameRef.current = null;
@@ -405,24 +462,9 @@ export default function GuidedTour({
     if (!isTourActive || blocked) return undefined;
 
     const appRoot = document.querySelector(".app-shell");
-    const shouldBlockApp = appRoot && !activeStep?.allowTargetInteraction;
-    const hadInertAttribute = appRoot?.hasAttribute("inert") || false;
-    const previousAriaHidden = appRoot?.getAttribute("aria-hidden");
+    if (!appRoot || activeStep?.allowTargetInteraction) return undefined;
 
-    if (shouldBlockApp) {
-      appRoot.setAttribute("inert", "");
-      appRoot.setAttribute("aria-hidden", "true");
-    }
-
-    return () => {
-      if (!appRoot || !shouldBlockApp) return;
-      if (!hadInertAttribute) appRoot.removeAttribute("inert");
-      if (previousAriaHidden === null) {
-        appRoot.removeAttribute("aria-hidden");
-      } else {
-        appRoot.setAttribute("aria-hidden", previousAriaHidden);
-      }
-    };
+    return blockGuidedTourBackground(appRoot);
   }, [activeStep?.allowTargetInteraction, blocked, isTourActive]);
 
   useEffect(() => {
@@ -450,24 +492,31 @@ export default function GuidedTour({
         return;
       }
 
-      const firstElement = focusableElements[0];
-      const lastElement = focusableElements[focusableElements.length - 1];
       const focusIsOutsideCard = !cardRef.current.contains(document.activeElement);
+      const focusTarget = getTourFocusTrapTarget({
+        focusableElements,
+        activeElement: document.activeElement,
+        shiftKey: event.shiftKey,
+        focusIsInside: !focusIsOutsideCard,
+      });
 
-      if (
-        event.shiftKey &&
-        (document.activeElement === firstElement ||
-          focusIsOutsideCard)
-      ) {
+      if (focusTarget) {
         event.preventDefault();
-        lastElement.focus();
-      } else if (
-        !event.shiftKey &&
-        (document.activeElement === lastElement || focusIsOutsideCard)
-      ) {
-        event.preventDefault();
-        firstElement.focus();
+        focusTarget.focus();
       }
+    }
+
+    function handleFocusIn(event) {
+      if (
+        !canFocusStep ||
+        !cardRef.current ||
+        cardRef.current.contains(event.target)
+      ) {
+        return;
+      }
+
+      const focusableElements = getFocusableTourElements(cardRef.current);
+      (focusableElements[0] || primaryActionRef.current)?.focus();
     }
 
     function handleBrowserBack() {
@@ -475,11 +524,13 @@ export default function GuidedTour({
     }
 
     document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("focusin", handleFocusIn);
     window.addEventListener("popstate", handleBrowserBack);
 
     return () => {
       if (frame !== null) cancelAnimationFrame(frame);
       document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("focusin", handleFocusIn);
       window.removeEventListener("popstate", handleBrowserBack);
     };
   }, [blocked, isTourActive, renderState.status, skipTour, stepKey]);
@@ -496,6 +547,7 @@ export default function GuidedTour({
 
   const isFinalStep = activeStepIndex === activeTour.steps.length - 1;
   const spotlightRect = renderState.spotlightRect;
+  const targetRect = renderState.targetRect;
   const ready = isTourTooltipReady(
     renderState.status,
     spotlightRect,
@@ -510,10 +562,15 @@ export default function GuidedTour({
     );
   const cardPlacement = ready ? position.placement : "center";
   const showCard = ready || measuring || missing;
+  const targetPaddingBlockers = activeStep.allowTargetInteraction
+    ? getTourTargetPaddingBlockers(spotlightRect, targetRect)
+    : [];
 
   return createPortal(
     <div
-      className={`guided-tour-layer${reducedMotion ? " is-reduced-motion" : ""}`}
+      className={`guided-tour-layer${
+        activeStep.allowTargetInteraction ? " allows-target-interaction" : ""
+      }${reducedMotion ? " is-reduced-motion" : ""}`}
       data-tour-state={renderState.status}
     >
       <span
@@ -558,9 +615,10 @@ export default function GuidedTour({
               left: spotlightRect.left,
               width: spotlightRect.width,
               height: spotlightRect.height,
+              borderRadius: `${renderState.spotlightRadius || 14}px`,
             }}
           />
-          {!activeStep.allowTargetInteraction && (
+          {!activeStep.allowTargetInteraction ? (
             <div
               className="guided-tour-target-blocker"
               aria-hidden="true"
@@ -571,6 +629,15 @@ export default function GuidedTour({
                 height: spotlightRect.height,
               }}
             />
+          ) : (
+            targetPaddingBlockers.map((blocker, index) => (
+              <div
+                className="guided-tour-target-blocker"
+                aria-hidden="true"
+                key={`target-padding-${index}`}
+                style={blocker}
+              />
+            ))
           )}
         </>
       ) : (
@@ -587,7 +654,7 @@ export default function GuidedTour({
         className={`guided-tour-card guided-tour-card-${cardPlacement}`}
         ref={cardRef}
         role="dialog"
-        aria-modal={measuring ? undefined : "true"}
+        aria-modal="true"
         aria-hidden={measuring ? "true" : undefined}
         aria-labelledby="guided-tour-step-title"
         aria-describedby="guided-tour-step-progress guided-tour-step-description"

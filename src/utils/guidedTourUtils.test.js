@@ -11,15 +11,18 @@ import {
   todaysPlanGuidedTour,
 } from "../data/guidedTours.js";
 import {
+  blockGuidedTourBackground,
   computeTourCardPosition,
   claimGuidedTourExit,
   claimGuidedTourStartup,
   findTourTarget,
   getSpotlightRect,
   getStepTargetSelectors,
+  getTourFocusTrapTarget,
   getTourNavigationRequest,
   getTourRequestFromSearch,
   getTourScrollBehavior,
+  getTourTargetPaddingBlockers,
   getTourViewportMetrics,
   guidedTourReducer,
   initialGuidedTourState,
@@ -255,6 +258,34 @@ test("old geometry is distinguishable between tour steps", () => {
   assert.equal(tourGeometryMatches(first, nextStep), false);
 });
 
+test("spotlight geometry updates when the target rectangle moves", () => {
+  const viewport = { width: 390, height: 844 };
+  const first = getSpotlightRect(
+    { left: 40, top: 120, right: 160, bottom: 168 },
+    8,
+    viewport
+  );
+  const moved = getSpotlightRect(
+    { left: 76, top: 188, right: 236, bottom: 244 },
+    8,
+    viewport
+  );
+
+  assert.deepEqual(first, {
+    left: 32,
+    top: 112,
+    right: 168,
+    bottom: 176,
+    width: 136,
+    height: 64,
+  });
+  assert.equal(tourGeometryMatches(first, moved), false);
+  assert.equal(moved.left, 68);
+  assert.equal(moved.top, 180);
+  assert.equal(moved.width, 176);
+  assert.equal(moved.height, 72);
+});
+
 test("scrolling is requested only when a target is not sufficiently visible", () => {
   const viewport = {
     width: 390,
@@ -295,6 +326,78 @@ test("focus can be returned after a tour closes", () => {
 
   assert.equal(restoreTourFocus(starter), true);
   assert.equal(focused, true);
+});
+
+test("background interaction is blocked and restored with the tour", () => {
+  const attributes = new Map([["aria-hidden", "false"]]);
+  const appRoot = {
+    hasAttribute: (name) => attributes.has(name),
+    getAttribute: (name) => attributes.get(name) ?? null,
+    setAttribute: (name, value) => attributes.set(name, value),
+    removeAttribute: (name) => attributes.delete(name),
+  };
+
+  const restore = blockGuidedTourBackground(appRoot);
+  assert.equal(attributes.has("inert"), true);
+  assert.equal(attributes.get("aria-hidden"), "true");
+
+  restore();
+  assert.equal(attributes.has("inert"), false);
+  assert.equal(attributes.get("aria-hidden"), "false");
+});
+
+test("interactive steps expose only the real target inside spotlight padding", () => {
+  const blockers = getTourTargetPaddingBlockers(
+    { left: 20, top: 30, right: 140, bottom: 100, width: 120, height: 70 },
+    { left: 28, top: 38, right: 132, bottom: 92, width: 104, height: 54 }
+  );
+
+  assert.equal(blockers.length, 4);
+  assert.deepEqual(blockers[0], {
+    left: 20,
+    top: 30,
+    width: 120,
+    height: 8,
+  });
+  assert.deepEqual(blockers[2], {
+    left: 20,
+    top: 38,
+    width: 8,
+    height: 54,
+  });
+});
+
+test("Tab and Shift+Tab remain inside the tour controls", () => {
+  const first = { id: "back" };
+  const middle = { id: "skip" };
+  const last = { id: "next" };
+  const focusableElements = [first, middle, last];
+
+  assert.equal(
+    getTourFocusTrapTarget({
+      focusableElements,
+      activeElement: last,
+      focusIsInside: true,
+    }),
+    first
+  );
+  assert.equal(
+    getTourFocusTrapTarget({
+      focusableElements,
+      activeElement: first,
+      shiftKey: true,
+      focusIsInside: true,
+    }),
+    last
+  );
+  assert.equal(
+    getTourFocusTrapTarget({
+      focusableElements,
+      activeElement: null,
+      focusIsInside: false,
+    }),
+    first
+  );
 });
 
 test("focus falls back to the page heading when the launcher is gone", () => {
