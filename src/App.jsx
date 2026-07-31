@@ -1886,10 +1886,24 @@ function App() {
     if (smartPlannerLoading) return;
 
     const context = getSmartPlannerLocalContext(smartPlannerDraft);
+    const shouldRequestAi = shouldRequestSmartPlannerAi({
+      basic,
+      remainingGenerations: smartPlannerQuota.remainingGenerations,
+    });
+    const basicFinishMinute =
+      context.startMinute !== null &&
+      context.finishMinute !== null &&
+      context.finishMinute <= context.startMinute
+        ? context.finishMinute + 24 * 60
+        : context.finishMinute;
+    const validatedFinishMinute = shouldRequestAi
+      ? context.finishMinute
+      : basicFinishMinute;
+
     if (
       context.startMinute === null ||
-      context.finishMinute === null ||
-      context.finishMinute <= context.startMinute
+      validatedFinishMinute === null ||
+      (shouldRequestAi && validatedFinishMinute <= context.startMinute)
     ) {
       setSmartPlannerError("Choose a finish time after your start time.");
       return;
@@ -1900,15 +1914,11 @@ function App() {
       return;
     }
 
-    if (context.finishMinute - context.startMinute < 15) {
+    if (validatedFinishMinute - context.startMinute < 15) {
       setSmartPlannerError("There isn’t enough time left to build today’s plan.");
       return;
     }
 
-    const shouldRequestAi = shouldRequestSmartPlannerAi({
-      basic,
-      remainingGenerations: smartPlannerQuota.remainingGenerations,
-    });
     const useBasicForQuota = !basic && !shouldRequestAi;
 
     smartPlannerRequestRef.current.controller?.abort();
@@ -2078,6 +2088,13 @@ function App() {
     const replacedExistingPlan = planBlocks.length > 0;
     const startMinutes = timeStringToMinute(smartPlannerDraft.startTime);
     const finishMinutes = timeStringToMinute(smartPlannerDraft.endTime);
+    const savedFinishMinutes =
+      smartPlannerPreview.source === "basic" &&
+      startMinutes !== null &&
+      finishMinutes !== null &&
+      finishMinutes <= startMinutes
+        ? finishMinutes + 24 * 60
+        : finishMinutes;
     const scheduledTaskCount = new Set(
       smartPlannerPreview.blocks
         .filter((block) => block.type === "study")
@@ -2090,7 +2107,7 @@ function App() {
     setStalePlanDate(null);
     setStartTime(smartPlannerDraft.startTime);
     setHoursAvailable(
-      Number((((finishMinutes || 0) - (startMinutes || 0)) / 60).toFixed(2))
+      Number((((savedFinishMinutes || 0) - (startMinutes || 0)) / 60).toFixed(2))
     );
     setPlanBlocks(smartPlannerPreview.blocks);
     setPlanMetadata({

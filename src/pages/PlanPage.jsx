@@ -709,6 +709,9 @@ function PlanPage({
                   {block.start}–{block.end}
                 </span>
                 <span className="plan-time-badges">
+                  {(block.startDayOffset > 0 || block.endDayOffset > 0) && (
+                    <span className="plan-next-day-indicator">Next day</span>
+                  )}
                   {isNow && <span className="plan-now-indicator">Now</span>}
                   {!isNow && isNext && (
                     <span className="plan-next-indicator">Next</span>

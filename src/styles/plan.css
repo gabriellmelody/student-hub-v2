@@ -1170,6 +1170,28 @@
   font-weight: 750;
 }
 
+.smart-planner-time-fields .smart-planner-time-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.smart-planner-time-label small,
+.smart-planner-preview-time small {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-size: 0.62rem;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .smart-planner-time-fields input {
   width: 100%;
   min-height: var(--density-input-height);
@@ -1471,6 +1493,9 @@
 }
 
 .smart-planner-preview-time {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
   color: var(--text-muted);
   font-family: var(--mono);
   font-size: 0.68rem;

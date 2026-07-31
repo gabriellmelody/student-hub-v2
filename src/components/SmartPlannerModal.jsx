@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import {
   formatPlannerPreviewTime,
   SMART_PLANNER_CONTEXT_MAX_LENGTH,
+  timeStringToMinute,
 } from "../utils/smartPlannerUtils.js";
 
 const PLAN_STYLE_OPTIONS = [
@@ -20,7 +21,12 @@ function PreviewBlock({ block, index }) {
 
   return (
     <li className={`smart-planner-preview-block ${block.type === "break" ? "is-break" : ""}`}>
-      <div className="smart-planner-preview-time">{timeLabel}</div>
+      <div className="smart-planner-preview-time">
+        <span>{timeLabel}</span>
+        {(block.startDayOffset > 0 || block.endDayOffset > 0) && (
+          <small>Next day</small>
+        )}
+      </div>
       <div>
         <div className="smart-planner-preview-block-heading">
           <strong>{block.title || (block.type === "break" ? "Break" : "Study block")}</strong>
@@ -110,6 +116,12 @@ export default function SmartPlannerModal({
     : Number.isInteger(quota?.remainingGenerations)
       ? `${quota.remainingGenerations} AI plan${quota.remainingGenerations === 1 ? "" : "s"} remaining`
       : "3 AI plans available every 24 hours";
+  const startMinute = timeStringToMinute(draft.startTime);
+  const finishMinute = timeStringToMinute(draft.endTime);
+  const finishesNextDay =
+    startMinute !== null &&
+    finishMinute !== null &&
+    finishMinute <= startMinute;
 
   return (
     <div className="smart-planner-backdrop" role="presentation" onMouseDown={onClose}>
@@ -151,7 +163,10 @@ export default function SmartPlannerModal({
                 />
               </label>
               <label>
-                <span>Finish time</span>
+                <span className="smart-planner-time-label">
+                  Finish time
+                  {finishesNextDay && <small>Next day</small>}
+                </span>
                 <input
                   type="time"
                   value={draft.endTime}

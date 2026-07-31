@@ -1765,6 +1765,17 @@ function getEveningTaskScore(task) {
   );
 }
 
+function getEveningDeadlineRank(task) {
+  const daysLeft = getDaysLeft(task.dueDate);
+
+  if (daysLeft === null || daysLeft > 7) return 5;
+  if (daysLeft < 0) return 0;
+  if (daysLeft === 0) return 1;
+  if (daysLeft === 1) return 2;
+  if (daysLeft <= 2) return 3;
+  return 4;
+}
+
 function getEveningTaskDuration(task, energy) {
   const effort = Number(task.effort) || 2;
   const effortDurations = {
@@ -1793,9 +1804,9 @@ export function buildEveningPlan({
   busyIntervals = [],
 }) {
   const startMinutes = timeToMinutes(startTime);
-  const endMinutes = timeToMinutes(endTime);
+  const selectedEndMinutes = timeToMinutes(endTime);
 
-  if (startMinutes === null || endMinutes === null) {
+  if (startMinutes === null || selectedEndMinutes === null) {
     return {
       ok: false,
       reason: "Choose a start and end time.",
@@ -1803,13 +1814,10 @@ export function buildEveningPlan({
     };
   }
 
-  if (endMinutes <= startMinutes) {
-    return {
-      ok: false,
-      reason: "Choose an end time after your start time.",
-      blocks: [],
-    };
-  }
+  const crossesMidnight = selectedEndMinutes <= startMinutes;
+  const endMinutes = crossesMidnight
+    ? selectedEndMinutes + 24 * 60
+    : selectedEndMinutes;
 
   const availableMinutes = endMinutes - startMinutes;
 
@@ -1855,8 +1863,7 @@ export function buildEveningPlan({
     };
   }
 
-  const styleBufferMultiplier =
-    planStyle === "light" ? 1.7 : planStyle === "push" ? 0.45 : 1;
+  const styleBufferMultiplier = planStyle === "light" ? 1.7 : 0;
   const baseBufferMinutes =
     availableMinutes >= 120 ? 15 : availableMinutes >= 75 ? 10 : 0;
   const bufferMinutes = Math.round(baseBufferMinutes * styleBufferMultiplier);
@@ -1881,6 +1888,12 @@ export function buildEveningPlan({
         !isInactiveClassroomTask(task)
     )
     .sort((firstTask, secondTask) => {
+      const deadlineDifference =
+        getEveningDeadlineRank(firstTask) -
+        getEveningDeadlineRank(secondTask);
+
+      if (deadlineDifference !== 0) return deadlineDifference;
+
       const scoreDifference =
         getEveningTaskScore(secondTask) - getEveningTaskScore(firstTask);
 
@@ -1900,6 +1913,7 @@ export function buildEveningPlan({
   let intervalIndex = 0;
   let currentOffset = freeTime.freeIntervals[0]?.startOffset || 0;
   let scheduledStudyMinutes = 0;
+  const minimumStudyMinutes = 15;
 
   function getCurrentFreeInterval() {
     return freeTime.freeIntervals[intervalIndex] || null;
@@ -1924,109 +1938,177 @@ export function buildEveningPlan({
     return currentInterval;
   }
 
-  const totalCandidateWorkMinutes = candidateTasks.reduce(
-    (totalMinutes, task) => {
-      return (
-        totalMinutes +
-        Math.round(getEveningTaskDuration(task, energy) * styleBlockMultiplier)
-      );
-    },
+  const taskWork = candidateTasks.map((task) => ({
+    task,
+    remainingMinutes: Math.round(
+      getEveningTaskDuration(task, energy) * styleBlockMultiplier
+    ),
+  }));
+  const totalCandidateWorkMinutes = taskWork.reduce(
+    (totalMinutes, entry) => totalMinutes + entry.remainingMinutes,
     0
   );
 
-  for (const task of candidateTasks) {
-    const studyBlockCount = blocks.filter((block) => block.type === "study").length;
-    if (studyBlockCount >= maxStudyBlocks) break;
-    if (remainingMinutes < 25) break;
+  function getDayOffset(offset) {
+    return Math.floor((startMinutes + offset) / (24 * 60));
+  }
 
-    let remainingTaskMinutes = Math.round(
-      getEveningTaskDuration(task, energy) * styleBlockMultiplier
+  function getStudyBlockCount() {
+    return blocks.filter((block) => block.type === "study").length;
+  }
+
+  function hasSchedulableWork() {
+    return taskWork.some(
+      (entry) => entry.remainingMinutes >= minimumStudyMinutes
+    );
+  }
+
+  function addBreakWhenUseful() {
+    if (
+      !includeBreaks ||
+      !hasSchedulableWork() ||
+      getStudyBlockCount() >= maxStudyBlocks ||
+      remainingMinutes < breakDuration + minimumStudyMinutes
+    ) {
+      return;
+    }
+
+    const breakInterval = getCurrentFreeInterval();
+
+    if (
+      !breakInterval ||
+      breakInterval.endOffset - currentOffset <
+        breakDuration + minimumStudyMinutes
+    ) {
+      if (
+        breakInterval &&
+        breakInterval.endOffset - currentOffset < minimumStudyMinutes
+      ) {
+        moveToNextFreeInterval();
+      }
+      return;
+    }
+
+    blocks.push({
+      id: `evening-break-${currentOffset}`,
+      type: "break",
+      source: "generated",
+      edited: false,
+      locked: false,
+      taskId: null,
+      calendarEventId: null,
+      start: formatTime(startTime, currentOffset),
+      end: formatTime(startTime, currentOffset + breakDuration),
+      startDayOffset: getDayOffset(currentOffset),
+      endDayOffset: getDayOffset(currentOffset + breakDuration),
+      duration: breakDuration,
+      title: "Break",
+      tip:
+        energy === "low"
+          ? "Reset properly before the next block."
+          : "Step away for a few minutes.",
+    });
+
+    currentOffset += breakDuration;
+    remainingMinutes -= breakDuration;
+  }
+
+  function scheduleTaskEntry(entry) {
+    const currentInterval = ensureMinimumFreeTime(minimumStudyMinutes);
+
+    if (!currentInterval) return false;
+
+    const intervalRemaining = currentInterval.endOffset - currentOffset;
+    const duration = Math.min(
+      safeMaxFocusMinutes,
+      entry.remainingMinutes,
+      remainingMinutes,
+      intervalRemaining
     );
 
-    while (
-      remainingTaskMinutes >= 20 &&
-      remainingMinutes >= 25 &&
-      blocks.filter((block) => block.type === "study").length < maxStudyBlocks
-    ) {
-      const currentInterval = ensureMinimumFreeTime(20);
+    if (duration < minimumStudyMinutes) return false;
 
-      if (!currentInterval) break;
+    const { task } = entry;
+    blocks.push({
+      id: `evening-${task.id}-${currentOffset}`,
+      type: "study",
+      source: "generated",
+      taskSource: task.source || "manual",
+      edited: false,
+      locked: false,
+      taskId: task.id,
+      calendarEventId: null,
+      subject: task.subject,
+      title: task.title,
+      start: formatTime(startTime, currentOffset),
+      end: formatTime(startTime, currentOffset + duration),
+      startDayOffset: getDayOffset(currentOffset),
+      endDayOffset: getDayOffset(currentOffset + duration),
+      duration,
+      effort: task.effort,
+      taskType: task.taskType,
+      importance: task.importance,
+      detectedTags: task.detectedTags,
+      importanceSource: task.importanceSource,
+      classroomCourseId: task.classroomCourseId || null,
+      classroomCourseName: task.classroomCourseName || "",
+      externalId: task.externalId || null,
+      tip: getTaskTip(task),
+    });
 
-      const intervalRemaining = currentInterval.endOffset - currentOffset;
-      const duration = Math.min(
-        safeMaxFocusMinutes,
-        remainingTaskMinutes,
-        remainingMinutes,
-        intervalRemaining
-      );
+    currentOffset += duration;
+    remainingMinutes -= duration;
+    entry.remainingMinutes -= duration;
+    scheduledStudyMinutes += duration;
+    addBreakWhenUseful();
+    return true;
+  }
 
-      if (duration < 20) break;
+  while (
+    remainingMinutes >= minimumStudyMinutes &&
+    getStudyBlockCount() < maxStudyBlocks &&
+    hasSchedulableWork()
+  ) {
+    let scheduledThisPass = false;
 
-      blocks.push({
-        id: `evening-${task.id}-${currentOffset}`,
-        type: "study",
-        source: "generated",
-        taskSource: task.source || "manual",
-        edited: false,
-        locked: false,
-        taskId: task.id,
-        calendarEventId: null,
-        subject: task.subject,
-        title: task.title,
-        start: formatTime(startTime, currentOffset),
-        end: formatTime(startTime, currentOffset + duration),
-        duration,
-        effort: task.effort,
-        taskType: task.taskType,
-        importance: task.importance,
-        detectedTags: task.detectedTags,
-        importanceSource: task.importanceSource,
-        classroomCourseId: task.classroomCourseId || null,
-        classroomCourseName: task.classroomCourseName || "",
-        externalId: task.externalId || null,
-        tip: getTaskTip(task),
-      });
-
-      currentOffset += duration;
-      remainingMinutes -= duration;
-      remainingTaskMinutes -= duration;
-      scheduledStudyMinutes += duration;
-
-      if (includeBreaks && remainingMinutes >= breakDuration + 25) {
-        const breakInterval = getCurrentFreeInterval();
-
-        if (
-          !breakInterval ||
-          breakInterval.endOffset - currentOffset < breakDuration + 25
-        ) {
-          if (breakInterval && breakInterval.endOffset - currentOffset < 25) {
-            moveToNextFreeInterval();
-          }
-          continue;
-        }
-
-        blocks.push({
-          id: `evening-break-${currentOffset}`,
-          type: "break",
-          source: "generated",
-          edited: false,
-          locked: false,
-          taskId: null,
-          calendarEventId: null,
-          start: formatTime(startTime, currentOffset),
-          end: formatTime(startTime, currentOffset + breakDuration),
-          duration: breakDuration,
-          title: "Break",
-          tip:
-            energy === "low"
-              ? "Reset properly before the next block."
-              : "Step away for a few minutes.",
-        });
-
-        currentOffset += breakDuration;
-        remainingMinutes -= breakDuration;
+    for (const entry of taskWork) {
+      if (
+        remainingMinutes < minimumStudyMinutes ||
+        getStudyBlockCount() >= maxStudyBlocks
+      ) {
+        break;
       }
+      if (entry.remainingMinutes < minimumStudyMinutes) continue;
+
+      scheduledThisPass = scheduleTaskEntry(entry) || scheduledThisPass;
     }
+
+    if (!scheduledThisPass) break;
+  }
+
+  const lastBlock = blocks.at(-1);
+  const lastTaskWork = lastBlock?.taskId
+    ? taskWork.find((entry) => entry.task.id === lastBlock.taskId)
+    : null;
+  const lastInterval = getCurrentFreeInterval();
+  const extendableMinutes =
+    lastBlock?.type === "study" && lastTaskWork && lastInterval
+      ? Math.min(
+          remainingMinutes,
+          Math.max(0, safeMaxFocusMinutes - lastBlock.duration),
+          lastTaskWork.remainingMinutes,
+          Math.max(0, lastInterval.endOffset - currentOffset)
+        )
+      : 0;
+
+  if (extendableMinutes > 0) {
+    currentOffset += extendableMinutes;
+    remainingMinutes -= extendableMinutes;
+    lastTaskWork.remainingMinutes -= extendableMinutes;
+    scheduledStudyMinutes += extendableMinutes;
+    lastBlock.duration += extendableMinutes;
+    lastBlock.end = formatTime(startTime, currentOffset);
+    lastBlock.endDayOffset = getDayOffset(currentOffset);
   }
 
   if (blocks.length === 0) {
@@ -2047,6 +2129,7 @@ export function buildEveningPlan({
     ).size,
     breakCount: blocks.filter((block) => block.type === "break").length,
     windowMinutes: availableMinutes,
+    crossesMidnight,
     usableMinutes: freeTime.usableMinutes,
     busyMinutes: availableMinutes - freeTime.usableMinutes,
     unscheduledWorkMinutes: Math.max(
