@@ -135,6 +135,17 @@ function positionsMatch(first, second) {
   );
 }
 
+function getInteractiveTargetElements(target) {
+  if (!target) return [];
+
+  const elements = getFocusableTourElements(target);
+  const targetIsFocusable = target.matches?.(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  );
+
+  return targetIsFocusable ? [target, ...elements] : elements;
+}
+
 export default function GuidedTour({
   activePage,
   activeSettingsView,
@@ -484,7 +495,13 @@ export default function GuidedTour({
 
       if (event.key !== "Tab" || !cardRef.current) return;
 
-      const focusableElements = getFocusableTourElements(cardRef.current);
+      const targetElements = activeStep?.allowTargetInteraction
+        ? getInteractiveTargetElements(targetRef.current)
+        : [];
+      const focusableElements = [
+        ...targetElements,
+        ...getFocusableTourElements(cardRef.current),
+      ];
 
       if (focusableElements.length === 0) {
         event.preventDefault();
@@ -492,12 +509,16 @@ export default function GuidedTour({
         return;
       }
 
-      const focusIsOutsideCard = !cardRef.current.contains(document.activeElement);
+      const focusIsInsideTarget = targetRef.current?.contains(
+        document.activeElement
+      );
+      const focusIsInsideSystem =
+        cardRef.current.contains(document.activeElement) || focusIsInsideTarget;
       const focusTarget = getTourFocusTrapTarget({
         focusableElements,
         activeElement: document.activeElement,
         shiftKey: event.shiftKey,
-        focusIsInside: !focusIsOutsideCard,
+        focusIsInside: focusIsInsideSystem,
       });
 
       if (focusTarget) {
@@ -510,7 +531,9 @@ export default function GuidedTour({
       if (
         !canFocusStep ||
         !cardRef.current ||
-        cardRef.current.contains(event.target)
+        cardRef.current.contains(event.target) ||
+        (activeStep?.allowTargetInteraction &&
+          targetRef.current?.contains(event.target))
       ) {
         return;
       }
@@ -533,7 +556,14 @@ export default function GuidedTour({
       document.removeEventListener("focusin", handleFocusIn);
       window.removeEventListener("popstate", handleBrowserBack);
     };
-  }, [blocked, isTourActive, renderState.status, skipTour, stepKey]);
+  }, [
+    activeStep?.allowTargetInteraction,
+    blocked,
+    isTourActive,
+    renderState.status,
+    skipTour,
+    stepKey,
+  ]);
 
   if (
     !isTourActive ||

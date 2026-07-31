@@ -1,3 +1,5 @@
+import { getClassroomSetupStartPhase } from "../utils/classroomSetupTourUtils.js";
+
 export const demoGuidedTour = {
   id: "demo",
   version: 1,
@@ -337,6 +339,180 @@ export const todaysPlanGuidedTour = {
   ],
 };
 
+const classroomSetupSteps = {
+  connect: {
+    id: "classroom-setup-connect",
+    phase: "connect",
+    page: "settings",
+    settingsView: "integrations",
+    target: '[data-tour="classroom-setup-connect"]',
+    fallbackTarget: '[data-tour="classroom-setup-card"]',
+    title: "Connect Google Classroom",
+    description:
+      "Choose your Google account to connect Classroom. You’ll return to DayLo when it’s ready.",
+    placement: "left",
+    mobilePlacement: "bottom",
+    allowTargetInteraction: true,
+  },
+  return: {
+    id: "classroom-setup-return",
+    phase: "connect",
+    page: "settings",
+    settingsView: "integrations",
+    target: '[data-tour="classroom-setup-card"]',
+    fallbackTarget: '[data-tour="integrations-overview"]',
+    title: "Return to DayLo",
+    description:
+      "After you choose an account, DayLo returns here and continues with your classes. You can retry or stop at any time.",
+    placement: "left",
+    mobilePlacement: "bottom",
+  },
+  loadClasses: {
+    id: "classroom-setup-load-classes",
+    phase: "load-classes",
+    page: "settings",
+    settingsView: "integrations",
+    target: '[data-tour="classroom-setup-load"]',
+    fallbackTarget: '[data-tour="classroom-setup-card"]',
+    title: "Load your classes",
+    description: "Read your active Classroom classes so you can choose which ones DayLo should use.",
+    placement: "left",
+    mobilePlacement: "bottom",
+    allowTargetInteraction: true,
+  },
+  openManager: {
+    id: "classroom-setup-open-manager",
+    phase: "choose-classes",
+    page: "settings",
+    settingsView: "integrations",
+    target: '[data-tour="classroom-setup-manage"]',
+    fallbackTarget: '[data-tour="classroom-setup-card"]',
+    title: "Manage Classroom",
+    description: "Open your class list to choose classes, link Subjects and review assignments.",
+    placement: "left",
+    mobilePlacement: "bottom",
+    allowTargetInteraction: true,
+  },
+  chooseClasses: {
+    id: "classroom-setup-choose-classes",
+    phase: "choose-classes",
+    page: "settings",
+    settingsView: "integrations",
+    target: '[data-tour="classroom-setup-class-choices"]',
+    fallbackTarget: '[data-tour="classroom-setup-manager"]',
+    title: "Choose your classes",
+    description: "Include classes you want to use in DayLo and ignore the rest.",
+    placement: "right",
+    mobilePlacement: "bottom",
+    allowTargetInteraction: true,
+  },
+  linkSubjects: {
+    id: "classroom-setup-link-subjects",
+    phase: "link-subjects",
+    page: "settings",
+    settingsView: "integrations",
+    target: '[data-tour="classroom-setup-subject-links"]',
+    fallbackTarget: '[data-tour="classroom-setup-class-choices"]',
+    title: "Link DayLo Subjects",
+    description: "Link each included class to a Subject, or create one with the suggested name.",
+    placement: "right",
+    mobilePlacement: "bottom",
+    allowTargetInteraction: true,
+  },
+  previewAssignments: {
+    id: "classroom-setup-preview-assignments",
+    phase: "preview-assignments",
+    page: "settings",
+    settingsView: "integrations",
+    target: '[data-tour="classroom-setup-preview"]',
+    fallbackTarget: '[data-tour="classroom-setup-manager"]',
+    title: "Preview assignments",
+    description: "Load assignments for included classes and review them before anything becomes a task.",
+    placement: "left",
+    mobilePlacement: "bottom",
+    allowTargetInteraction: true,
+  },
+  importAssignments: {
+    id: "classroom-setup-import-assignments",
+    phase: "import-assignments",
+    page: "settings",
+    settingsView: "integrations",
+    target: '[data-tour="classroom-setup-import"]',
+    fallbackTarget: '[data-tour="classroom-setup-manager"]',
+    title: "Import selected work",
+    description: "Only selected assignments become DayLo tasks. Existing imports stay duplicate-free.",
+    placement: "left",
+    mobilePlacement: "top",
+    allowTargetInteraction: true,
+  },
+  manage: {
+    id: "classroom-setup-manage-later",
+    phase: "manage",
+    page: "settings",
+    settingsView: "integrations",
+    target: '[data-tour="classroom-setup-manager"]',
+    fallbackTarget: '[data-tour="classroom-setup-card"]',
+    title: "Manage Classroom here",
+    description: "Return here whenever you want to change classes, preview new work or sync selected assignments.",
+    placement: "left",
+    mobilePlacement: "bottom",
+  },
+};
+
+function getClassroomSetupSteps(context = {}, resumePhase = "") {
+  const managerOpen = context.managerOpen === true;
+  const phase = getClassroomSetupStartPhase(context, resumePhase);
+
+  if (phase === "connect") {
+    return [
+      classroomSetupSteps.connect,
+      classroomSetupSteps.return,
+      classroomSetupSteps.loadClasses,
+      classroomSetupSteps.openManager,
+      classroomSetupSteps.chooseClasses,
+      classroomSetupSteps.linkSubjects,
+      classroomSetupSteps.previewAssignments,
+      classroomSetupSteps.importAssignments,
+      classroomSetupSteps.manage,
+    ];
+  }
+
+  if (phase === "load-classes") {
+    return [
+      classroomSetupSteps.loadClasses,
+      classroomSetupSteps.openManager,
+      classroomSetupSteps.chooseClasses,
+      classroomSetupSteps.linkSubjects,
+      classroomSetupSteps.previewAssignments,
+      classroomSetupSteps.importAssignments,
+      classroomSetupSteps.manage,
+    ];
+  }
+
+  const managerSteps = [];
+  if (!managerOpen) managerSteps.push(classroomSetupSteps.openManager);
+  if (phase === "choose-classes") managerSteps.push(classroomSetupSteps.chooseClasses);
+  if (["choose-classes", "link-subjects"].includes(phase)) {
+    managerSteps.push(classroomSetupSteps.linkSubjects);
+  }
+  if (["choose-classes", "link-subjects", "preview-assignments"].includes(phase)) {
+    managerSteps.push(classroomSetupSteps.previewAssignments);
+  }
+  if (phase !== "manage") managerSteps.push(classroomSetupSteps.importAssignments);
+  managerSteps.push(classroomSetupSteps.manage);
+  return managerSteps;
+}
+
+export function createClassroomSetupGuidedTour(context = {}, resumePhase = "") {
+  return {
+    id: "google-classroom-setup",
+    version: 1,
+    steps: getClassroomSetupSteps(context, resumePhase),
+  };
+}
+
+export const classroomSetupGuidedTour = createClassroomSetupGuidedTour();
+
 const guidedTours = {
   [demoGuidedTour.id]: demoGuidedTour,
   [gettingStartedGuidedTour.id]: gettingStartedGuidedTour,
@@ -345,8 +521,12 @@ const guidedTours = {
   [calendarGuidedTour.id]: calendarGuidedTour,
   [smartPlannerGuidedTour.id]: smartPlannerGuidedTour,
   [todaysPlanGuidedTour.id]: todaysPlanGuidedTour,
+  [classroomSetupGuidedTour.id]: classroomSetupGuidedTour,
 };
 
-export function getGuidedTourDefinition(tourId) {
+export function getGuidedTourDefinition(tourId, context, resumePhase) {
+  if (tourId === classroomSetupGuidedTour.id) {
+    return createClassroomSetupGuidedTour(context, resumePhase);
+  }
   return guidedTours[tourId] || null;
 }

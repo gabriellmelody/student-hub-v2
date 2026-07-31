@@ -3,6 +3,7 @@ import {
   migrateLegacySubjectColours,
   suggestSubjectColour,
 } from "./subjectColourUtils.js";
+import { RELEASE_WELCOME_STORAGE_KEY } from "./releaseWelcomeUtils.js";
 
 export const defaultTasks = [
   {
@@ -210,6 +211,8 @@ export const STUDENT_HUB_STORAGE_KEYS = [
   "student-hub-hours",
   "student-hub-start-time",
   "student-hub-guided-tours",
+  "daylo-classroom-setup-intro-seen",
+  RELEASE_WELCOME_STORAGE_KEY,
 ];
 
 function normalizeQuickLinkLabel(value, fallback = "School link") {

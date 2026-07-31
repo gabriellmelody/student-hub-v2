@@ -492,10 +492,56 @@ test("all supported forced replay identifiers resolve", () => {
     "calendar",
     "smart-planner",
     "todays-plan",
+    "google-classroom-setup",
     "demo",
   ]) {
     assert.equal(getGuidedTourDefinition(tourId)?.id, tourId);
   }
+});
+
+test("Classroom setup starts at Connect when disconnected", () => {
+  const tour = getGuidedTourDefinition("google-classroom-setup", {
+    connected: false,
+  });
+
+  assert.equal(tour.steps[0].id, "classroom-setup-connect");
+  assert.equal(tour.steps[0].allowTargetInteraction, true);
+});
+
+test("Classroom setup skips completed connection and class-loading steps", () => {
+  const tour = getGuidedTourDefinition("google-classroom-setup", {
+    connected: true,
+    courseCount: 5,
+    includedCount: 3,
+    linkedIncludedCount: 2,
+    managerOpen: true,
+  });
+
+  assert.equal(tour.steps[0].id, "classroom-setup-link-subjects");
+  assert.ok(!tour.steps.some((step) => step.id === "classroom-setup-connect"));
+  assert.ok(!tour.steps.some((step) => step.id === "classroom-setup-load-classes"));
+});
+
+test("Classroom setup OAuth resume begins at the next relevant phase", () => {
+  const tour = getGuidedTourDefinition(
+    "google-classroom-setup",
+    {
+      connected: true,
+      courseCount: 0,
+    },
+    "load-classes"
+  );
+
+  assert.equal(tour.steps[0].id, "classroom-setup-load-classes");
+});
+
+test("Classroom setup steps provide safe missing-target fallbacks", () => {
+  const tour = getGuidedTourDefinition("google-classroom-setup", {
+    connected: false,
+  });
+
+  assert.ok(tour.steps.every((step) => step.target));
+  assert.ok(tour.steps.every((step) => step.fallbackTarget));
 });
 
 test("unknown forced replay identifiers are rejected", () => {

@@ -74,6 +74,32 @@ export const helpTopics = [
     ],
   },
   {
+    id: "google-classroom-setup",
+    title: "Google Classroom setup",
+    summary: "Connect Classroom, choose classes and import selected assignments.",
+    tourId: "google-classroom-setup",
+    sections: [
+      {
+        title: "Connect and choose classes",
+        paragraphs: [
+          "Connect your Google account, load active classes, then include only the classes you want DayLo to use.",
+        ],
+      },
+      {
+        title: "Link Subjects",
+        paragraphs: [
+          "Link each included class to an existing DayLo Subject or create one from the class name.",
+        ],
+      },
+      {
+        title: "Review before import",
+        paragraphs: [
+          "Preview assignments and select the work you want. Only selected assignments become tasks.",
+        ],
+      },
+    ],
+  },
+  {
     id: "subjects-grades",
     title: "Subjects and grade targets",
     summary: "Organise classes and give planning useful academic context.",

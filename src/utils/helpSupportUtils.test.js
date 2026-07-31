@@ -16,13 +16,14 @@ import {
 } from "./helpSupportUtils.js";
 import { GUIDED_TOUR_STORAGE_KEY } from "./guidedTourStorage.js";
 
-test("the Help centre defines the six required topics", () => {
-  assert.equal(helpTopics.length, 6);
+test("the Help centre defines the seven required topics", () => {
+  assert.equal(helpTopics.length, 7);
   assert.deepEqual(
     helpTopics.map((topic) => topic.title),
     [
       "Getting started",
       "To-do and assignments",
+      "Google Classroom setup",
       "Subjects and grade targets",
       "Calendar and busy time",
       "Smart Planner",
@@ -31,12 +32,13 @@ test("the Help centre defines the six required topics", () => {
   );
 });
 
-test("all six Help topics expose focused tour identifiers", () => {
+test("all seven Help topics expose focused tour identifiers", () => {
   assert.deepEqual(
     helpTopics.map((topic) => topic.tourId),
     [
       "getting-started",
       "todo",
+      "google-classroom-setup",
       "subjects",
       "calendar",
       "smart-planner",
@@ -44,6 +46,15 @@ test("all six Help topics expose focused tour identifiers", () => {
     ]
   );
   assert.ok(helpTopics.every((topic) => getGuidedTourDefinition(topic.tourId)));
+});
+
+test("Google Classroom setup keeps its written guide and replayable tour", () => {
+  const topic = getHelpTopic("google-classroom-setup");
+  const tour = getGuidedTourDefinition(topic.tourId);
+
+  assert.equal(topic.title, "Google Classroom setup");
+  assert.equal(tour.id, "google-classroom-setup");
+  assert.ok(tour.steps.length > 0);
 });
 
 test("Help topics no longer rely on the getting-started inclusion note", () => {

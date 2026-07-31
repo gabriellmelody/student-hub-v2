@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import ClassroomSetupIntroModal from "../components/ClassroomSetupIntroModal.jsx";
 import DayloMark from "../components/DayloMark.jsx";
 import QuickLinkIcon from "../components/QuickLinkIcon.jsx";
 import {
@@ -72,6 +73,15 @@ import {
   getSuggestedClassroomSubjectName,
 } from "../utils/classroomCourseUtils.js";
 import { REAL_CLASSROOM_COURSE_SELECTIONS_KEY } from "../utils/onboardingUtils.js";
+import {
+  CLASSROOM_SETUP_TOUR_ID,
+  clearClassroomSetupResume,
+  loadClassroomSetupIntroSeen,
+  loadClassroomSetupResume,
+  markClassroomSetupIntroSeen,
+  saveClassroomSetupResume,
+  shouldShowClassroomSetupIntro,
+} from "../utils/classroomSetupTourUtils.js";
 
 const STUDENT_HUB_SUPPORT_EMAIL = normalizeSupportEmail(
   import.meta.env.VITE_STUDENT_HUB_SUPPORT_EMAIL || ""
@@ -531,6 +541,10 @@ function SettingsPage({
   onRefreshSmartPlannerStatus,
   onOpenSmartPlanner,
   onReplayTour,
+  activeGuidedTourId = "",
+  releaseWelcomeOpen = false,
+  classroomSetupTourRequest = 0,
+  onStartClassroomSetupTour,
   navigationRequest = 0,
 }) {
   const [settingsView, setSettingsView] = useState(() => initialView || "hub");
@@ -1278,6 +1292,10 @@ function SettingsPage({
           smartPlannerStatus={smartPlannerStatus}
           onRefreshSmartPlannerStatus={onRefreshSmartPlannerStatus}
           onOpenSmartPlanner={onOpenSmartPlanner}
+          activeGuidedTourId={activeGuidedTourId}
+          releaseWelcomeOpen={releaseWelcomeOpen}
+          classroomSetupTourRequest={classroomSetupTourRequest}
+          onStartClassroomSetupTour={onStartClassroomSetupTour}
           navigationRequest={navigationRequest}
         />
       ) : settingsView === "quickLinks" ? (
@@ -1316,6 +1334,10 @@ function IntegrationsSettings({
   smartPlannerStatus,
   onRefreshSmartPlannerStatus,
   onOpenSmartPlanner,
+  activeGuidedTourId = "",
+  releaseWelcomeOpen = false,
+  classroomSetupTourRequest = 0,
+  onStartClassroomSetupTour,
   navigationRequest = 0,
 }) {
   const sampleCourses = buildMockClassroomPreview(mockClassroomData);
@@ -1353,6 +1375,14 @@ function IntegrationsSettings({
   const [syncMessage, setSyncMessage] = useState("");
   const [classroomCleanupMessage, setClassroomCleanupMessage] = useState("");
   const [successToast, setSuccessToast] = useState(null);
+  const [classroomSetupIntroSeen, setClassroomSetupIntroSeen] = useState(
+    loadClassroomSetupIntroSeen
+  );
+  const [classroomSetupIntroOpen, setClassroomSetupIntroOpen] = useState(false);
+  const [classroomSetupStartPending, setClassroomSetupStartPending] =
+    useState(false);
+  const handledClassroomTourRequestRef = useRef(0);
+  const handledClassroomResumeRef = useRef(false);
   const [googleIdentityStatus, setGoogleIdentityStatus] = useState(() => ({
     loading: Boolean(GOOGLE_OAUTH_BROWSER_CLIENT_ID),
     ready: false,
@@ -1544,6 +1574,41 @@ function IntegrationsSettings({
     ).length,
     message: classroomCleanupMessage,
   };
+  const classroomCourseCounts = getRealClassroomCourseCounts(
+    realClassroomCourses.courses,
+    realClassroomCourseSelections
+  );
+  const linkedIncludedCount = realClassroomCourses.courses.filter((course) => {
+    const courseId = getRealClassroomCourseId(course);
+    return (
+      realClassroomCourseSelections[courseId] === "included" &&
+      Boolean(realClassroomCourseSubjectLinks[courseId])
+    );
+  }).length;
+  const classroomSetupContext = {
+    connected: realClassroomSession.connected,
+    courseCount: realClassroomCourses.courses.length,
+    includedCount: classroomCourseCounts.includedCount,
+    linkedIncludedCount,
+    importedCount: realClassroomImportedCount,
+    previewAssignmentCount: realClassroomAssignmentPreview.assignments.length,
+    managerOpen: showRealClassroomReview,
+  };
+  const classroomSetupBlockingUiOpen = Boolean(
+    showMockPreview ||
+      showGoogleCalendarManager ||
+      showRealClassroomReview ||
+      pendingAction ||
+      successToast ||
+      googleOAuthPopupState.provider
+  );
+  const classroomSetupTourBlockingUiOpen = Boolean(
+    showMockPreview ||
+      showGoogleCalendarManager ||
+      pendingAction ||
+      successToast ||
+      googleOAuthPopupState.provider
+  );
 
   useEffect(() => {
     onRefreshSmartPlannerStatus?.();
@@ -1724,6 +1789,119 @@ function IntegrationsSettings({
     checkRealClassroomSession();
     checkGoogleCalendarSession();
   }, []);
+
+  useEffect(() => {
+    if (realClassroomSession.checking || classroomSetupIntroOpen) return;
+
+    if (
+      shouldShowClassroomSetupIntro({
+        introSeen: classroomSetupIntroSeen,
+        onboardingActive: false,
+        releaseWelcomeOpen,
+        guidedTourActive: Boolean(activeGuidedTourId),
+        blockingUiOpen: classroomSetupBlockingUiOpen,
+        integrationsVisible: true,
+      })
+    ) {
+      setClassroomSetupIntroOpen(true);
+    }
+  }, [
+    activeGuidedTourId,
+    classroomSetupBlockingUiOpen,
+    classroomSetupIntroOpen,
+    classroomSetupIntroSeen,
+    realClassroomSession.checking,
+    releaseWelcomeOpen,
+  ]);
+
+  useEffect(() => {
+    if (!classroomSetupStartPending || classroomSetupIntroOpen) return;
+
+    setClassroomSetupStartPending(false);
+    onStartClassroomSetupTour?.(classroomSetupContext);
+  }, [
+    classroomSetupIntroOpen,
+    classroomSetupStartPending,
+    onStartClassroomSetupTour,
+    classroomSetupContext.connected,
+    classroomSetupContext.courseCount,
+    classroomSetupContext.importedCount,
+    classroomSetupContext.includedCount,
+    classroomSetupContext.linkedIncludedCount,
+    classroomSetupContext.managerOpen,
+    classroomSetupContext.previewAssignmentCount,
+  ]);
+
+  useEffect(() => {
+    if (
+      classroomSetupTourRequest <= 0 ||
+      handledClassroomTourRequestRef.current === classroomSetupTourRequest ||
+      realClassroomSession.checking ||
+      classroomSetupTourBlockingUiOpen
+    ) {
+      return;
+    }
+
+    handledClassroomTourRequestRef.current = classroomSetupTourRequest;
+    onStartClassroomSetupTour?.(classroomSetupContext);
+  }, [
+    classroomSetupTourBlockingUiOpen,
+    classroomSetupTourRequest,
+    onStartClassroomSetupTour,
+    realClassroomSession.checking,
+    classroomSetupContext.connected,
+    classroomSetupContext.courseCount,
+    classroomSetupContext.importedCount,
+    classroomSetupContext.includedCount,
+    classroomSetupContext.linkedIncludedCount,
+    classroomSetupContext.managerOpen,
+    classroomSetupContext.previewAssignmentCount,
+  ]);
+
+  useEffect(() => {
+    if (classroomCallbackStatus?.result === "error") {
+      clearClassroomSetupResume();
+      handledClassroomResumeRef.current = true;
+      return;
+    }
+
+    if (
+      classroomCallbackStatus?.result !== "connected" ||
+      handledClassroomResumeRef.current ||
+      realClassroomSession.checking ||
+      classroomSetupTourBlockingUiOpen
+    ) {
+      return;
+    }
+
+    const resume = loadClassroomSetupResume();
+    handledClassroomResumeRef.current = true;
+    if (!resume) return;
+
+    clearClassroomSetupResume();
+    markClassroomSetupIntroSeen();
+    setClassroomSetupIntroSeen(true);
+    onStartClassroomSetupTour?.(classroomSetupContext, resume.phase);
+  }, [
+    classroomCallbackStatus,
+    classroomSetupTourBlockingUiOpen,
+    onStartClassroomSetupTour,
+    realClassroomSession.checking,
+    classroomSetupContext.connected,
+    classroomSetupContext.courseCount,
+    classroomSetupContext.importedCount,
+    classroomSetupContext.includedCount,
+    classroomSetupContext.linkedIncludedCount,
+    classroomSetupContext.managerOpen,
+    classroomSetupContext.previewAssignmentCount,
+  ]);
+
+  function closeClassroomSetupIntro({ startTour = false } = {}) {
+    markClassroomSetupIntroSeen();
+    setClassroomSetupIntroSeen(true);
+    setClassroomSetupIntroOpen(false);
+    if (startTour) setClassroomSetupStartPending(true);
+  }
 
   useEffect(() => {
     if (classroomCallbackStatus?.result !== "connected") return;
@@ -1999,6 +2177,10 @@ function IntegrationsSettings({
     const config = getGooglePopupConfig(provider);
 
     if (googleOAuthPopupState.provider) return;
+
+    if (provider === "classroom" && activeGuidedTourId === CLASSROOM_SETUP_TOUR_ID) {
+      saveClassroomSetupResume("load-classes");
+    }
 
     if (!GOOGLE_OAUTH_BROWSER_CLIENT_ID) {
       setGooglePopupError(
@@ -3138,7 +3320,7 @@ function IntegrationsSettings({
 
   if (showRealClassroomReview) {
     return (
-      <div className="integrations-settings">
+      <div className="integrations-settings" data-tour="classroom-setup-manager">
         <IntegrationAutoSaveStatus
           status={integrationAutoSaveStatus.status}
           message={integrationAutoSaveStatus.message}
@@ -3291,6 +3473,11 @@ function IntegrationsSettings({
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
               onConnectGooglePopup={startGooglePopupConnection}
+              onClassroomRedirect={() => {
+                if (activeGuidedTourId === CLASSROOM_SETUP_TOUR_ID) {
+                  saveClassroomSetupResume("load-classes");
+                }
+              }}
               realClassroomConnectButtonRef={realClassroomConnectButtonRef}
               onManageRealClassroom={() =>
                 setRealClassroomManagerPageOpen(true)
@@ -3332,6 +3519,13 @@ function IntegrationsSettings({
           title={successToast.title}
           summary={successToast.summary}
           onClose={() => setSuccessToast(null)}
+        />
+      )}
+
+      {classroomSetupIntroOpen && (
+        <ClassroomSetupIntroModal
+          onStart={() => closeClassroomSetupIntro({ startTour: true })}
+          onNotNow={() => closeClassroomSetupIntro()}
         />
       )}
     </div>
@@ -3428,6 +3622,7 @@ function IntegrationCard({
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
   onConnectGooglePopup,
+  onClassroomRedirect,
   realClassroomConnectButtonRef,
   onManageRealClassroom,
   onLoadGoogleCalendars,
@@ -3506,7 +3701,13 @@ function IntegrationCard({
   return (
     <article
       className="integration-card"
-      data-tour={isSmartPlanner ? "smart-planner-status" : undefined}
+      data-tour={
+        isSmartPlanner
+          ? "smart-planner-status"
+          : isRealClassroom
+            ? "classroom-setup-card"
+            : undefined
+      }
     >
       <div className="integration-card-heading">
         <span className="integration-provider-mark" aria-hidden="true">
@@ -3654,6 +3855,11 @@ function IntegrationCard({
                       : onLoadRealClassroomCourses
                   }
                   disabled={realClassroomCourses.loading}
+                  data-tour={
+                    realClassroomCourses.courses.length > 0
+                      ? "classroom-setup-manage"
+                      : "classroom-setup-load"
+                  }
                 >
                   {realClassroomCourses.loading
                     ? "Loading classes..."
@@ -3672,6 +3878,7 @@ function IntegrationCard({
                 onClick={() => onConnectGooglePopup("classroom")}
                 disabled={popupConnectDisabled}
                 ref={realClassroomConnectButtonRef}
+                data-tour="classroom-setup-connect"
                 aria-busy={isPopupConnecting ? "true" : undefined}
               >
                 {isPopupConnecting
@@ -3684,6 +3891,7 @@ function IntegrationCard({
                 <a
                   className="integration-setup-button secondary"
                   href="/api/google-classroom/connect"
+                  onClick={onClassroomRedirect}
                 >
                   Use redirect instead
                 </a>
@@ -4276,7 +4484,10 @@ function RealClassroomCourseReviewPage({
   }
 
   return (
-    <section className="settings-provider-subpage real-classroom-manager-page">
+    <section
+      className="settings-provider-subpage real-classroom-manager-page"
+      data-tour="classroom-setup-manager"
+    >
       <div className="settings-provider-header">
         <button
           type="button"
@@ -4381,6 +4592,7 @@ function RealClassroomCourseReviewPage({
                   type="button"
                   onClick={previewAssignments}
                   disabled={assignmentPreview.loading}
+                  data-tour="classroom-setup-preview"
                 >
                   {assignmentPreview.loading
                     ? "Loading..."
@@ -4397,7 +4609,10 @@ function RealClassroomCourseReviewPage({
               </p>
             )}
 
-            <div className="real-classroom-course-actions">
+            <div
+              className="real-classroom-course-actions"
+              data-tour="classroom-setup-class-choices"
+            >
               <button type="button" onClick={onIncludeAll}>
                 Include all
               </button>
@@ -4475,7 +4690,10 @@ function RealClassroomCourseReviewPage({
                       )}
                     </div>
                     {selection === "included" && (
-                      <div className="real-classroom-subject-link">
+                      <div
+                        className="real-classroom-subject-link"
+                        data-tour="classroom-setup-subject-links"
+                      >
                         <div>
                           <strong>
                             {linkedSubject
@@ -4533,6 +4751,7 @@ function RealClassroomCourseReviewPage({
                   type="button"
                   onClick={previewAssignments}
                   disabled={assignmentPreview.loading}
+                  data-tour="classroom-setup-preview"
                 >
                   {assignmentPreview.loading
                     ? "Loading..."
@@ -4872,7 +5091,10 @@ function RealClassroomAssignmentPreview({
       </div>
 
       {hasAssignments && (
-        <div className="real-classroom-import-panel">
+        <div
+          className="real-classroom-import-panel"
+          data-tour="classroom-setup-import"
+        >
           <div>
             <strong>Import selected</strong>
             <p>{importPanelSummary}</p>

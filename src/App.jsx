@@ -10,6 +10,7 @@ import {
 } from "./components/AppChrome.jsx";
 import SmartPlannerModal from "./components/SmartPlannerModal.jsx";
 import GuidedTour from "./components/GuidedTour.jsx";
+import ReleaseWelcomeModal from "./components/ReleaseWelcomeModal.jsx";
 import DayloMark from "./components/DayloMark.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import HomePage from "./pages/HomePage.jsx";
@@ -82,6 +83,10 @@ import {
 import useGuidedTour from "./hooks/useGuidedTour.js";
 import { getGuidedTourDefinition } from "./data/guidedTours.js";
 import {
+  CURRENT_DAYLO_VERSION,
+  currentDayloRelease,
+} from "./data/releaseNotes.js";
+import {
   claimGuidedTourStartup,
   removeTourRequestFromUrl,
   resolveForcedTourRequest,
@@ -93,6 +98,17 @@ import {
   saveGuidedTourOutcome,
   shouldAutomaticallyStartGettingStarted,
 } from "./utils/guidedTourStorage.js";
+import {
+  acknowledgeReleaseVersion,
+  getInitialTourExitAction,
+  loadAcknowledgedReleaseVersion,
+  shouldShowReleaseWelcome,
+} from "./utils/releaseWelcomeUtils.js";
+import {
+  CLASSROOM_SETUP_TOUR_ID,
+  clearClassroomSetupResume,
+  markClassroomSetupIntroSeen,
+} from "./utils/classroomSetupTourUtils.js";
 
 function resolveThemePreference(themePreference) {
   if (themePreference !== "system") return themePreference === "dark" ? "dark" : "light";
@@ -256,6 +272,9 @@ function App() {
   });
   const [subjects, setSubjects] = useState(loadSubjects);
   const [studentProfile, setStudentProfile] = useState(loadStudentProfile);
+  const [lastSeenDayloVersion, setLastSeenDayloVersion] = useState(
+    loadAcknowledgedReleaseVersion
+  );
   const [quickLinksPreferences, setQuickLinksPreferences] = useState(
     loadQuickLinksPreferences
   );
@@ -331,10 +350,21 @@ function App() {
   const [eveningPlanSuccess, setEveningPlanSuccess] = useState(null);
   const eveningPlanSuccessTimerRef = useRef(null);
   const smartPlannerTourOpenedModalRef = useRef(false);
+  const tourStartPendingRef = useRef(false);
+  const [releaseWelcomeOpen, setReleaseWelcomeOpen] = useState(false);
+  const [classroomSetupTourRequest, setClassroomSetupTourRequest] = useState(0);
+  const classroomSetupTourStarterRef = useRef(null);
   const guidedTour = useGuidedTour({
     onExit: ({ tour, status }) => {
       if (tour?.persistOutcome !== false) {
         saveGuidedTourOutcome(tour, status);
+      }
+
+      const initialTourExit = getInitialTourExitAction(tour, status);
+
+      if (initialTourExit.returnHome) {
+        setMobileMoreOpen(false);
+        setActivePage("home");
       }
 
       if (
@@ -344,10 +374,28 @@ function App() {
         smartPlannerTourOpenedModalRef.current = false;
         closeSmartPlanner();
       }
+
+      if (tour?.id === CLASSROOM_SETUP_TOUR_ID) {
+        clearClassroomSetupResume();
+      }
     },
   });
-  const startGuidedTour = guidedTour.startTour;
+  const startGuidedTourBase = guidedTour.startTour;
+  const startGuidedTour = useCallback(
+    (tour, starterElement) => {
+      tourStartPendingRef.current = true;
+      const started = startGuidedTourBase(tour, starterElement);
+
+      if (!started) tourStartPendingRef.current = false;
+      return started;
+    },
+    [startGuidedTourBase]
+  );
   const guidedTourRequestHandledRef = useRef(false);
+
+  useEffect(() => {
+    if (guidedTour.isTourActive) tourStartPendingRef.current = false;
+  }, [guidedTour.isTourActive]);
 
   const applySmartPlannerQuotaResponse = useCallback((result) => {
     if (!result || typeof result !== "object") return;
@@ -546,7 +594,7 @@ function App() {
     const requestedTourId = forcedRequest.id;
     const requestedTour = forcedRequest.tour;
     const blockingUiOpen = Boolean(
-      mobileMoreOpen || eveningPlanSuccess || showAddTask
+      mobileMoreOpen || eveningPlanSuccess || showAddTask || releaseWelcomeOpen
     );
 
     if (requestedTourId) {
@@ -634,6 +682,7 @@ function App() {
     initialNavigation.googleCalendarCallbackStatus,
     mobileMoreOpen,
     openSmartPlanner,
+    releaseWelcomeOpen,
     showAddTask,
     smartPlannerOpen,
     startGuidedTour,
@@ -649,9 +698,36 @@ function App() {
     setActivePage(page);
   }, []);
 
+  const startClassroomSetupTour = useCallback(
+    (context = {}, resumePhase = "") => {
+      if (guidedTour.isTourActive || releaseWelcomeOpen) return false;
+
+      const tour = getGuidedTourDefinition(
+        CLASSROOM_SETUP_TOUR_ID,
+        context,
+        resumePhase
+      );
+      const starterElement = classroomSetupTourStarterRef.current;
+      classroomSetupTourStarterRef.current = null;
+      return startGuidedTour(tour, starterElement);
+    },
+    [guidedTour.isTourActive, releaseWelcomeOpen, startGuidedTour]
+  );
+
   const replayGuidedTour = useCallback(
     (tourId, starterElement) => {
-      if (guidedTour.isTourActive) return false;
+      if (guidedTour.isTourActive || releaseWelcomeOpen) return false;
+
+      if (tourId === CLASSROOM_SETUP_TOUR_ID) {
+        markClassroomSetupIntroSeen();
+        classroomSetupTourStarterRef.current = starterElement || null;
+        setMobileMoreOpen(false);
+        setSettingsView("integrations");
+        setSettingsNavigationRequest((request) => request + 1);
+        setActivePage("settings");
+        setClassroomSetupTourRequest((request) => request + 1);
+        return true;
+      }
 
       const requestedTour = getGuidedTourDefinition(tourId);
       if (!requestedTour) return false;
@@ -684,10 +760,61 @@ function App() {
     [
       guidedTour.isTourActive,
       openSmartPlanner,
+      releaseWelcomeOpen,
       smartPlannerOpen,
       startGuidedTour,
     ]
   );
+
+  useEffect(() => {
+    const gettingStartedTour = getGuidedTourDefinition("getting-started");
+    const gettingStartedTourSettled = Boolean(
+      gettingStartedTour &&
+        !isGuidedTourEligible(
+          gettingStartedTour,
+          loadGuidedTourProgress()
+        )
+    );
+    const blockingUiOpen = Boolean(
+      mobileMoreOpen ||
+        showAddTask ||
+        eveningPlanSuccess ||
+        smartPlannerOpen ||
+        releaseWelcomeOpen
+    );
+
+    if (
+      shouldShowReleaseWelcome({
+        currentVersion: CURRENT_DAYLO_VERSION,
+        lastSeenVersion: lastSeenDayloVersion,
+        activePage,
+        onboardingCompleted: studentProfile.onboardingCompleted,
+        guidedTourActive: guidedTour.isTourActive,
+        gettingStartedTourSettled,
+        blockingUiOpen,
+        tourStartPending: tourStartPendingRef.current,
+      })
+    ) {
+      setReleaseWelcomeOpen(true);
+    }
+  }, [
+    activePage,
+    eveningPlanSuccess,
+    guidedTour.isTourActive,
+    guidedTour.lastExitReason,
+    lastSeenDayloVersion,
+    mobileMoreOpen,
+    releaseWelcomeOpen,
+    showAddTask,
+    smartPlannerOpen,
+    studentProfile.onboardingCompleted,
+  ]);
+
+  const dismissReleaseWelcome = useCallback(() => {
+    acknowledgeReleaseVersion(CURRENT_DAYLO_VERSION);
+    setLastSeenDayloVersion(CURRENT_DAYLO_VERSION);
+    setReleaseWelcomeOpen(false);
+  }, []);
 
   function openSettings(view = "hub", sectionId = "") {
     const nextView = view || "hub";
@@ -2441,6 +2568,8 @@ function App() {
     setSidebarCollapsed(false);
     setActivePage("home");
     setQuickLinksPreferences(loadQuickLinksPreferences());
+    setLastSeenDayloVersion("");
+    setReleaseWelcomeOpen(false);
     setStudentProfile({
       schoolSystem: "",
       onboardingCompleted: false,
@@ -2670,6 +2799,10 @@ function App() {
             onRefreshSmartPlannerStatus={refreshSmartPlannerStatus}
             onOpenSmartPlanner={openSmartPlanner}
             onReplayTour={replayGuidedTour}
+            activeGuidedTourId={guidedTour.activeTour?.id || ""}
+            releaseWelcomeOpen={releaseWelcomeOpen}
+            classroomSetupTourRequest={classroomSetupTourRequest}
+            onStartClassroomSetupTour={startClassroomSetupTour}
             navigationRequest={settingsNavigationRequest}
           />
         )}
@@ -2718,6 +2851,13 @@ function App() {
           title={eveningPlanSuccess.title}
           summary={eveningPlanSuccess.summary}
           onClose={() => setEveningPlanSuccess(null)}
+        />
+      )}
+
+      {releaseWelcomeOpen && (
+        <ReleaseWelcomeModal
+          release={currentDayloRelease}
+          onDismiss={dismissReleaseWelcome}
         />
       )}
 
