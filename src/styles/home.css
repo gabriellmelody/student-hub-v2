@@ -1119,6 +1119,34 @@
   margin-left: clamp(0px, 2vw, 18px);
 }
 
+.home-plan-zone > .home-plan-action--smart {
+  border-color: var(--accent-secondary);
+  background: var(--accent-secondary);
+  color: var(--accent-secondary-contrast);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--daylo-navy) 16%, transparent),
+    0 8px 20px color-mix(in srgb, var(--accent-secondary) 16%, transparent);
+}
+
+.home-plan-zone > .home-plan-action--smart:not(:disabled):hover {
+  border-color: var(--accent-secondary-hover);
+  background: var(--accent-secondary-hover);
+  color: var(--accent-secondary-contrast);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--daylo-navy) 18%, transparent),
+    0 10px 24px color-mix(in srgb, var(--accent-secondary) 22%, transparent);
+}
+
+.home-plan-zone > .home-plan-action--smart:not(:disabled):active {
+  border-color: var(--accent-secondary);
+  background: color-mix(
+    in srgb,
+    var(--accent-secondary) 90%,
+    var(--daylo-navy)
+  );
+  color: var(--accent-secondary-contrast);
+}
+
 .home-week-progress {
   position: relative;
   display: grid;
@@ -1148,6 +1176,15 @@
   stroke: var(--accent);
   filter: drop-shadow(
     0 10px 18px color-mix(in srgb, var(--accent) 18%, transparent)
+  );
+}
+
+.home-progress-endpoint {
+  fill: var(--accent-secondary);
+  stroke: var(--surface);
+  stroke-width: 2;
+  filter: drop-shadow(
+    0 3px 7px color-mix(in srgb, var(--accent-secondary) 24%, transparent)
   );
 }
 

@@ -115,7 +115,7 @@ async function handlePopupCodeExchange(request, response, config) {
         configured: true,
         connected: false,
         message:
-          "Google did not share the account identity Student Hub needs. Reconnect and allow the requested account information.",
+          "Google did not share the account identity DayLo needs. Reconnect and allow the requested account information.",
       });
       return;
     }
@@ -160,7 +160,7 @@ async function handlePopupCodeExchange(request, response, config) {
       connected: false,
       message:
         error?.message === "missing_session_secret"
-          ? "Google OAuth worked, but Student Hub session encryption is not configured."
+          ? "Google OAuth worked, but DayLo session encryption is not configured."
           : "Google Calendar connection could not be completed.",
     });
   }
@@ -259,7 +259,7 @@ export default async function handler(request, response) {
         status: "account_identity_unavailable",
         configured: true,
         message:
-          "Google did not share the account identity Student Hub needs. Reconnect and allow the requested account information.",
+          "Google did not share the account identity DayLo needs. Reconnect and allow the requested account information.",
       });
       return;
     }
@@ -300,7 +300,7 @@ export default async function handler(request, response) {
       configured: true,
       message:
         error?.message === "missing_session_secret"
-          ? "Google OAuth worked, but Student Hub session encryption is not configured."
+          ? "Google OAuth worked, but DayLo session encryption is not configured."
           : "Google Calendar token exchange could not be completed.",
     });
   }

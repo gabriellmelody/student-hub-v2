@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import DayloMark from "../components/DayloMark.jsx";
 import QuickLinkIcon from "../components/QuickLinkIcon.jsx";
 import {
   subjectCourseSystems,
@@ -6,6 +7,7 @@ import {
   DEFAULT_THEME_COLORS,
   themeBackgroundModes,
   themeBackgroundStrengths,
+  logoAppearanceOptions,
   getThemeColorWarnings,
   createSubjectDraft,
   findSubjectProfile,
@@ -711,6 +713,13 @@ function SettingsPage({
     });
   }
 
+  function updateLogoAppearance(nextAppearance) {
+    previewThemeColors({
+      ...themeColorDraft,
+      logoAppearance: nextAppearance,
+    });
+  }
+
   function updateThemeBackgroundField(field, nextValue) {
     previewThemeColors({
       ...themeColorDraft,
@@ -754,12 +763,12 @@ function SettingsPage({
     hub: {
       eyebrow: "Settings",
       title: "Settings",
-      description: "Manage how Student Hub looks, stores data, and connects to school tools.",
+      description: "Manage how DayLo looks, stores data, and connects to school tools.",
     },
     appearance: {
       eyebrow: "Settings / Appearance",
       title: "Appearance",
-      description: "Personalise how Student Hub looks and feels.",
+      description: "Personalise how DayLo looks and feels.",
     },
     subjects: {
       eyebrow: "Settings / Subjects",
@@ -769,18 +778,18 @@ function SettingsPage({
     data: {
       eyebrow: "Settings / Data",
       title: "Data & reset",
-      description: "Manage local Student Hub data and workspace defaults.",
+      description: "Manage local DayLo data and workspace defaults.",
     },
     help: {
       eyebrow: "Settings / Help & tours",
       title: "Help & tours",
       description:
-        "Learn how Student Hub works, replay guided tours or report a problem.",
+        "Learn how DayLo works, replay guided tours or report a problem.",
     },
     integrations: {
       eyebrow: "Settings / Integrations",
       title: "Integrations",
-      description: "Connect school tools and choose what Student Hub can use.",
+      description: "Connect school tools and choose what DayLo can use.",
     },
     quickLinks: {
       eyebrow: "Settings / Quick links",
@@ -1010,63 +1019,38 @@ function SettingsPage({
                   </div>
                 )}
 
-                <div className="theme-colour-advanced">
-                  <button
-                    type="button"
-                    className="theme-colour-advanced-toggle"
-                    aria-expanded={themeAdvancedOpen}
-                    aria-controls="advanced-theme-colours"
-                    onClick={() =>
-                      setThemeAdvancedOpen((currentOpen) => !currentOpen)
-                    }
+                <div className="theme-logo-setting">
+                  <div className="theme-logo-heading">
+                    <strong>Logo appearance</strong>
+                    <small>Choose how the in-app DayLo mark is shown.</small>
+                  </div>
+                  <div
+                    className="theme-logo-options"
+                    role="group"
+                    aria-label="Logo appearance"
                   >
-                    <span>
-                      <strong>Advanced colours</strong>
-                      <small>Edit Primary, Secondary, and Tertiary individually.</small>
-                    </span>
-                    <span
-                      className={`theme-colour-advanced-chevron ${
-                        themeAdvancedOpen ? "open" : ""
-                      }`}
-                      aria-hidden="true"
-                    >
-                      ⌄
-                    </span>
-                  </button>
+                    {logoAppearanceOptions.map((option) => {
+                      const isSelected =
+                        themeColorDraft.logoAppearance === option.value;
 
-                  {themeColorHasWarnings && (
-                    <p className="theme-colour-warning">
-                      {Object.values(themeColorWarnings)[0]}
-                    </p>
-                  )}
-
-                  {themeAdvancedOpen && (
-                    <div
-                      id="advanced-theme-colours"
-                      className="theme-colour-advanced-body"
-                    >
-                      {[
-                        ["primary", "Primary"],
-                        ["secondary", "Secondary"],
-                        ["tertiary", "Tertiary"],
-                      ].map(([role, label]) => (
-                        <label className="theme-colour-picker" key={role}>
-                          <span>
-                            <strong>{label}</strong>
-                            <small>{themeColorDraft[role]}</small>
-                          </span>
-                          <input
-                            type="color"
-                            value={themeColorDraft[role]}
-                            aria-label={`${label} theme colour`}
-                            onChange={(event) =>
-                              updateThemeColorRole(role, event.target.value)
-                            }
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={isSelected ? "active" : ""}
+                          aria-pressed={isSelected}
+                          onClick={() => updateLogoAppearance(option.value)}
+                        >
+                          <DayloMark
+                            className="theme-logo-option-mark"
+                            appearance={option.value}
                           />
-                        </label>
-                      ))}
-                    </div>
-                  )}
+                          <strong>{option.label}</strong>
+                          <span aria-hidden="true">{isSelected ? "✓" : ""}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div
@@ -1174,6 +1158,65 @@ function SettingsPage({
                   )}
                 </div>
 
+                <div className="theme-colour-advanced">
+                  <button
+                    type="button"
+                    className="theme-colour-advanced-toggle"
+                    aria-expanded={themeAdvancedOpen}
+                    aria-controls="advanced-theme-colours"
+                    onClick={() =>
+                      setThemeAdvancedOpen((currentOpen) => !currentOpen)
+                    }
+                  >
+                    <span>
+                      <strong>Advanced colours</strong>
+                      <small>Edit Primary, Secondary, and Tertiary individually.</small>
+                    </span>
+                    <span
+                      className={`theme-colour-advanced-chevron ${
+                        themeAdvancedOpen ? "open" : ""
+                      }`}
+                      aria-hidden="true"
+                    >
+                      ⌄
+                    </span>
+                  </button>
+
+                  {themeColorHasWarnings && (
+                    <p className="theme-colour-warning">
+                      {Object.values(themeColorWarnings)[0]}
+                    </p>
+                  )}
+
+                  {themeAdvancedOpen && (
+                    <div
+                      id="advanced-theme-colours"
+                      className="theme-colour-advanced-body"
+                    >
+                      {[
+                        ["primary", "Primary"],
+                        ["secondary", "Secondary"],
+                        ["tertiary", "Tertiary"],
+                      ].map(([role, label]) => (
+                        <label className="theme-colour-picker" key={role}>
+                          <span>
+                            <strong>{label}</strong>
+                            <small>{themeColorDraft[role]}</small>
+                          </span>
+                          <input
+                            type="color"
+                            value={themeColorDraft[role]}
+                            aria-label={`${label} theme colour`}
+                            onChange={(event) =>
+                              updateThemeColorRole(role, event.target.value)
+                            }
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <div className="theme-colour-preview" aria-label="Theme preview">
                   <span>Preview</span>
                   <div className="theme-colour-preview-card">
@@ -1191,7 +1234,7 @@ function SettingsPage({
                     className="theme-colour-reset"
                     onClick={resetThemeColorDraft}
                   >
-                    Reset to Student Hub default
+                    Reset to DayLo default
                   </button>
                   <span>
                     <button
@@ -1882,7 +1925,7 @@ function IntegrationsSettings({
         linkedAt: null,
       }));
       setSyncMessage(
-        "Sample Classroom unlinked. Imported tasks remain in Student Hub."
+        "Sample Classroom unlinked. Imported tasks remain in DayLo."
       );
     } else if (pendingAction === "remove") {
       const removedCount = removeMockClassroomTasks();
@@ -2303,7 +2346,7 @@ function IntegrationsSettings({
         message:
           result.courseSummary?.count === 0
             ? "Google Classroom connected, but no active classes were found."
-            : "Classes loaded. Choose what Student Hub should use.",
+            : "Classes loaded. Choose what DayLo should use.",
         error: "",
       });
       setRealClassroomSession((currentState) => ({
@@ -3035,9 +3078,9 @@ function IntegrationsSettings({
           loading: false,
           error:
             result.status === "classroom_submission_status_permission_error"
-              ? "Student Hub can read assignments but not submission status yet. Reconnect Google Classroom or check school permissions."
+              ? "DayLo can read assignments but not submission status yet. Reconnect Google Classroom or check school permissions."
               : result.status === "classroom_coursework_permission_error"
-              ? "Student Hub needs assignment access. Reconnect Google Classroom and approve read-only access."
+              ? "DayLo needs assignment access. Reconnect Google Classroom and approve read-only access."
               : result.message || "Could not preview Classroom assignments.",
         }));
         return;
@@ -3322,7 +3365,7 @@ function IntegrationsSettings({
           <div>
             <p className="settings-group-label">Connections</p>
             <h3>School tools in one place</h3>
-            <p>Connect tools, review what they can use, and keep control of what appears in Student Hub.</p>
+            <p>Connect tools, review what they can use, and keep control of what appears in DayLo.</p>
           </div>
           <span>Local workspace</span>
         </div>
@@ -4128,7 +4171,7 @@ function GoogleCalendarManagerPage({
             </p>
             <h1 id="google-calendar-manager-title">Manage calendars</h1>
             <p id="google-calendar-manager-description">
-              Choose which calendars appear in Student Hub and which events block study time. Nothing is changed in Google.
+              Choose which calendars appear in DayLo and which events block study time. Nothing is changed in Google.
             </p>
           </div>
         </header>
@@ -4249,7 +4292,7 @@ function GoogleCalendarManagerRow({ calendar, preference, onTogglePreference }) 
               })
             }
           />
-          <span>Show in Student Hub</span>
+          <span>Show in DayLo</span>
         </label>
         <label className="google-calendar-switch">
           <input
@@ -4540,7 +4583,7 @@ function RealClassroomCourseReviewPage({
                           </p>
                         </div>
                         <label>
-                          <span>Student Hub subject</span>
+                          <span>DayLo subject</span>
                           <select
                             value={linkedSubject?.id || ""}
                             onChange={(event) =>
@@ -4912,7 +4955,7 @@ function RealClassroomAssignmentPreview({
       <div className="real-classroom-assignment-preview-header">
         <div>
           <strong>Preview</strong>
-          <p>Select the work to turn into Student Hub tasks.</p>
+          <p>Select the work to turn into DayLo tasks.</p>
         </div>
         {preview.summary && (
           <span>
@@ -5327,7 +5370,7 @@ function ClassroomConnectionConfirmation({
               : isRemove
                 ? "Only tasks imported from Sample Classroom will be removed. Manual tasks will be kept."
                 : isUnlink
-                  ? "This disconnects local sample mode. Imported sample tasks remain in Student Hub."
+                  ? "This disconnects local sample mode. Imported sample tasks remain in DayLo."
                   : "This uses local demo data only. No Google account will be connected."}
           </p>
         </div>
@@ -5535,7 +5578,7 @@ function MockClassroomPreview({
                   <span>
                     {linkedSubject
                       ? `Linked to ${linkedSubject.name}`
-                      : "Choose a Student Hub subject or leave unassigned."}
+                      : "Choose a DayLo subject or leave unassigned."}
                   </span>
                 </div>
                 <div className="classroom-subject-link-actions">
@@ -6090,7 +6133,7 @@ function QuickLinksSettings({
         <section className="quick-links-section">
           <div className="quick-links-section-heading">
             <h4>AI shortcut</h4>
-            <p>This opens an external assistant. It is not Student Hub AI.</p>
+            <p>This opens an external assistant. It is not DayLo AI.</p>
           </div>
           <div
             className="quick-links-ai-choice"
@@ -6414,7 +6457,7 @@ function HelpSettings({
         <div className="help-section-heading">
           <div>
             <p className="settings-group-label">Guides</p>
-            <h2 id="help-guides-title">Learn Student Hub</h2>
+            <h2 id="help-guides-title">Learn DayLo</h2>
           </div>
           <p>Short, practical help for each part of your workspace.</p>
         </div>
@@ -6901,7 +6944,7 @@ function DataSettings({
     {
       id: "all",
       title: "Clear all local app data",
-      description: "Return Student Hub to a clean first-time state.",
+      description: "Return DayLo to a clean first-time state.",
       confirmation:
         "Tasks, completed history, subjects, profile, onboarding, preferences, widgets, and the current plan will all be removed from this device.",
       confirmLabel: "Clear all data",
@@ -6942,7 +6985,7 @@ function DataSettings({
             <p className="settings-group-label">Stored on this device</p>
             <h3>Local workspace data</h3>
             <p>
-              These controls only affect Student Hub data saved in this
+              These controls only affect DayLo data saved in this
               browser. Other site data is never touched.
             </p>
           </div>

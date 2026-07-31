@@ -45,7 +45,7 @@ test("written guides contain the required planning explanations", () => {
   const today = JSON.stringify(getHelpTopic("todays-plan"));
 
   assert.match(subjects, /secondary planning signal/);
-  assert.match(calendar, /not treated as Student Hub tasks/);
+  assert.match(calendar, /not treated as DayLo tasks/);
   assert.match(planner, /successful Smart Planner result uses one daily allowance/);
   assert.match(planner, /Basic Planner is unlimited/);
   assert.doesNotMatch(today, /timer/i);
@@ -105,7 +105,7 @@ test("valid support email creates an encoded mailto only on request", () => {
   });
 
   assert.match(mailto, /^mailto:support%40example\.com\?/);
-  assert.match(mailto, /Student%20Hub%20feedback/);
+  assert.match(mailto, /DayLo%20feedback/);
   assert.match(mailto, /Add%20A%26B%3F/);
 });
 

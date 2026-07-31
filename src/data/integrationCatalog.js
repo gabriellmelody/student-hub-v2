@@ -30,7 +30,7 @@ export const integrationCatalog = [
     name: "Google Classroom",
     provider: "Google",
     description:
-      "Import assignments and link classes to Student Hub Subjects.",
+      "Import assignments and link classes to DayLo Subjects.",
     status: "beta",
     enabled: false,
     canLink: false,
@@ -54,7 +54,7 @@ export const integrationCatalog = [
   {
     id: "ai-planner",
     name: "Smart Planner AI",
-    provider: "Student Hub",
+    provider: "DayLo",
     description:
       "Build a focused study plan from your active tasks.",
     status: "checking",

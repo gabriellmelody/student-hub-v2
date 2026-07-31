@@ -110,7 +110,7 @@ function HomePage({
 
       <section
         className="home-hero-dashboard home-glow-surface"
-        aria-label="Student Hub overview"
+        aria-label="DayLo overview"
         {...glowSurfaceProps}
       >
         <div
@@ -204,7 +204,9 @@ function HomePage({
 
           <button
             type="button"
-            className="primary-button home-plan-action"
+            className={`primary-button home-plan-action${
+              hasPlan ? "" : " home-plan-action--smart"
+            }`}
             onClick={hasPlan ? () => setActivePage("plan") : openSmartPlanner}
           >
             {hasPlan ? "Continue plan" : "Smart Planner"}
@@ -337,6 +339,9 @@ function WeeklyProgressArc({
     total === 0
       ? ""
       : describeArc(center, center, radius, startAngle, progressEndAngle);
+  const progressEndPoint = progressPath
+    ? polarToCartesian(center, center, radius, progressEndAngle)
+    : null;
   const progressText =
     total === 0
       ? `0 due. No assignments due this week.${
@@ -364,11 +369,19 @@ function WeeklyProgressArc({
           pathLength="100"
         />
         {progressPath && (
-          <path
-            className="home-progress-value-arc"
-            d={progressPath}
-            pathLength="100"
-          />
+          <>
+            <path
+              className="home-progress-value-arc"
+              d={progressPath}
+              pathLength="100"
+            />
+            <circle
+              className="home-progress-endpoint"
+              cx={progressEndPoint.x}
+              cy={progressEndPoint.y}
+              r="3.7"
+            />
+          </>
         )}
       </svg>
       <div className="home-progress-center">

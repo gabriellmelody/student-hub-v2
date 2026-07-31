@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import DayloMark from "./DayloMark.jsx";
 import QuickLinkIcon from "./QuickLinkIcon.jsx";
 import {
   getDaysLeft,
@@ -48,16 +49,17 @@ function getAccountIdentity(displayName) {
   return { accountName, accountInitials };
 }
 
-function MobileTopBar({ activePage, settingsView }) {
+function MobileTopBar({ activePage, settingsView, logoAppearance }) {
   return (
-    <header className="mobile-topbar" aria-label="Student Hub mobile header">
+    <header className="mobile-topbar" aria-label="DayLo mobile header">
       <div className="mobile-topbar-brand">
-        <span className="mobile-topbar-mark" aria-hidden="true">
-          S
-        </span>
+        <DayloMark
+          className="mobile-topbar-mark"
+          appearance={logoAppearance}
+        />
         <div>
           <strong>{getMobilePageTitle(activePage, settingsView)}</strong>
-          <small>Student Hub</small>
+          <small>DayLo</small>
         </div>
       </div>
     </header>
@@ -170,7 +172,7 @@ function MobileMoreSheet({
         <div className="mobile-more-header">
           <div>
             <p className="eyebrow">More</p>
-            <h2 id="mobile-more-title">Student Hub</h2>
+            <h2 id="mobile-more-title">DayLo</h2>
           </div>
           <button
             type="button"

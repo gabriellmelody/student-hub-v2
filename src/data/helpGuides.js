@@ -68,7 +68,7 @@ export const helpTopics = [
       {
         title: "Completed work",
         paragraphs: [
-          "Recently completed work appears in completed views and Subject history according to Student Hub’s existing retention behaviour.",
+          "Recently completed work appears in completed views and Subject history according to DayLo’s existing retention behaviour.",
         ],
       },
     ],
@@ -112,7 +112,7 @@ export const helpTopics = [
     tourId: "calendar",
     sections: [
       {
-        title: "Student Hub tasks",
+        title: "DayLo tasks",
         paragraphs: [
           "Tasks are work with deadlines. They appear as assignment indicators and can be used in To-do and planning.",
         ],
@@ -120,19 +120,19 @@ export const helpTopics = [
       {
         title: "Google Calendar events",
         paragraphs: [
-          "Events are lessons, meetings, activities and other commitments. They appear alongside deadlines but are not treated as Student Hub tasks.",
+          "Events are lessons, meetings, activities and other commitments. They appear alongside deadlines but are not treated as DayLo tasks.",
         ],
       },
       {
         title: "Show and block",
         paragraphs: [
-          "Show in Student Hub controls whether a calendar’s events appear here. Block study time lets Smart Planner avoid those event intervals when Calendar consideration is enabled.",
+          "Show in DayLo controls whether a calendar’s events appear here. Block study time lets Smart Planner avoid those event intervals when Calendar consideration is enabled.",
         ],
       },
       {
         title: "Your Google calendars",
         paragraphs: [
-          "Hidden calendars remain unchanged in Google, and removing a calendar from Student Hub does not delete it. Switching accounts should load only the currently connected account’s data.",
+          "Hidden calendars remain unchanged in Google, and removing a calendar from DayLo does not delete it. Switching accounts should load only the currently connected account’s data.",
         ],
       },
     ],
@@ -227,4 +227,3 @@ export const helpTopics = [
 export function getHelpTopic(topicId) {
   return helpTopics.find((topic) => topic.id === topicId) || null;
 }
-

@@ -76,7 +76,7 @@ export default async function handler(request, response) {
         ok: false,
         status: "courses_fetch_failed",
         connected: true,
-        message: "Student Hub could not read Classroom courses.",
+        message: "DayLo could not read Classroom courses.",
         googleError: getSafeGoogleError(
           coursesJson,
           "Google Classroom courses endpoint returned an unexpected response."
@@ -111,7 +111,7 @@ export default async function handler(request, response) {
       ok: false,
       status: "courses_fetch_failed",
       connected: true,
-      message: "Student Hub could not read Classroom courses.",
+      message: "DayLo could not read Classroom courses.",
       googleError: "Classroom courses request failed.",
     });
   }

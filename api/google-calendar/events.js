@@ -301,7 +301,7 @@ export default async function handler(request, response) {
       ok: false,
       status: "invalid_request",
       connected: true,
-      message: "Student Hub could not read the calendar event request.",
+      message: "DayLo could not read the calendar event request.",
     });
     return;
   }
@@ -326,7 +326,7 @@ export default async function handler(request, response) {
       ok: false,
       status: "no_selected_calendars",
       connected: true,
-      message: "Choose at least one calendar to show in Student Hub.",
+      message: "Choose at least one calendar to show in DayLo.",
     });
     return;
   }
@@ -436,7 +436,7 @@ export default async function handler(request, response) {
         status: "all_calendar_event_fetches_failed",
         connected: true,
         message:
-          "Student Hub could not read events from the selected calendars.",
+          "DayLo could not read events from the selected calendars.",
         skippedCalendarCount: eventsResult.skippedCalendarCount,
       });
       return;
@@ -472,7 +472,7 @@ export default async function handler(request, response) {
       ok: false,
       status: "events_fetch_failed",
       connected: true,
-      message: "Student Hub could not read Google Calendar events.",
+      message: "DayLo could not read Google Calendar events.",
       googleError:
         error instanceof Error
           ? error.message

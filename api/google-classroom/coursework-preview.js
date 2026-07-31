@@ -186,8 +186,8 @@ async function fetchCourseworkForCourse(course, accessToken) {
             : "coursework_fetch_failed",
         message:
           courseworkResponse.status === 403
-            ? "Student Hub does not have permission to read Classroom coursework. Reconnect Google Classroom and approve coursework access."
-            : `Student Hub could not read coursework for ${course.classroomCourseName || "one class"}.`,
+            ? "DayLo does not have permission to read Classroom coursework. Reconnect Google Classroom and approve coursework access."
+            : `DayLo could not read coursework for ${course.classroomCourseName || "one class"}.`,
         googleError: getSafeGoogleError(
           courseworkJson,
           "Google Classroom coursework endpoint returned an unexpected response."
@@ -240,8 +240,8 @@ async function fetchStudentSubmissionsForCourse(course, accessToken) {
             : "student_submissions_fetch_failed",
         message:
           submissionsResponse.status === 403
-            ? "Student Hub can read assignments but not submission status yet. Reconnect Google Classroom or check school permissions."
-            : `Student Hub could not read submission status for ${course.classroomCourseName || "one class"}.`,
+            ? "DayLo can read assignments but not submission status yet. Reconnect Google Classroom or check school permissions."
+            : `DayLo could not read submission status for ${course.classroomCourseName || "one class"}.`,
         googleError: getSafeGoogleError(
           submissionsJson,
           "Google Classroom student submissions endpoint returned an unexpected response."
@@ -395,7 +395,7 @@ export default async function handler(request, response) {
       connected: true,
       message:
         previewItems.length > 0
-          ? "Google Classroom assignments were loaded as a read-only preview. No Student Hub tasks were created."
+          ? "Google Classroom assignments were loaded as a read-only preview. No DayLo tasks were created."
           : "No coursework was found for the included Classroom classes.",
       previewSummary: {
         includedCourseCount: includedCourses.length,
@@ -409,7 +409,7 @@ export default async function handler(request, response) {
       ok: false,
       status: "coursework_fetch_failed",
       connected: true,
-      message: "Student Hub could not preview Classroom assignments.",
+      message: "DayLo could not preview Classroom assignments.",
       googleError: "Classroom coursework request failed.",
     });
   }

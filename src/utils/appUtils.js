@@ -74,15 +74,17 @@ export function createDemoTasks() {
 }
 
 export const COMPLETED_TASK_RETENTION_MS = 24 * 60 * 60 * 1000;
-export const DEFAULT_ACCENT_COLOR = "#6366f1";
+export const DEFAULT_ACCENT_COLOR = "#73a8df";
 export const THEME_COLORS_STORAGE_KEY = "student-hub-theme-colors";
+export const DEFAULT_LOGO_APPEARANCE = "brand";
 export const DEFAULT_THEME_COLORS = {
   paletteId: "student-hub",
   primary: DEFAULT_ACCENT_COLOR,
-  secondary: "#0ea5e9",
-  tertiary: "#a855f7",
+  secondary: "#ffa36b",
+  tertiary: "#10213c",
+  logoAppearance: DEFAULT_LOGO_APPEARANCE,
   backgroundMode: "neutral",
-  backgroundTone: DEFAULT_ACCENT_COLOR,
+  backgroundTone: "#f2f6f8",
   backgroundStrength: "off",
 };
 export const themeBackgroundModes = [
@@ -94,6 +96,10 @@ export const themeBackgroundStrengths = [
   { value: "off", label: "Off" },
   { value: "subtle", label: "Subtle" },
   { value: "medium", label: "Medium" },
+];
+export const logoAppearanceOptions = [
+  { value: "brand", label: "Brand colours" },
+  { value: "single", label: "Single colour" },
 ];
 export const DEFAULT_SUBJECT_COLOR = "#2563eb";
 export const WIDGET_CONFIG_STORAGE_KEY = "student-hub-widget-config";
@@ -424,7 +430,7 @@ const assessmentKeywordDefinitions = [
   ["paper", "Paper"],
 ];
 export const accentColorPresets = [
-  { label: "Indigo", value: DEFAULT_ACCENT_COLOR },
+  { label: "Sky Blue", value: DEFAULT_ACCENT_COLOR },
   { label: "Purple", value: "#7c3aed" },
   { label: "Blue", value: "#2563eb" },
   { label: "Green", value: "#16865c" },
@@ -435,7 +441,7 @@ export const accentColorPresets = [
 export const themeColorPalettes = [
   {
     id: "student-hub",
-    label: "Student Hub",
+    label: "DayLo",
     primary: DEFAULT_THEME_COLORS.primary,
     secondary: DEFAULT_THEME_COLORS.secondary,
     tertiary: DEFAULT_THEME_COLORS.tertiary,
@@ -455,11 +461,11 @@ export const themeColorPalettes = [
     tertiary: "#0f766e",
   },
   {
-    id: "lavender",
-    label: "Lavender",
-    primary: "#7c3aed",
-    secondary: "#db2777",
-    tertiary: "#6366f1",
+    id: "rose",
+    label: "Rose",
+    primary: "#c97898",
+    secondary: "#eda4b8",
+    tertiary: "#513747",
   },
   {
     id: "sunset",
@@ -476,6 +482,42 @@ export const themeColorPalettes = [
     tertiary: "#a1a1aa",
   },
 ];
+
+const legacyLavenderPalette = {
+  primary: "#7c3aed",
+  secondary: "#db2777",
+  tertiary: "#6366f1",
+};
+
+export function migrateLegacyThemeColors(savedThemeColors) {
+  if (!savedThemeColors || savedThemeColors.paletteId !== "lavender") {
+    return savedThemeColors;
+  }
+
+  const usesUnchangedLavenderPreset = ["primary", "secondary", "tertiary"].every(
+    (role) =>
+      normalizeHexColor(savedThemeColors[role] || legacyLavenderPalette[role]) ===
+      legacyLavenderPalette[role]
+  );
+
+  if (!usesUnchangedLavenderPreset) {
+    return {
+      ...legacyLavenderPalette,
+      ...savedThemeColors,
+      paletteId: "custom",
+    };
+  }
+
+  const rosePalette = themeColorPalettes.find((palette) => palette.id === "rose");
+
+  return {
+    ...savedThemeColors,
+    paletteId: rosePalette.id,
+    primary: rosePalette.primary,
+    secondary: rosePalette.secondary,
+    tertiary: rosePalette.tertiary,
+  };
+}
 export const rightRailWidgetOptions = [
   { value: "clock", label: "Clock" },
   { value: "calendar", label: "School calendar" },
@@ -617,18 +659,19 @@ export function normalizeHexColor(value) {
 }
 
 export function normalizeThemeColors(savedThemeColors = null, legacyAccent = null) {
+  const migratedThemeColors = migrateLegacyThemeColors(savedThemeColors);
   const savedPalette = themeColorPalettes.find(
-    (palette) => palette.id === savedThemeColors?.paletteId
+    (palette) => palette.id === migratedThemeColors?.paletteId
   );
   const fallback = savedPalette || DEFAULT_THEME_COLORS;
   const legacyPrimary = legacyAccent ? normalizeHexColor(legacyAccent) : null;
-  const savedBackgroundMode = savedThemeColors?.backgroundMode;
+  const savedBackgroundMode = migratedThemeColors?.backgroundMode;
   const backgroundMode = ["neutral", "match-theme", "custom"].includes(
     savedBackgroundMode
   )
     ? savedBackgroundMode
     : DEFAULT_THEME_COLORS.backgroundMode;
-  const savedBackgroundStrength = savedThemeColors?.backgroundStrength;
+  const savedBackgroundStrength = migratedThemeColors?.backgroundStrength;
   const backgroundStrength = ["off", "subtle", "medium"].includes(
     savedBackgroundStrength
   )
@@ -637,17 +680,26 @@ export function normalizeThemeColors(savedThemeColors = null, legacyAccent = nul
 
   return {
     paletteId:
-      savedThemeColors?.paletteId && savedThemeColors.paletteId !== fallback.id
+      migratedThemeColors?.paletteId &&
+      migratedThemeColors.paletteId !== fallback.id
         ? "custom"
         : fallback.paletteId || fallback.id || "student-hub",
     primary: normalizeHexColor(
-      savedThemeColors?.primary || legacyPrimary || fallback.primary
+      migratedThemeColors?.primary || legacyPrimary || fallback.primary
     ),
-    secondary: normalizeHexColor(savedThemeColors?.secondary || fallback.secondary),
-    tertiary: normalizeHexColor(savedThemeColors?.tertiary || fallback.tertiary),
+    secondary: normalizeHexColor(
+      migratedThemeColors?.secondary || fallback.secondary
+    ),
+    tertiary: normalizeHexColor(
+      migratedThemeColors?.tertiary || fallback.tertiary
+    ),
+    logoAppearance:
+      migratedThemeColors?.logoAppearance === "single"
+        ? "single"
+        : DEFAULT_LOGO_APPEARANCE,
     backgroundMode,
     backgroundTone: normalizeHexColor(
-      savedThemeColors?.backgroundTone || DEFAULT_THEME_COLORS.backgroundTone
+      migratedThemeColors?.backgroundTone || DEFAULT_THEME_COLORS.backgroundTone
     ),
     backgroundStrength,
   };
@@ -660,11 +712,23 @@ export function loadThemeColors() {
     const savedThemeColors = JSON.parse(
       window.localStorage.getItem(THEME_COLORS_STORAGE_KEY) || "null"
     );
-
-    return normalizeThemeColors(
+    const normalizedThemeColors = normalizeThemeColors(
       savedThemeColors,
       window.localStorage.getItem("student-hub-accent")
     );
+
+    if (savedThemeColors?.paletteId === "lavender") {
+      window.localStorage.setItem(
+        THEME_COLORS_STORAGE_KEY,
+        JSON.stringify(normalizedThemeColors)
+      );
+      window.localStorage.setItem(
+        "student-hub-accent",
+        normalizedThemeColors.primary
+      );
+    }
+
+    return normalizedThemeColors;
   } catch {
     return normalizeThemeColors(
       null,
@@ -750,7 +814,7 @@ export function getContrastRatio(firstColor, secondColor) {
 
 export function getContrastText(accentColor) {
   const lightText = "#ffffff";
-  const darkText = "#18181b";
+  const darkText = "#10213c";
 
   return getContrastRatio(accentColor, lightText) >=
     getContrastRatio(accentColor, darkText)
@@ -759,8 +823,8 @@ export function getContrastText(accentColor) {
 }
 
 export function getReadableAccent(accentColor, theme) {
-  const background = theme === "dark" ? "#0d0d0f" : "#f7f7f5";
-  const target = theme === "dark" ? "#ffffff" : "#18181b";
+  const background = theme === "dark" ? "#0b1524" : "#f2f6f8";
+  const target = theme === "dark" ? "#ffffff" : "#10213c";
 
   for (let step = 0; step <= 10; step += 1) {
     const candidate = mixColors(accentColor, target, step / 10);
@@ -777,45 +841,85 @@ export function colorToRgba(color, alpha) {
 
 const neutralBackgroundTheme = {
   dark: {
-    canvas: "#0d0d0f",
-    sidebar: "#111113",
-    surface: "#18181b",
-    elevated: "#202024",
-    subtle: "#151518",
-    input: "#09090b",
-    hover: "#24242a",
-    control: "#27272a",
-    controlHover: "#323238",
-    border: "#232326",
-    borderRaised: "#2b2b30",
-    borderStrong: "#3f3f46",
-    borderHover: "#52525b",
-    indicatorBorder: "#34343b",
+    canvas: "#0b1524",
+    sidebar: "#10213c",
+    surface: "#14243a",
+    elevated: "#1a2b43",
+    subtle: "#111f33",
+    input: "#091321",
+    hover: "#1d3049",
+    control: "#223750",
+    controlHover: "#2b435e",
+    border: "#21344c",
+    borderRaised: "#2a3e57",
+    borderStrong: "#41566f",
+    borderHover: "#58708a",
+    indicatorBorder: "#344a64",
     borderSoft: "rgba(255, 255, 255, 0.075)",
   },
   light: {
-    canvas: "#f7f7f5",
-    sidebar: "#f1f1ef",
+    canvas: "#f2f6f8",
+    sidebar: "#eff3f5",
     surface: "#ffffff",
-    elevated: "#fafaf9",
-    subtle: "#f5f5f3",
+    elevated: "#f8fafb",
+    subtle: "#f3f6f7",
     input: "#ffffff",
-    hover: "#f4f4f1",
-    control: "#f0f0ed",
-    controlHover: "#e8e8e4",
-    border: "#e7e7e3",
-    borderRaised: "#e9e9e5",
-    borderStrong: "#d5d5cf",
-    borderHover: "#c4c4bd",
-    indicatorBorder: "#deded9",
-    borderSoft: "rgba(41, 41, 39, 0.075)",
+    hover: "#edf2f3",
+    control: "#edf1f2",
+    controlHover: "#e2e9eb",
+    border: "#dfe5e7",
+    borderRaised: "#e5eaec",
+    borderStrong: "#cfd8dc",
+    borderHover: "#bac8ce",
+    indicatorBorder: "#d7dfe2",
+    borderSoft: "rgba(16, 33, 60, 0.08)",
+  },
+};
+
+const roseBackgroundTheme = {
+  dark: {
+    canvas: "#181318",
+    sidebar: "#211820",
+    surface: "#251c24",
+    elevated: "#2d222b",
+    subtle: "#20181f",
+    input: "#151015",
+    hover: "#32262f",
+    control: "#392b36",
+    controlHover: "#443440",
+    border: "#3b2d38",
+    borderRaised: "#473543",
+    borderStrong: "#614959",
+    borderHover: "#795d70",
+    indicatorBorder: "#574251",
+    borderSoft: "rgba(237, 164, 184, 0.1)",
+  },
+  light: {
+    canvas: "#fbf5f7",
+    sidebar: "#f7eff2",
+    surface: "#fffdfd",
+    elevated: "#fcf8fa",
+    subtle: "#f8f1f4",
+    input: "#ffffff",
+    hover: "#f5ebef",
+    control: "#f3e8ed",
+    controlHover: "#eadce2",
+    border: "#eadde2",
+    borderRaised: "#efe5e9",
+    borderStrong: "#dac6cf",
+    borderHover: "#c9acb9",
+    indicatorBorder: "#dfcfd6",
+    borderSoft: "rgba(81, 55, 71, 0.08)",
   },
 };
 
 export function deriveThemeBackground(themeColors, resolvedTheme = "light") {
   const normalizedThemeColors = normalizeThemeColors(themeColors);
   const appearance = resolvedTheme === "dark" ? "dark" : "light";
-  const neutralTheme = neutralBackgroundTheme[appearance];
+  const neutralTheme =
+    normalizedThemeColors.paletteId === "rose"
+      ? roseBackgroundTheme[appearance]
+      : neutralBackgroundTheme[appearance];
   const strength = normalizedThemeColors.backgroundStrength;
 
   if (normalizedThemeColors.backgroundMode === "neutral" || strength === "off") {

@@ -36,16 +36,9 @@
   gap: 10px;
 }
 
-.onboarding-brand > span {
+.onboarding-brand-mark {
   width: 30px;
   height: 30px;
-  display: grid;
-  place-items: center;
-  border-radius: 7px;
-  background: var(--accent);
-  color: var(--accent-contrast);
-  font-size: 0.68rem;
-  font-weight: 800;
 }
 
 .onboarding-brand strong,

@@ -116,7 +116,7 @@ export default async function handler(request, response) {
         ok: false,
         status: "calendars_fetch_failed",
         connected: true,
-        message: "Student Hub could not read Google calendars.",
+        message: "DayLo could not read Google calendars.",
         googleError: getSafeGoogleError(
           calendarsResult.json,
           "Google Calendar returned an unexpected response."
@@ -157,7 +157,7 @@ export default async function handler(request, response) {
       ok: false,
       status: "calendars_fetch_failed",
       connected: true,
-      message: "Student Hub could not read Google calendars.",
+      message: "DayLo could not read Google calendars.",
       googleError: "Google Calendar request failed.",
     });
   }

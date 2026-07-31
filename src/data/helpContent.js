@@ -7,7 +7,7 @@ export const helpStatusLabels = {
 export const helpCategories = [
   {
     id: "using-student-hub",
-    label: "Using Student Hub",
+    label: "Using DayLo",
     description: "Tools you can use in the app today.",
   },
   {
@@ -25,7 +25,7 @@ export const helpCategories = [
 export const helpContent = [
   {
     id: "student-hub-overview",
-    title: "What is Student Hub?",
+    title: "What is DayLo?",
     status: "available",
     category: "using-student-hub",
     summary:
@@ -47,7 +47,7 @@ export const helpContent = [
     status: "available",
     category: "using-student-hub",
     summary:
-      "Student Hub detects assessment words such as test, summative, formative, and exam, then marks the task as high importance.",
+      "DayLo detects assessment words such as test, summative, formative, and exam, then marks the task as high importance.",
     details:
       "You can change the task type or importance yourself at any time. This uses simple local rules, not AI.",
   },
@@ -77,7 +77,7 @@ export const helpContent = [
     status: "available",
     category: "using-student-hub",
     summary:
-      "The calendar currently uses due dates from tasks you create in Student Hub.",
+      "The calendar currently uses due dates from tasks you create in DayLo.",
     details:
       "Select a day to see its deadlines or add a task with that date already chosen.",
   },
@@ -171,7 +171,7 @@ export const helpContent = [
     status: "available",
     category: "workspace",
     summary:
-      "Student Hub currently saves data in this browser on this device.",
+      "DayLo currently saves data in this browser on this device.",
     details:
       "There are no accounts or cloud sync yet, so clearing browser site data may remove your work.",
   },
@@ -181,7 +181,7 @@ export const helpContent = [
     status: "available",
     category: "workspace",
     summary:
-      "Sample mode can sync local mock assignments into Student Hub tasks.",
+      "Sample mode can sync local mock assignments into DayLo tasks.",
     details:
       "The preview uses local sample data only. No Google account is connected.",
   },
@@ -192,7 +192,7 @@ export const helpContent = [
     category: "future",
     summary: "This is not connected yet.",
     details:
-      "The Mock Classroom Preview uses local sample data only. Later, Student Hub may import classes, assignments, and due dates from Google Classroom.",
+      "The Mock Classroom Preview uses local sample data only. Later, DayLo may import classes, assignments, and due dates from Google Classroom.",
   },
   {
     id: "ai-planning",
@@ -217,7 +217,7 @@ export const helpContent = [
     title: "Accounts and cloud sync",
     status: "plannedLater",
     category: "future",
-    summary: "Student Hub does not have accounts or cloud sync yet.",
+    summary: "DayLo does not have accounts or cloud sync yet.",
     details:
       "A later version may make it possible to keep a workspace across devices.",
   },

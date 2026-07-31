@@ -82,7 +82,7 @@ export function buildSafeDiagnosticDetails({
   remainingAllowance,
 } = {}) {
   const lines = [
-    "Student Hub diagnostics",
+    "DayLo diagnostics",
     `Build: ${cleanText(appVersion, 80) || "Unknown"}`,
     `Date: ${now instanceof Date && Number.isFinite(now.getTime()) ? now.toISOString() : "Unknown"}`,
     `Page: ${cleanText(currentPage, 80) || "Unknown"}`,
@@ -155,7 +155,7 @@ export function buildSupportMessage({
     ? cleanText(diagnostics, 2600)
     : "";
   const diagnosticPrefix = diagnosticText
-    ? "\n\n---\nOnly the diagnostic details shown in Student Hub are included.\n"
+    ? "\n\n---\nOnly the diagnostic details shown in DayLo are included.\n"
     : "";
   const availableDiagnosticLength = Math.max(
     0,
@@ -180,8 +180,8 @@ export function buildSupportMailto({
 
   const subject =
     mode === "problem"
-      ? "Student Hub problem report"
-      : "Student Hub feedback";
+      ? "DayLo problem report"
+      : "DayLo feedback";
   const body = buildSupportMessage({
     mode,
     draft,
@@ -225,4 +225,3 @@ export async function copySupportMessage(
     return false;
   }
 }
-

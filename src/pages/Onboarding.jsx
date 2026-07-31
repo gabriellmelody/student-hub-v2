@@ -7,6 +7,7 @@ import {
   getContrastText,
   createSubjectDraft,
 } from "../utils/appUtils.js";
+import DayloMark from "../components/DayloMark.jsx";
 
 const onboardingSteps = [
   "Welcome",
@@ -24,6 +25,7 @@ function OnboardingFlow({
   setSubjects,
   theme,
   setTheme,
+  logoAppearance,
   accentColor,
   setAccentColor,
   layoutDensity,
@@ -123,10 +125,13 @@ function OnboardingFlow({
       <section className="onboarding-frame">
         <header className="onboarding-topbar">
           <div className="onboarding-brand">
-            <span>SH</span>
+            <DayloMark
+              className="onboarding-brand-mark"
+              appearance={logoAppearance}
+            />
             <div>
-              <strong>Student Hub</strong>
-              <small>Local workspace setup</small>
+              <strong>DayLo</strong>
+              <small>Student Hub</small>
             </div>
           </div>
           {step < onboardingSteps.length - 1 && (
@@ -531,7 +536,7 @@ function OnboardingFlow({
             {step === 0
               ? "Get started"
               : step === onboardingSteps.length - 1
-                ? "Enter Student Hub"
+                ? "Enter DayLo"
                 : "Continue"}
           </button>
         </footer>

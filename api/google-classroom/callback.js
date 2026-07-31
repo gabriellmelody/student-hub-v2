@@ -135,7 +135,7 @@ async function handlePopupCodeExchange(request, response, config) {
         configured: true,
         connected: false,
         message:
-          "Google did not share the account identity Student Hub needs. Reconnect and allow the requested account information.",
+          "Google did not share the account identity DayLo needs. Reconnect and allow the requested account information.",
       });
       return;
     }
@@ -178,7 +178,7 @@ async function handlePopupCodeExchange(request, response, config) {
       connected: false,
       message:
         error?.message === "missing_session_secret"
-          ? "Google OAuth worked, but Student Hub session encryption is not configured."
+          ? "Google OAuth worked, but DayLo session encryption is not configured."
           : "Google Classroom connection could not be completed.",
     });
   }
@@ -280,7 +280,7 @@ export default async function handler(request, response) {
           status: "account_identity_unavailable",
           configured: true,
           message:
-            "Google did not share the account identity Student Hub needs. Reconnect and allow the requested account information.",
+            "Google did not share the account identity DayLo needs. Reconnect and allow the requested account information.",
           nextStep:
             "Try connecting again after checking the OAuth consent configuration.",
         });
@@ -315,7 +315,7 @@ export default async function handler(request, response) {
           status: "courses_fetch_failed",
           configured: true,
           message:
-            "Google OAuth worked, but Student Hub could not read Classroom courses.",
+            "Google OAuth worked, but DayLo could not read Classroom courses.",
           googleError: "Google Classroom courses could not be read.",
           nextStep:
             "Check Classroom permissions, scopes, and whether the selected Google account has Classroom access.",
@@ -373,7 +373,7 @@ export default async function handler(request, response) {
           status: "classroom_session_not_configured",
           configured: true,
           message:
-            "Google OAuth worked, but Student Hub session encryption is not configured.",
+            "Google OAuth worked, but DayLo session encryption is not configured.",
           nextStep:
             "Add STUDENT_HUB_SESSION_SECRET in Vercel before creating Classroom sessions.",
         });
@@ -383,7 +383,7 @@ export default async function handler(request, response) {
           status: "courses_fetch_failed",
           configured: true,
           message:
-            "Google OAuth worked, but Student Hub could not read Classroom courses.",
+            "Google OAuth worked, but DayLo could not read Classroom courses.",
           googleError: "Classroom courses request failed.",
           nextStep:
             "Check Classroom permissions, scopes, and whether the selected Google account has Classroom access.",
@@ -398,6 +398,6 @@ export default async function handler(request, response) {
     status: "missing_code",
     configured: true,
     message: "Google Classroom OAuth callback did not include a code.",
-    nextStep: "Start the authorization redirect again from Student Hub.",
+    nextStep: "Start the authorization redirect again from DayLo.",
   });
 }

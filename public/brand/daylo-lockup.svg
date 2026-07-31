@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="88" viewBox="0 0 300 88" role="img" aria-labelledby="daylo-lockup-title">
+  <title id="daylo-lockup-title">DayLo — Student Hub</title>
+  <defs>
+    <linearGradient id="daylo-lockup-peach" x1="19" y1="23" x2="59" y2="61" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFA36B"/>
+      <stop offset=".56" stop-color="#FFC19A"/>
+      <stop offset="1" stop-color="#FFA36B"/>
+    </linearGradient>
+    <linearGradient id="daylo-lockup-blue" x1="18" y1="51" x2="61" y2="69" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#73A8DF"/>
+      <stop offset=".55" stop-color="#91B9E2"/>
+      <stop offset="1" stop-color="#73A8DF"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(8 12)">
+    <path fill="url(#daylo-lockup-peach)" d="M8 32A24 24 0 0 1 56 32H46A14 14 0 0 0 18 32Z"/>
+    <path fill="url(#daylo-lockup-peach)" d="M23 40a9 9 0 0 1 18 0c0 1.6-.6 3.1-1.7 4.2l-5.5 5.5a2.6 2.6 0 0 1-3.6 0l-5.5-5.5A5.9 5.9 0 0 1 23 40Z"/>
+    <path fill="url(#daylo-lockup-blue)" d="M8 36.5c9 .4 17 4.6 24 12.5 7-7.9 15-12.1 24-12.5C54 49.5 44 58 32 58S10 49.5 8 36.5Z"/>
+  </g>
+  <text x="84" y="48" fill="#10213C" font-family="'Arial Rounded MT Bold', 'Trebuchet MS', Arial, sans-serif" font-size="36" font-weight="700">DayLo</text>
+  <text x="86" y="69" fill="#10213C" font-family="'Trebuchet MS', Arial, sans-serif" font-size="13" font-weight="600" letter-spacing="1.8" opacity=".72">STUDENT HUB</text>
+</svg>

@@ -11,6 +11,7 @@ import {
 } from "./components/AppChrome.jsx";
 import SmartPlannerModal from "./components/SmartPlannerModal.jsx";
 import GuidedTour from "./components/GuidedTour.jsx";
+import DayloMark from "./components/DayloMark.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import HomePage from "./pages/HomePage.jsx";
 import OnboardingFlow from "./pages/Onboarding.jsx";
@@ -2550,6 +2551,7 @@ function App() {
         setSubjects={setSubjects}
         theme={theme}
         setTheme={setTheme}
+        logoAppearance={themeColors.logoAppearance}
         accentColor={accentColor}
         setAccentColor={setAccentColor}
         layoutDensity={layoutDensity}
@@ -2571,15 +2573,22 @@ function App() {
         rightRailVisible ? "right-rail-visible" : ""
       } ${rightRailCollapsed ? "right-rail-collapsed" : ""}`}
     >
-      <MobileTopBar activePage={activePage} settingsView={settingsView} />
+      <MobileTopBar
+        activePage={activePage}
+        settingsView={settingsView}
+        logoAppearance={themeColors.logoAppearance}
+      />
 
       <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
         <div className="brand-row">
           <div className="brand">
-            <div className="brand-mark">S</div>
+            <DayloMark
+              className="brand-mark"
+              appearance={themeColors.logoAppearance}
+            />
             <div className="brand-text">
-              <h1>Student Hub</h1>
-              <p>School, organised.</p>
+              <h1>DayLo</h1>
+              <p>Student Hub</p>
             </div>
           </div>
 

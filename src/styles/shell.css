@@ -62,30 +62,37 @@
   align-items: center;
 }
 
+.daylo-mark {
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.daylo-mark--single {
+  background: var(--accent-tertiary-soft);
+  -webkit-mask: url("/brand/daylo-icon-navy.svg") center / contain no-repeat;
+  mask: url("/brand/daylo-icon-navy.svg") center / contain no-repeat;
+}
+
 .brand-mark {
   width: var(--density-brand-size);
   height: var(--density-brand-size);
-  border-radius: 9px;
-  background: var(--accent);
-  color: var(--accent-contrast);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  box-shadow: var(--shadow-sm);
+  display: block;
+  object-fit: contain;
   flex-shrink: 0;
 }
 
 .brand h1 {
   margin: 0;
-  font-size: 0.9rem;
-  font-weight: 650;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 760;
   letter-spacing: 0;
 }
 
 .brand p {
   margin: 2px 0 0;
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text-secondary) 86%, var(--text));
   font-size: 0.72rem;
 }
 

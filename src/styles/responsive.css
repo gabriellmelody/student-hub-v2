@@ -428,14 +428,8 @@ button {
     width: 34px;
     height: 34px;
     flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    border-radius: 10px;
-    background: var(--accent);
-    color: var(--accent-contrast);
-    font-size: 0.86rem;
-    font-weight: 800;
-    box-shadow: var(--shadow-sm);
+    display: block;
+    object-fit: contain;
   }
 
   .mobile-topbar-brand div {
