@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import "./App.css";
 import {
   AccountMenu,
@@ -2654,7 +2655,7 @@ function App() {
           />
           <NavButton
             label="Calendar"
-            icon="▦"
+            icon="���"
             active={activePage === "calendar"}
             onClick={() => setActivePage("calendar")}
           />
@@ -2879,6 +2880,7 @@ function App() {
         previousStep={guidedTour.previousStep}
         skipTour={guidedTour.skipTour}
       />
+      <Analytics />
     </main>
   );
 }
