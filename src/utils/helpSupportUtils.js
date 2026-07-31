@@ -26,11 +26,15 @@ export function normalizeSupportEmail(value) {
 export function getGuidedTourDisplayStatus(tour, progress = loadGuidedTourProgress()) {
   const record = progress?.tours?.[tour?.id];
 
-  if (!record) return "Not viewed";
+  if (!record) return "Not started";
   if (record.version !== tour.version) return "Updated";
   if (record.status === "completed") return "Completed";
   if (record.status === "skipped") return "Skipped";
-  return "Not viewed";
+  return "Not started";
+}
+
+export function getGuidedTourActionLabel(status) {
+  return status === "Not started" ? "Start tour" : "Replay tour";
 }
 
 export function resetGuidedTourProgress(storage = globalThis.localStorage) {

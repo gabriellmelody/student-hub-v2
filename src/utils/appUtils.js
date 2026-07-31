@@ -1,3 +1,9 @@
+import {
+  LEGACY_SUBJECT_COLOUR,
+  migrateLegacySubjectColours,
+  suggestSubjectColour,
+} from "./subjectColourUtils.js";
+
 export const defaultTasks = [
   {
     id: "demo-english-essay",
@@ -101,7 +107,7 @@ export const logoAppearanceOptions = [
   { value: "brand", label: "Brand colours" },
   { value: "single", label: "Single colour" },
 ];
-export const DEFAULT_SUBJECT_COLOR = "#2563eb";
+export const DEFAULT_SUBJECT_COLOR = LEGACY_SUBJECT_COLOUR;
 export const WIDGET_CONFIG_STORAGE_KEY = "student-hub-widget-config";
 export const TODAY_PLAN_STORAGE_KEY = "student-hub-today-plan";
 export const QUICK_LINKS_STORAGE_KEY = "student-hub-quick-links";
@@ -518,140 +524,6 @@ export function migrateLegacyThemeColors(savedThemeColors) {
     tertiary: rosePalette.tertiary,
   };
 }
-export const rightRailWidgetOptions = [
-  { value: "clock", label: "Clock" },
-  { value: "calendar", label: "School calendar" },
-  { value: "deadlines", label: "Upcoming deadlines" },
-  { value: "plan", label: "Today’s Plan" },
-];
-
-export function getDefaultWidgetConfig(homeLayout = "focused") {
-  const expandedHome = homeLayout === "dashboard";
-
-  return [
-    {
-      id: "home-next-focus",
-      type: "nextFocus",
-      label: "Next focus",
-      area: "home",
-      visible: true,
-      size: "expanded",
-      order: 0,
-      source: "local",
-    },
-    {
-      id: "home-today-plan",
-      type: "todayPlan",
-      label: "Today’s Plan",
-      area: "home",
-      visible: true,
-      size: "compact",
-      order: 1,
-      source: "local",
-    },
-    {
-      id: "home-school-calendar",
-      type: "schoolCalendar",
-      label: "School calendar",
-      area: "home",
-      visible: true,
-      size: expandedHome ? "expanded" : "compact",
-      order: 2,
-      source: "local",
-    },
-    {
-      id: "home-progress",
-      type: "progress",
-      label: "Progress",
-      area: "home",
-      visible: true,
-      size: expandedHome ? "expanded" : "compact",
-      order: 3,
-      source: "local",
-    },
-    ...rightRailWidgetOptions.map((option, order) => ({
-      id: `right-rail-${option.value}`,
-      type: option.value,
-      label: option.label,
-      area: "rightRail",
-      visible: true,
-      size: "compact",
-      order,
-      source: "local",
-    })),
-  ];
-}
-
-export function normalizeWidgetConfig(
-  savedConfig,
-  homeLayout = "focused",
-  legacyRightRailWidgets = null
-) {
-  const defaults = getDefaultWidgetConfig(homeLayout);
-
-  return defaults.map((defaultWidget) => {
-    const savedWidget = Array.isArray(savedConfig)
-      ? savedConfig.find((widget) => widget?.id === defaultWidget.id)
-      : null;
-    const legacyVisibility =
-      defaultWidget.area === "rightRail" &&
-      Array.isArray(legacyRightRailWidgets)
-        ? legacyRightRailWidgets.includes(defaultWidget.type)
-        : defaultWidget.visible;
-
-    return {
-      ...defaultWidget,
-      visible:
-        typeof savedWidget?.visible === "boolean"
-          ? savedWidget.visible
-          : legacyVisibility,
-      size:
-        savedWidget?.size === "compact" || savedWidget?.size === "expanded"
-          ? savedWidget.size
-          : defaultWidget.size,
-      order: Number.isFinite(Number(savedWidget?.order))
-        ? Number(savedWidget.order)
-        : defaultWidget.order,
-    };
-  });
-}
-
-export function loadWidgetConfig(homeLayout = "focused") {
-  const legacyRightRailWidgets = loadRightRailWidgets();
-  const savedConfig = localStorage.getItem(WIDGET_CONFIG_STORAGE_KEY);
-
-  if (!savedConfig) {
-    return normalizeWidgetConfig(
-      null,
-      homeLayout,
-      legacyRightRailWidgets
-    );
-  }
-
-  try {
-    return normalizeWidgetConfig(
-      JSON.parse(savedConfig),
-      homeLayout,
-      legacyRightRailWidgets
-    );
-  } catch {
-    return normalizeWidgetConfig(
-      null,
-      homeLayout,
-      legacyRightRailWidgets
-    );
-  }
-}
-
-export function getWidgetsForArea(widgetConfig, area, visibleOnly = true) {
-  return widgetConfig
-    .filter(
-      (widget) =>
-        widget.area === area && (!visibleOnly || widget.visible === true)
-    )
-    .sort((first, second) => first.order - second.order);
-}
-
 export function normalizeHexColor(value) {
   return /^#[0-9a-f]{6}$/i.test(value || "")
     ? value.toLowerCase()
@@ -1283,25 +1155,6 @@ export function loadTasks() {
   }
 }
 
-export function loadRightRailWidgets() {
-  const savedWidgets = localStorage.getItem("student-hub-right-rail-widgets");
-  const defaultWidgets = rightRailWidgetOptions.map((option) => option.value);
-
-  if (!savedWidgets) return defaultWidgets;
-
-  try {
-    const parsedWidgets = JSON.parse(savedWidgets);
-
-    if (!Array.isArray(parsedWidgets)) return defaultWidgets;
-
-    return rightRailWidgetOptions
-      .filter((option) => parsedWidgets.includes(option.value))
-      .map((option) => option.value);
-  } catch {
-    return defaultWidgets;
-  }
-}
-
 export function loadSubjects() {
   const savedSubjects = localStorage.getItem("student-hub-subjects");
 
@@ -1312,18 +1165,20 @@ export function loadSubjects() {
 
     if (!Array.isArray(parsedSubjects)) return [];
 
-    return parsedSubjects
+    const normalizedSubjects = parsedSubjects
       .filter((subject) => subject && typeof subject.name === "string")
-      .map((subject) => ({
-        id: subject.id || `subject-${Date.now()}-${Math.random()}`,
+      .map((subject, index) => ({
+        id:
+          subject.id ||
+          `subject-${index + 1}-${
+            normalizeSubjectName(subject.name).replace(/\s+/g, "-") || "untitled"
+          }`,
         name: subject.name.trim(),
         courseSystem: subject.courseSystem || "Other",
         level: subject.level || "Other",
         currentGrade: subject.currentGrade || "",
         targetGrade: subject.targetGrade || "",
-        colour: /^#[0-9a-f]{6}$/i.test(subject.colour || "")
-          ? subject.colour
-          : DEFAULT_SUBJECT_COLOR,
+        colour: subject.colour,
         source: subject.source || "manual",
         classroomCourseId: subject.classroomCourseId || null,
         externalId: subject.externalId || null,
@@ -1331,6 +1186,8 @@ export function loadSubjects() {
         lastSyncedAt: subject.lastSyncedAt || null,
       }))
       .filter((subject) => subject.name);
+
+    return migrateLegacySubjectColours(normalizedSubjects);
   } catch {
     return [];
   }
@@ -2199,9 +2056,13 @@ export function buildEveningPlan({
   };
 }
 
-export function createSubjectDraft(courseSystem = "IB") {
+export function createSubjectDraft(
+  courseSystem = "IB",
+  existingSubjects = [],
+  subjectName = ""
+) {
   return {
-    name: "",
+    name: subjectName,
     courseSystem,
     level:
       courseSystem === "IB"
@@ -2213,6 +2074,6 @@ export function createSubjectDraft(courseSystem = "IB") {
             : "Standard",
     currentGrade: "",
     targetGrade: "",
-    colour: DEFAULT_SUBJECT_COLOR,
+    colour: suggestSubjectColour(subjectName, existingSubjects, "new-subject"),
   };
 }

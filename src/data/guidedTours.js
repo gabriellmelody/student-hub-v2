@@ -92,6 +92,56 @@ export const gettingStartedGuidedTour = {
   ],
 };
 
+export const todoGuidedTour = {
+  id: "todo",
+  version: 1,
+  steps: [
+    {
+      id: "todo-add-task",
+      page: "tasks",
+      target: '[data-tour="todo-add-task"]',
+      title: "Add school work",
+      description:
+        "Add a task yourself or import selected assignments from Google Classroom.",
+      placement: "bottom",
+      mobilePlacement: "bottom",
+    },
+    {
+      id: "todo-due-navigation",
+      page: "tasks",
+      target: '[data-tour="todo-due-navigation"]',
+      fallbackTarget: '[data-tour="todo-overview"]',
+      title: "Keep dates visible",
+      description:
+        "See overdue work at a glance, then use Due date to move between upcoming dates.",
+      placement: "bottom",
+      mobilePlacement: "bottom",
+    },
+    {
+      id: "todo-organise",
+      page: "tasks",
+      target: '[data-tour="todo-organise"]',
+      fallbackTarget: '[data-tour="todo-overview"]',
+      title: "Organise active work",
+      description:
+        "Use Priority, Due date, Effort, or Subject to change how active work is grouped and scanned.",
+      placement: "bottom",
+      mobilePlacement: "bottom",
+    },
+    {
+      id: "todo-task-actions",
+      page: "tasks",
+      target: '[data-tour="todo-task-actions"]',
+      fallbackTarget: '[data-tour="todo-add-task"]',
+      title: "Update each task",
+      description:
+        "Task controls let you edit, complete, or delete work. If the list is empty, add a task when you are ready.",
+      placement: "right",
+      mobilePlacement: "bottom",
+    },
+  ],
+};
+
 export const subjectsGuidedTour = {
   id: "subjects",
   version: 1,
@@ -237,12 +287,64 @@ export const smartPlannerGuidedTour = {
   ],
 };
 
+export const todaysPlanGuidedTour = {
+  id: "todays-plan",
+  version: 1,
+  steps: [
+    {
+      id: "todays-plan-smart-planner",
+      page: "plan",
+      target: '[data-tour="smart-planner-open"]',
+      title: "Create a plan",
+      description:
+        "Smart Planner can propose a realistic plan for today without changing anything until you accept it.",
+      placement: "bottom",
+      mobilePlacement: "bottom",
+    },
+    {
+      id: "todays-plan-timeline",
+      page: "plan",
+      target: '[data-tour="todays-plan-timeline"]',
+      fallbackTarget: '[data-tour="todays-plan-overview"]',
+      title: "Follow the study timeline",
+      description:
+        "Accepted plans appear here as ordered study and break blocks. An empty plan stays ready for you to build.",
+      placement: "right",
+      mobilePlacement: "bottom",
+    },
+    {
+      id: "todays-plan-adjust",
+      page: "plan",
+      target: '[data-tour="todays-plan-adjust"]',
+      fallbackTarget: '[data-tour="todays-plan-overview"]',
+      title: "Adjust the plan",
+      description:
+        "Add a block or use block options to edit the schedule when your day changes.",
+      placement: "bottom",
+      mobilePlacement: "bottom",
+    },
+    {
+      id: "todays-plan-complete",
+      page: "plan",
+      target: '[data-tour="todays-plan-complete"]',
+      fallbackTarget: '[data-tour="todays-plan-overview"]',
+      title: "Complete planned work",
+      description:
+        "Mark a study block done as you finish it. If there is no active block yet, the plan overview remains available.",
+      placement: "left",
+      mobilePlacement: "top",
+    },
+  ],
+};
+
 const guidedTours = {
   [demoGuidedTour.id]: demoGuidedTour,
   [gettingStartedGuidedTour.id]: gettingStartedGuidedTour,
+  [todoGuidedTour.id]: todoGuidedTour,
   [subjectsGuidedTour.id]: subjectsGuidedTour,
   [calendarGuidedTour.id]: calendarGuidedTour,
   [smartPlannerGuidedTour.id]: smartPlannerGuidedTour,
+  [todaysPlanGuidedTour.id]: todaysPlanGuidedTour,
 };
 
 export function getGuidedTourDefinition(tourId) {

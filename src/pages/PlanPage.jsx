@@ -474,7 +474,7 @@ function PlanPage({
         <p>Follow the next block, then adjust anything that changes.</p>
       </header>
 
-      <div className="panel plan-panel">
+      <div className="panel plan-panel" data-tour="todays-plan-overview">
         <div className="panel-header">
           <div>
             <h3>Study timeline</h3>
@@ -504,6 +504,7 @@ function PlanPage({
             <button
               type="button"
               className="small-button secondary plan-add-block-button"
+              data-tour="todays-plan-adjust"
               aria-expanded={showAddBlockForm}
               onClick={() =>
                 showAddBlockForm
@@ -653,7 +654,11 @@ function PlanPage({
         )}
 
         {planBlocks.length > 0 && (
-          <div className="plan-timeline" aria-label="Today’s Plan timeline">
+          <div
+            className="plan-timeline"
+            aria-label="Today’s Plan timeline"
+            data-tour="todays-plan-timeline"
+          >
             {planBlocks.map((block, index) => {
           const blockKey = getPlanBlockKey(block, index);
 
@@ -917,6 +922,7 @@ function PlanPage({
                   <button
                     type="button"
                     className="complete-plan-button"
+                    data-tour="todays-plan-complete"
                     disabled={block.locked}
                     aria-label={`Mark ${block.title} done`}
                     title={block.locked ? "Unlock to mark this task done" : undefined}

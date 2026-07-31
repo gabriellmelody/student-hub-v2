@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { getGuidedTourDefinition } from "../data/guidedTours.js";
 import { helpTopics, getHelpTopic } from "../data/helpGuides.js";
 import {
   SUPPORT_FIELD_LIMITS,
@@ -7,6 +8,7 @@ import {
   buildSupportMailto,
   buildSupportMessage,
   copySupportMessage,
+  getGuidedTourActionLabel,
   getGuidedTourDisplayStatus,
   normalizeSupportEmail,
   resetGuidedTourProgress,
@@ -29,13 +31,28 @@ test("the Help centre defines the six required topics", () => {
   );
 });
 
-test("only topics with existing tours expose replay identifiers", () => {
+test("all six Help topics expose focused tour identifiers", () => {
   assert.deepEqual(
-    helpTopics.filter((topic) => topic.tourId).map((topic) => topic.tourId),
-    ["getting-started", "subjects", "calendar", "smart-planner"]
+    helpTopics.map((topic) => topic.tourId),
+    [
+      "getting-started",
+      "todo",
+      "subjects",
+      "calendar",
+      "smart-planner",
+      "todays-plan",
+    ]
   );
-  assert.equal(getHelpTopic("todo-assignments").tourId, undefined);
-  assert.equal(getHelpTopic("todays-plan").tourId, undefined);
+  assert.ok(helpTopics.every((topic) => getGuidedTourDefinition(topic.tourId)));
+});
+
+test("Help topics no longer rely on the getting-started inclusion note", () => {
+  assert.ok(
+    helpTopics.every(
+      (topic) => !("includedInGettingStarted" in topic)
+    )
+  );
+  assert.doesNotMatch(JSON.stringify(helpTopics), /Included in Getting started/);
 });
 
 test("written guides contain the required planning explanations", () => {
@@ -54,7 +71,7 @@ test("written guides contain the required planning explanations", () => {
 test("tour status is derived safely from versioned progress", () => {
   const tour = { id: "subjects", version: 2 };
 
-  assert.equal(getGuidedTourDisplayStatus(tour, { tours: {} }), "Not viewed");
+  assert.equal(getGuidedTourDisplayStatus(tour, { tours: {} }), "Not started");
   assert.equal(
     getGuidedTourDisplayStatus(tour, {
       tours: { subjects: { status: "completed", version: 2 } },
@@ -75,6 +92,13 @@ test("tour status is derived safely from versioned progress", () => {
   );
 });
 
+test("tour action labels follow the visible status", () => {
+  assert.equal(getGuidedTourActionLabel("Not started"), "Start tour");
+  assert.equal(getGuidedTourActionLabel("Completed"), "Replay tour");
+  assert.equal(getGuidedTourActionLabel("Skipped"), "Replay tour");
+  assert.equal(getGuidedTourActionLabel("Updated"), "Replay tour");
+});
+
 test("reset removes only guided-tour persistence", () => {
   const values = new Map([
     [GUIDED_TOUR_STORAGE_KEY, "{}"],
@@ -87,6 +111,14 @@ test("reset removes only guided-tour persistence", () => {
   assert.equal(resetGuidedTourProgress(storage), true);
   assert.equal(values.has(GUIDED_TOUR_STORAGE_KEY), false);
   assert.equal(values.get("studentHub.tasks"), "[1]");
+  assert.ok(
+    helpTopics.every(
+      (topic) =>
+        getGuidedTourDisplayStatus(getGuidedTourDefinition(topic.tourId), {
+          tours: {},
+        }) === "Not started"
+    )
+  );
 });
 
 test("support email validation fails closed", () => {

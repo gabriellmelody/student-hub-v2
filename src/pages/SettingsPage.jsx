@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import DayloMark from "../components/DayloMark.jsx";
 import QuickLinkIcon from "../components/QuickLinkIcon.jsx";
 import {
@@ -46,11 +47,17 @@ import {
 } from "../utils/googleCalendarStorage.js";
 import { formatSmartPlannerResetTime } from "../utils/smartPlannerUtils.js";
 import {
+  isValidSubjectColour,
+  suggestSubjectColour,
+  suggestSubjectDraftColour,
+} from "../utils/subjectColourUtils.js";
+import {
   SUPPORT_FIELD_LIMITS,
   buildSafeDiagnosticDetails,
   buildSupportMailto,
   buildSupportMessage,
   copySupportMessage,
+  getGuidedTourActionLabel,
   getGuidedTourDisplayStatus,
   normalizeSupportEmail,
   resetGuidedTourProgress,
@@ -573,12 +580,6 @@ function SettingsPage({
   themeColorPalettes,
   layoutDensity,
   setLayoutDensity,
-  homeLayout,
-  setHomeLayout,
-  rightRailVisible,
-  setRightRailVisible,
-  openHomeEditMode,
-  openRightRailEditMode,
   restartOnboarding,
   resetTasks,
   resetSubjects,
@@ -617,6 +618,8 @@ function SettingsPage({
   const themeColorDirtyRef = useRef(false);
   const savedThemeColorRef = useRef(savedThemeColorSnapshot);
   const setThemeColorsRef = useRef(setThemeColors);
+  const settingsHeadingRef = useRef(null);
+  const previousSettingsViewRef = useRef(settingsView);
 
   useEffect(() => {
     setSettingsView(initialView || "hub");
@@ -654,6 +657,14 @@ function SettingsPage({
     if (settingsView === "appearance") {
       setThemeAdvancedOpen(false);
     }
+  }, [settingsView]);
+
+  useLayoutEffect(() => {
+    if (previousSettingsViewRef.current === settingsView) return;
+
+    previousSettingsViewRef.current = settingsView;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    settingsHeadingRef.current?.focus({ preventScroll: true });
   }, [settingsView]);
 
   useEffect(() => {
@@ -695,8 +706,32 @@ function SettingsPage({
     setThemeColorDirty(true);
   }
 
+  function persistThemeColors(nextThemeColors) {
+    const normalizedThemeColors = normalizeThemeColors(nextThemeColors);
+
+    saveThemeColorPreferences(normalizedThemeColors);
+    setSavedThemeColorSnapshot(normalizedThemeColors);
+    setThemeColorDraft(normalizedThemeColors);
+    setThemeColors(normalizedThemeColors);
+    setThemeColorDirty(false);
+  }
+
+  function persistThemePreference(updatePreference) {
+    const nextSavedTheme = normalizeThemeColors(
+      updatePreference(savedThemeColorSnapshot)
+    );
+    const nextDraftTheme = normalizeThemeColors(
+      updatePreference(themeColorDraft)
+    );
+
+    saveThemeColorPreferences(nextSavedTheme);
+    setSavedThemeColorSnapshot(nextSavedTheme);
+    setThemeColorDraft(nextDraftTheme);
+    setThemeColors(nextDraftTheme);
+  }
+
   function chooseThemePalette(palette) {
-    previewThemeColors({
+    persistThemeColors({
       ...themeColorDraft,
       paletteId: palette.id,
       primary: palette.primary,
@@ -714,34 +749,34 @@ function SettingsPage({
   }
 
   function updateLogoAppearance(nextAppearance) {
-    previewThemeColors({
-      ...themeColorDraft,
+    persistThemePreference((currentTheme) => ({
+      ...currentTheme,
       logoAppearance: nextAppearance,
-    });
+    }));
   }
 
   function updateThemeBackgroundField(field, nextValue) {
-    previewThemeColors({
-      ...themeColorDraft,
+    persistThemePreference((currentTheme) => ({
+      ...currentTheme,
       [field]: nextValue,
-    });
+    }));
   }
 
   function updateThemeBackgroundMode(nextMode) {
-    previewThemeColors({
-      ...themeColorDraft,
+    persistThemePreference((currentTheme) => ({
+      ...currentTheme,
       backgroundMode: nextMode,
       backgroundStrength:
         nextMode === "neutral"
           ? "off"
-          : themeColorDraft.backgroundStrength === "off"
+          : currentTheme.backgroundStrength === "off"
             ? "subtle"
-            : themeColorDraft.backgroundStrength,
-    });
+            : currentTheme.backgroundStrength,
+    }));
   }
 
   function resetThemeColorDraft() {
-    previewThemeColors(DEFAULT_THEME_COLORS);
+    persistThemeColors(DEFAULT_THEME_COLORS);
   }
 
   function cancelThemeColorChanges() {
@@ -812,11 +847,21 @@ function SettingsPage({
           </button>
         )}
         <p className="eyebrow">{currentViewCopy.eyebrow}</p>
-        <h1>{currentViewCopy.title}</h1>
+        <h1 ref={settingsHeadingRef} tabIndex="-1">
+          {currentViewCopy.title}
+        </h1>
         <p>{currentViewCopy.description}</p>
       </header>
 
-      {settingsView === "hub" ? (
+      <div
+        className={`settings-view-content ${
+          settingsView === "hub"
+            ? "settings-hub-content"
+            : "settings-detail-content"
+        }`}
+        key={settingsView}
+      >
+        {settingsView === "hub" ? (
         <div className="settings-hub-grid">
           <button
             type="button"
@@ -920,11 +965,9 @@ function SettingsPage({
       ) : settingsView === "appearance" ? (
         <div className="panel appearance-panel">
           <section className="appearance-group">
-            <p className="settings-group-label">Visual</p>
-
             <div className="theme-setting">
               <div>
-                <h3>Theme</h3>
+                <h3>Appearance mode</h3>
                 <p>Choose the appearance that feels most comfortable.</p>
               </div>
 
@@ -1217,30 +1260,15 @@ function SettingsPage({
                   )}
                 </div>
 
-                <div className="theme-colour-preview" aria-label="Theme preview">
-                  <span>Preview</span>
-                  <div className="theme-colour-preview-card">
-                    <strong>Card surface</strong>
-                    <small>Elevated note</small>
-                  </div>
-                  <button type="button">Primary action</button>
-                  <strong>Secondary</strong>
-                  <small>Tertiary</small>
-                </div>
-
-                <div className="theme-colour-actions">
-                  <button
-                    type="button"
-                    className="theme-colour-reset"
-                    onClick={resetThemeColorDraft}
+                {themeColorDirty && (
+                  <div
+                    className="theme-colour-actions theme-colour-pending-actions"
+                    role="group"
+                    aria-label="Unsaved advanced colour changes"
                   >
-                    Reset to DayLo default
-                  </button>
-                  <span>
                     <button
                       type="button"
                       className="theme-colour-cancel"
-                      disabled={!themeColorDirty}
                       onClick={cancelThemeColorChanges}
                     >
                       Cancel
@@ -1248,19 +1276,14 @@ function SettingsPage({
                     <button
                       type="button"
                       className="theme-colour-save"
-                      disabled={!themeColorDirty}
                       onClick={saveThemeColorChanges}
                     >
                       Save theme
                     </button>
-                  </span>
-                </div>
+                  </div>
+                )}
               </div>
             </div>
-          </section>
-
-          <section className="appearance-group">
-            <p className="settings-group-label">Layout</p>
 
             <div className="theme-setting density-setting">
               <div>
@@ -1287,88 +1310,15 @@ function SettingsPage({
               </div>
             </div>
 
-            <div className="theme-setting home-layout-setting">
-              <div>
-                <h3>Home layout</h3>
-                <p>Choose a focused workspace or a fuller task overview.</p>
-              </div>
-
-              <div
-                className="theme-toggle home-layout-toggle"
-                role="group"
-                aria-label="Home layout"
-              >
-                {["focused", "dashboard"].map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className={homeLayout === option ? "active" : ""}
-                    aria-pressed={homeLayout === option}
-                    onClick={() => setHomeLayout(option)}
-                  >
-                    {option === "focused" ? "Focused" : "Dashboard"}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="theme-setting right-rail-setting">
-              <div>
-                <h3>Side Panel</h3>
-                <p>Show compact school context beside the workspace.</p>
-              </div>
-
-              <div
-                className="theme-toggle right-rail-toggle"
-                role="group"
-                aria-label="Side Panel"
-              >
-                {[
-                  ["On", true],
-                  ["Off", false],
-                ].map(([label, value]) => (
-                  <button
-                    key={label}
-                    type="button"
-                    className={rightRailVisible === value ? "active" : ""}
-                    aria-pressed={rightRailVisible === value}
-                    onClick={() => setRightRailVisible(value)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div
-              className="widget-edit-launch-grid"
-              aria-label="Widget customisation"
-            >
+            <div className="appearance-reset-row">
               <button
                 type="button"
-                className="settings-widget-edit-card"
-                onClick={openHomeEditMode}
+                className="theme-colour-reset"
+                onClick={resetThemeColorDraft}
               >
-                <span>
-                  <strong>Edit Home Page</strong>
-                  <small>Reorder, hide, and resize Home widgets.</small>
-                </span>
-                <span aria-hidden="true">→</span>
-              </button>
-
-              <button
-                type="button"
-                className="settings-widget-edit-card"
-                onClick={openRightRailEditMode}
-              >
-                <span>
-                  <strong>Edit Side Panel</strong>
-                  <small>Reorder or hide quick side widgets.</small>
-                </span>
-                <span aria-hidden="true">→</span>
+                Reset to DayLo default
               </button>
             </div>
-
           </section>
         </div>
       ) : settingsView === "subjects" ? (
@@ -1418,7 +1368,8 @@ function SettingsPage({
           smartPlannerStatus={smartPlannerStatus}
           onReplayTour={onReplayTour}
         />
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -2973,12 +2924,18 @@ function IntegrationsSettings({
 
     markIntegrationAutoSaving();
 
+    const explicitCourseColour = course?.colour || course?.color;
+    const subjectColour = isValidSubjectColour(explicitCourseColour)
+      ? explicitCourseColour
+      : suggestSubjectColour(subjectName, subjects, courseId);
+
     const newSubject = {
       id: `subject-${REAL_CLASSROOM_SOURCE}-${courseId}`,
-      ...createSubjectDraft("Other"),
+      ...createSubjectDraft("Other", subjects, subjectName),
       name: subjectName,
       courseSystem: "Other",
       level: "Other",
+      colour: subjectColour,
       source: REAL_CLASSROOM_SOURCE,
       classroomCourseId: courseId,
       externalId: courseId,
@@ -3611,6 +3568,13 @@ function IntegrationCard({
     Boolean(isPopupConnecting) ||
     googleIdentityStatus.loading ||
     (!googleIdentityStatus.ready && !googleIdentityStatus.error);
+  const integrationIconId = isRealClassroom
+    ? "school"
+    : isGoogleCalendar
+      ? "calendar"
+      : isSmartPlanner
+        ? "sparkles"
+        : "school";
 
   return (
     <article
@@ -3619,7 +3583,10 @@ function IntegrationCard({
     >
       <div className="integration-card-heading">
         <span className="integration-provider-mark" aria-hidden="true">
-          {isSmartPlanner ? "AI" : "G"}
+          <QuickLinkIcon
+            iconId={integrationIconId}
+            className="integration-provider-icon"
+          />
         </span>
         <div>
           <h3>{integration.name}</h3>
@@ -3750,25 +3717,31 @@ function IntegrationCard({
         {!isClassroom && (
           isRealClassroom ? (
             <>
+              {realClassroomSession.connected && (
+                <button
+                  type="button"
+                  className="integration-primary-action"
+                  onClick={
+                    realClassroomCourses.courses.length > 0
+                      ? onManageRealClassroom
+                      : onLoadRealClassroomCourses
+                  }
+                  disabled={realClassroomCourses.loading}
+                >
+                  {realClassroomCourses.loading
+                    ? "Loading classes..."
+                    : realClassroomCourses.courses.length > 0
+                      ? "Manage Classroom"
+                      : "Load classes"}
+                </button>
+              )}
               <button
                 type="button"
-                className="integration-preview-button"
-                onClick={
-                  realClassroomCourses.courses.length > 0
-                    ? onManageRealClassroom
-                    : onLoadRealClassroomCourses
+                className={
+                  realClassroomSession.connected
+                    ? "integration-secondary-action secondary"
+                    : "integration-primary-action"
                 }
-                disabled={realClassroomCourses.loading}
-              >
-                {realClassroomCourses.loading
-                  ? "Loading classes..."
-                  : realClassroomCourses.courses.length > 0
-                    ? "Manage Classroom"
-                    : "Load classes"}
-              </button>
-              <button
-                type="button"
-                className="integration-oauth-prototype-link secondary"
                 onClick={() => onConnectGooglePopup("classroom")}
                 disabled={popupConnectDisabled}
                 ref={realClassroomConnectButtonRef}
@@ -3802,7 +3775,7 @@ function IntegrationCard({
               {googleCalendarSession.connected && (
                 <button
                   type="button"
-                  className="integration-preview-button"
+                  className="integration-primary-action"
                   onClick={
                     googleCalendarCalendars.calendars.length > 0
                       ? onManageGoogleCalendars
@@ -3819,9 +3792,11 @@ function IntegrationCard({
               )}
               <button
                 type="button"
-                className={`integration-oauth-prototype-link ${
-                  googleCalendarSession.connected ? "secondary" : ""
-                }`}
+                className={
+                  googleCalendarSession.connected
+                    ? "integration-secondary-action secondary"
+                    : "integration-primary-action"
+                }
                 onClick={() => onConnectGooglePopup("calendar")}
                 disabled={popupConnectDisabled}
                 ref={googleCalendarConnectButtonRef}
@@ -3846,7 +3821,7 @@ function IntegrationCard({
             <>
               <button
                 type="button"
-                className="integration-oauth-prototype-link"
+                className="integration-primary-action"
                 onClick={onOpenSmartPlanner}
               >
                 Open Smart Planner
@@ -3894,8 +3869,8 @@ function SmartPlannerIntegrationStatus({ status }) {
     detail = `0 of ${dailyLimit} AI plans remaining`;
     support = "Basic Planner is still available.";
   } else if (isUnavailable) {
-    detail = "Smart Planner is temporarily unavailable.";
-    support = "Basic Planner is still available.";
+    detail = "AI planning is unavailable right now.";
+    support = "Basic Planner still works.";
   } else if (
     remaining !== null &&
     !(status?.status === "ready" && !status?.resetAt && remaining === dailyLimit)
@@ -4048,8 +4023,12 @@ function RealClassroomCompactStatus({
   return (
     <div className="real-classroom-compact-status" aria-live="polite">
       <div>
-        <strong>{connected ? "Connected" : "Not connected"}</strong>
-        <span>{connected ? "Ready to manage" : "Connect to start"}</span>
+        <strong>{connected ? "Classroom ready" : "Connect to start"}</strong>
+        <span>
+          {connected
+            ? "Manage classes and imported work"
+            : "Import assignments and link Subjects"}
+        </span>
       </div>
       <dl>
         <div>
@@ -4101,13 +4080,13 @@ function GoogleCalendarCompactStatus({ session, calendarState, preferences }) {
   return (
     <div className="real-classroom-compact-status" aria-live="polite">
       <div>
-        <strong>{connected ? "Connected" : "Not connected"}</strong>
+        <strong>{connected ? "Calendars ready" : "Connect to start"}</strong>
         <span>
           {connected
             ? calendarCount > 0
               ? `${calendarCount} calendars available`
               : "Load calendars to manage"
-            : "Connect to list calendars"}
+            : "Show events and protect study time"}
         </span>
       </div>
       <dl>
@@ -5494,7 +5473,8 @@ function MockClassroomPreview({
       (subject) =>
         normalizeSubjectName(subject.name) === normalizeSubjectName(course.name)
     );
-    const subject = existingSubject || createSubjectFromMockCourse(course);
+    const subject =
+      existingSubject || createSubjectFromMockCourse(course, subjects);
 
     if (!existingSubject) {
       setSubjects((currentSubjects) => [...currentSubjects, subject]);
@@ -5686,11 +5666,13 @@ function QuickLinksSettings({
   });
   const [customError, setCustomError] = useState("");
   const [openIconPicker, setOpenIconPicker] = useState(null);
+  const [iconPickerPosition, setIconPickerPosition] = useState(null);
   const [powerSchoolDraft, setPowerSchoolDraft] = useState(
     preferences.links.find((link) => link.id === "powerschool")?.url || ""
   );
   const [message, setMessage] = useState("");
   const iconPickerRef = useRef(null);
+  const iconPickerTriggerRef = useRef(null);
   const pinnedLinks = preferences.links
     .filter((link) => link.pinned)
     .sort((left, right) => left.pinnedOrder - right.pinnedOrder);
@@ -5699,6 +5681,17 @@ function QuickLinksSettings({
   const aiPresetIds = quickLinkPresets
     .filter((preset) => preset.aiAssistant)
     .map((preset) => preset.id);
+  const activeIconPickerLink = openIconPicker
+    ? openIconPicker.linkId === "__custom-draft"
+      ? {
+          id: "__custom-draft",
+          label: customDraft.label || "Custom website",
+          iconId: customDraft.iconId || "globe",
+          defaultIconId: "globe",
+          type: "custom",
+        }
+      : preferences.links.find((link) => link.id === openIconPicker.linkId)
+    : null;
 
   useEffect(() => {
     setPowerSchoolDraft(
@@ -5706,32 +5699,179 @@ function QuickLinksSettings({
     );
   }, [quickLinksPreferences]);
 
+  useLayoutEffect(() => {
+    if (!openIconPicker) return undefined;
+
+    const frameId = requestAnimationFrame(() => {
+      updateIconPickerPosition();
+      const selectedOption = iconPickerRef.current?.querySelector(
+        '[role="menuitemradio"][aria-checked="true"]'
+      );
+      const firstOption = iconPickerRef.current?.querySelector(
+        '[role="menuitemradio"]'
+      );
+      (selectedOption || firstOption)?.focus();
+    });
+
+    return () => cancelAnimationFrame(frameId);
+  }, [openIconPicker]);
+
   useEffect(() => {
     if (!openIconPicker) return undefined;
 
+    let frameId = 0;
+
     function closeIconPicker(event) {
       if (event.key === "Escape") {
-        setOpenIconPicker(null);
+        event.preventDefault();
+        dismissIconPicker(true);
         return;
       }
 
       if (
         event.type === "pointerdown" &&
         !iconPickerRef.current?.contains(event.target) &&
-        !event.target.closest?.(".quick-link-icon-picker-wrap")
+        !iconPickerTriggerRef.current?.contains(event.target)
       ) {
-        setOpenIconPicker(null);
+        dismissIconPicker(false);
       }
+    }
+
+    function schedulePositionUpdate() {
+      cancelAnimationFrame(frameId);
+      frameId = requestAnimationFrame(updateIconPickerPosition);
     }
 
     document.addEventListener("pointerdown", closeIconPicker);
     document.addEventListener("keydown", closeIconPicker);
+    window.addEventListener("resize", schedulePositionUpdate);
+    window.addEventListener("scroll", schedulePositionUpdate, true);
+    window.visualViewport?.addEventListener("resize", schedulePositionUpdate);
+    window.visualViewport?.addEventListener("scroll", schedulePositionUpdate);
 
     return () => {
+      cancelAnimationFrame(frameId);
       document.removeEventListener("pointerdown", closeIconPicker);
       document.removeEventListener("keydown", closeIconPicker);
+      window.removeEventListener("resize", schedulePositionUpdate);
+      window.removeEventListener("scroll", schedulePositionUpdate, true);
+      window.visualViewport?.removeEventListener(
+        "resize",
+        schedulePositionUpdate
+      );
+      window.visualViewport?.removeEventListener(
+        "scroll",
+        schedulePositionUpdate
+      );
     };
   }, [openIconPicker]);
+
+  function getIconPickerPosition(triggerElement, pickerElement = null) {
+    if (!triggerElement || typeof window === "undefined") return null;
+
+    const viewportMargin = 12;
+    const triggerGap = 8;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const triggerRect = triggerElement.getBoundingClientRect();
+    const width = Math.min(340, viewportWidth - viewportMargin * 2);
+    const estimatedHeight = Math.min(
+      pickerElement?.offsetHeight || 340,
+      viewportHeight - viewportMargin * 2
+    );
+    const spaceBelow =
+      viewportHeight - viewportMargin - triggerRect.bottom - triggerGap;
+    const spaceAbove = triggerRect.top - viewportMargin - triggerGap;
+    const placement =
+      spaceBelow >= Math.min(estimatedHeight, 240) || spaceBelow >= spaceAbove
+        ? "below"
+        : "above";
+    const availableHeight = Math.max(
+      0,
+      Math.min(
+        360,
+        placement === "below" ? spaceBelow : spaceAbove,
+        viewportHeight - viewportMargin * 2
+      )
+    );
+    const measuredHeight = Math.min(estimatedHeight, availableHeight);
+    const left = Math.min(
+      Math.max(triggerRect.left, viewportMargin),
+      viewportWidth - viewportMargin - width
+    );
+    const top =
+      placement === "below"
+        ? triggerRect.bottom + triggerGap
+        : Math.max(viewportMargin, triggerRect.top - triggerGap - measuredHeight);
+
+    return { top, left, width, maxHeight: availableHeight, placement };
+  }
+
+  function updateIconPickerPosition() {
+    const nextPosition = getIconPickerPosition(
+      iconPickerTriggerRef.current,
+      iconPickerRef.current
+    );
+
+    if (nextPosition) setIconPickerPosition(nextPosition);
+  }
+
+  function dismissIconPicker(restoreFocus = false) {
+    const triggerElement = iconPickerTriggerRef.current;
+
+    setOpenIconPicker(null);
+    setIconPickerPosition(null);
+
+    if (restoreFocus) {
+      requestAnimationFrame(() => triggerElement?.focus());
+    }
+  }
+
+  function toggleIconPicker(pickerId, linkId, triggerElement) {
+    if (openIconPicker?.pickerId === pickerId) {
+      dismissIconPicker(true);
+      return;
+    }
+
+    iconPickerTriggerRef.current = triggerElement;
+    setIconPickerPosition(getIconPickerPosition(triggerElement));
+    setOpenIconPicker({ pickerId, linkId });
+  }
+
+  function handleIconPickerKeyDown(event) {
+    const navigationKeys = [
+      "ArrowDown",
+      "ArrowRight",
+      "ArrowUp",
+      "ArrowLeft",
+      "Home",
+      "End",
+    ];
+
+    if (!navigationKeys.includes(event.key)) {
+      return;
+    }
+
+    const options = Array.from(
+      event.currentTarget.querySelectorAll('[role="menuitemradio"]')
+    );
+
+    if (options.length === 0) return;
+
+    const currentIndex = options.indexOf(document.activeElement);
+    let nextIndex = currentIndex;
+
+    if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = options.length - 1;
+    else if (["ArrowDown", "ArrowRight"].includes(event.key)) {
+      nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % options.length;
+    } else {
+      nextIndex = currentIndex <= 0 ? options.length - 1 : currentIndex - 1;
+    }
+
+    event.preventDefault();
+    options[nextIndex]?.focus();
+  }
 
   function updatePreferences(updater) {
     setQuickLinksPreferences((currentPreferences) =>
@@ -5753,12 +5893,12 @@ function QuickLinksSettings({
   function updateLinkIcon(linkId, iconId) {
     if (linkId === "__custom-draft") {
       setCustomDraft((currentDraft) => ({ ...currentDraft, iconId }));
-      setOpenIconPicker(null);
+      dismissIconPicker(true);
       return;
     }
 
     updateLink(linkId, { iconId });
-    setOpenIconPicker(null);
+    dismissIconPicker(true);
   }
 
   function pinLink(linkId) {
@@ -5940,7 +6080,7 @@ function QuickLinksSettings({
   }
 
   function renderIconPicker(link, pickerId) {
-    const defaultIconId = link.defaultIconId || "globe";
+    const pickerOpen = openIconPicker?.pickerId === pickerId;
 
     return (
       <div className="quick-link-icon-picker-wrap">
@@ -5949,33 +6089,56 @@ function QuickLinksSettings({
           className="quick-link-icon-button"
           aria-label={`Choose icon for ${link.label}`}
           aria-haspopup="menu"
-          aria-expanded={openIconPicker === pickerId}
-          onClick={() =>
-            setOpenIconPicker((currentPicker) =>
-              currentPicker === pickerId ? null : pickerId
-            )
+          aria-expanded={pickerOpen}
+          aria-controls={
+            pickerOpen ? `quick-link-icon-picker-${pickerId}` : undefined
+          }
+          onClick={(event) =>
+            toggleIconPicker(pickerId, link.id, event.currentTarget)
           }
         >
           <QuickLinkIcon iconId={link.iconId} />
         </button>
+      </div>
+    );
+  }
 
-        {openIconPicker === pickerId && (
+  const iconPickerPopover =
+    openIconPicker &&
+    activeIconPickerLink &&
+    iconPickerPosition &&
+    typeof document !== "undefined"
+      ? createPortal(
           <div
+            id={`quick-link-icon-picker-${openIconPicker.pickerId}`}
             className="quick-link-icon-picker"
             ref={iconPickerRef}
             role="menu"
-            aria-label={`Icon choices for ${link.label}`}
+            aria-label={`Icon choices for ${activeIconPickerLink.label}`}
+            data-placement={iconPickerPosition.placement}
+            style={{
+              top: `${iconPickerPosition.top}px`,
+              left: `${iconPickerPosition.left}px`,
+              width: `${iconPickerPosition.width}px`,
+              maxHeight: `${iconPickerPosition.maxHeight}px`,
+            }}
+            onKeyDown={handleIconPickerKeyDown}
           >
             <div className="quick-link-icon-grid">
               {quickLinkIconCatalog.map((icon) => (
                 <button
                   type="button"
                   role="menuitemradio"
-                  aria-checked={link.iconId === icon.id}
-                  className={link.iconId === icon.id ? "active" : ""}
+                  aria-checked={activeIconPickerLink.iconId === icon.id}
+                  aria-label={icon.label}
+                  className={
+                    activeIconPickerLink.iconId === icon.id ? "active" : ""
+                  }
                   key={icon.id}
                   title={icon.label}
-                  onClick={() => updateLinkIcon(link.id, icon.id)}
+                  onClick={() =>
+                    updateLinkIcon(activeIconPickerLink.id, icon.id)
+                  }
                 >
                   <QuickLinkIcon iconId={icon.id} />
                   <span>{icon.label}</span>
@@ -5983,23 +6146,29 @@ function QuickLinksSettings({
               ))}
             </div>
 
-            {link.type === "preset" && (
+            {activeIconPickerLink.type === "preset" && (
               <button
                 type="button"
+                role="menuitem"
                 className="quick-link-icon-default"
-                onClick={() => updateLinkIcon(link.id, defaultIconId)}
+                onClick={() =>
+                  updateLinkIcon(
+                    activeIconPickerLink.id,
+                    activeIconPickerLink.defaultIconId || "globe"
+                  )
+                }
               >
                 Restore default icon
               </button>
             )}
-          </div>
-        )}
-      </div>
-    );
-  }
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
-    <div className="quick-links-settings">
+    <>
+      <div className="quick-links-settings">
       <section className="panel quick-links-panel">
         <div className="quick-links-panel-intro">
           <div>
@@ -6026,9 +6195,13 @@ function QuickLinksSettings({
                 <div className="quick-link-row" key={link.id}>
                   {renderIconPicker(link, `pinned-${link.id}`)}
                   <label className="quick-link-label-field">
-                    <span className="quick-link-a11y">Display name</span>
+                    <span className="quick-link-label-caption">
+                      Display name
+                    </span>
                     <input
                       value={link.label}
+                      title={link.label}
+                      aria-label={`Display name for ${link.label}`}
                       onChange={(event) =>
                         updateLink(link.id, { label: event.target.value })
                       }
@@ -6246,8 +6419,14 @@ function QuickLinksSettings({
           )}
         </section>
       </section>
-    </div>
+      </div>
+      {iconPickerPopover}
+    </>
   );
+}
+
+function getHelpTourStatusClassName(status) {
+  return `help-tour-status-${status.toLocaleLowerCase().replace(/\s+/g, "-")}`;
 }
 
 function HelpSettings({
@@ -6270,6 +6449,9 @@ function HelpSettings({
   const gettingStartedStatus = getGuidedTourDisplayStatus(
     gettingStartedTour,
     tourProgress
+  );
+  const gettingStartedActionLabel = getGuidedTourActionLabel(
+    gettingStartedStatus
   );
 
   useEffect(() => {
@@ -6335,6 +6517,10 @@ function HelpSettings({
     const topicTour = selectedTopic.tourId
       ? getGuidedTourDefinition(selectedTopic.tourId)
       : null;
+    const topicStatus = topicTour
+      ? getGuidedTourDisplayStatus(topicTour, tourProgress)
+      : "Not started";
+    const topicTourActionLabel = getGuidedTourActionLabel(topicStatus);
 
     return (
       <div className="help-settings help-guide-page">
@@ -6358,12 +6544,13 @@ function HelpSettings({
             {topicTour && (
               <button
                 type="button"
-                className="small-button secondary"
+                className="help-tour-action"
+                aria-label={`${topicTourActionLabel}: ${selectedTopic.title}`}
                 onClick={(event) =>
                   replayTour(selectedTopic.tourId, event.currentTarget)
                 }
               >
-                Replay {selectedTopic.title} tour
+                {topicTourActionLabel}
               </button>
             )}
           </header>
@@ -6409,9 +6596,10 @@ function HelpSettings({
       <section className="panel help-tour-summary">
         <div className="help-tour-summary-copy">
           <span
-            className={`help-tour-status help-tour-status-${gettingStartedStatus
-              .toLowerCase()
-              .replace(" ", "-")}`}
+            className={`help-tour-status ${getHelpTourStatusClassName(
+              gettingStartedStatus
+            )}`}
+            aria-label={`Tour status: ${gettingStartedStatus}`}
           >
             {gettingStartedStatus}
           </span>
@@ -6426,12 +6614,13 @@ function HelpSettings({
         <div className="help-tour-summary-actions">
           <button
             type="button"
-            className="primary-button"
+            className="help-summary-tour-action"
+            aria-label={`${gettingStartedActionLabel}: Getting started`}
             onClick={(event) =>
               replayTour("getting-started", event.currentTarget)
             }
           >
-            Replay getting-started tour
+            {gettingStartedActionLabel}
           </button>
           <button
             ref={resetLauncherRef}
@@ -6469,44 +6658,44 @@ function HelpSettings({
               : null;
             const topicStatus = topicTour
               ? getGuidedTourDisplayStatus(topicTour, tourProgress)
-              : "";
+              : "Not started";
+            const topicTourActionLabel = getGuidedTourActionLabel(topicStatus);
 
             return (
               <article className="help-topic-card" key={topic.id}>
                 <div className="help-topic-card-copy">
                   <div className="help-topic-title-row">
                     <h3>{topic.title}</h3>
-                    {topicStatus && (
-                      <span className="help-tour-status">{topicStatus}</span>
-                    )}
+                    <span
+                      className={`help-tour-status ${getHelpTourStatusClassName(
+                        topicStatus
+                      )}`}
+                      aria-label={`Tour status: ${topicStatus}`}
+                    >
+                      {topicStatus}
+                    </span>
                   </div>
                   <p>{topic.summary}</p>
                 </div>
                 <div className="help-topic-actions">
                   <button
                     type="button"
-                    className="small-button secondary"
+                    className="help-guide-action"
                     aria-label={`Read ${topic.title} guide`}
                     onClick={() => setSelectedTopicId(topic.id)}
                   >
                     Read guide
                   </button>
-                  {topicTour ? (
-                    <button
-                      type="button"
-                      className="help-replay-action"
-                      aria-label={`Replay ${topic.title} tour`}
-                      onClick={(event) =>
-                        replayTour(topic.tourId, event.currentTarget)
-                      }
-                    >
-                      Replay tour
-                    </button>
-                  ) : (
-                    <span className="help-included-note">
-                      Included in Getting started
-                    </span>
-                  )}
+                  <button
+                    type="button"
+                    className="help-tour-action"
+                    aria-label={`${topicTourActionLabel}: ${topic.title}`}
+                    onClick={(event) =>
+                      replayTour(topic.tourId, event.currentTarget)
+                    }
+                  >
+                    {topicTourActionLabel}
+                  </button>
                 </div>
               </article>
             );
@@ -6526,14 +6715,14 @@ function HelpSettings({
         <div className="help-support-card-actions">
           <button
             type="button"
-            className="small-button secondary"
+            className="help-feedback-primary"
             onClick={() => setSupportMode("feedback")}
           >
             Send feedback
           </button>
           <button
             type="button"
-            className="small-button secondary"
+            className="help-feedback-secondary"
             onClick={() => setSupportMode("problem")}
           >
             Report a problem
@@ -6874,7 +7063,7 @@ function DataSettings({
   hasDemoData,
 }) {
   const [pendingReset, setPendingReset] = useState(null);
-  const resetOptions = [
+  const setupOptions = [
     {
       id: "load-demo",
       title: "Load demo workspace",
@@ -6888,21 +7077,26 @@ function DataSettings({
       action: loadDemoWorkspace,
       disabled: hasDemoTasks,
     },
-    ...(hasDemoData
-      ? [
-          {
-            id: "remove-demo",
-            title: "Remove demo data",
-            description: "Remove sample data while keeping your own work.",
-            confirmation:
-              "Only demo tasks, subjects, and completed history will be removed. Your manual work will stay untouched.",
-            confirmLabel: "Remove demo data",
-            actionLabel: "Remove",
-            action: removeDemoData,
-            destructive: true,
-          },
-        ]
-      : []),
+    {
+      id: "appearance",
+      title: "Reset appearance",
+      description: "Restore theme colours, logo appearance, background, and density.",
+      confirmation:
+        "Your visual and workspace layout preferences will return to their default values. Tasks and subjects will stay untouched.",
+      confirmLabel: "Reset appearance",
+      action: resetAppearancePreferences,
+    },
+    {
+      id: "onboarding",
+      title: "Restart onboarding",
+      description: "Run local workspace setup again without deleting your work.",
+      confirmation:
+        "Onboarding will open again. Your tasks, subjects, and current preferences will remain available.",
+      confirmLabel: "Restart onboarding",
+      action: restartOnboarding,
+    },
+  ];
+  const dataResetOptions = [
     {
       id: "tasks",
       title: "Reset tasks",
@@ -6923,33 +7117,32 @@ function DataSettings({
       action: resetSubjects,
       destructive: true,
     },
-    {
-      id: "appearance",
-      title: "Reset appearance",
-      description: "Restore theme, accent, density, Home, and Side Panel defaults.",
-      confirmation:
-        "Your visual and workspace layout preferences will return to their default values. Tasks and subjects will stay untouched.",
-      confirmLabel: "Reset appearance",
-      action: resetAppearancePreferences,
-    },
-    {
-      id: "onboarding",
-      title: "Restart onboarding",
-      description: "Run local workspace setup again without deleting your work.",
-      confirmation:
-        "Onboarding will open again. Your tasks, subjects, and current preferences will remain available.",
-      confirmLabel: "Restart onboarding",
-      action: restartOnboarding,
-    },
+    ...(hasDemoData
+      ? [
+          {
+            id: "remove-demo",
+            title: "Remove demo data",
+            description: "Remove sample data while keeping your own work.",
+            confirmation:
+              "Only demo tasks, subjects, and completed history will be removed. Your manual work will stay untouched.",
+            confirmLabel: "Remove demo data",
+            actionLabel: "Remove",
+            action: removeDemoData,
+            destructive: true,
+          },
+        ]
+      : []),
     {
       id: "all",
       title: "Clear all local app data",
       description: "Return DayLo to a clean first-time state.",
       confirmation:
-        "Tasks, completed history, subjects, profile, onboarding, preferences, widgets, and the current plan will all be removed from this device.",
+        "This removes locally stored DayLo data from this browser, including tasks and completed history, Subjects, Today’s Plan, your local profile, appearance preferences, onboarding state, and locally stored integration preferences. It does not delete data from Google Classroom, Google Calendar, your Google account, or any external service.",
       confirmLabel: "Clear all data",
+      actionLabel: "Clear all data",
       action: clearAllStudentHubData,
       destructive: true,
+      strongestDestructive: true,
     },
   ];
 
@@ -6977,6 +7170,30 @@ function DataSettings({
     setPendingReset(null);
   }
 
+  function renderResetOption(option) {
+    return (
+      <div
+        className={`data-reset-row ${option.destructive ? "destructive" : ""} ${
+          option.strongestDestructive ? "strongest-destructive" : ""
+        }`}
+        key={option.id}
+      >
+        <div>
+          <h3>{option.title}</h3>
+          <p>{option.description}</p>
+        </div>
+        <button
+          type="button"
+          disabled={option.disabled}
+          onClick={() => setPendingReset(option)}
+        >
+          {option.actionLabel ||
+            (option.id === "onboarding" ? "Restart" : "Reset")}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="data-settings">
       <section className="panel data-panel">
@@ -6993,31 +7210,11 @@ function DataSettings({
         </div>
 
         <div className="data-reset-list">
-          {resetOptions.map((option) => (
-            <div
-              className={`data-reset-row ${
-                option.destructive ? "destructive" : ""
-              }`}
-              key={option.id}
-            >
-              <div>
-                <h3>{option.title}</h3>
-                <p>{option.description}</p>
-              </div>
-              <button
-                type="button"
-                disabled={option.disabled}
-                onClick={() => setPendingReset(option)}
-              >
-                {option.actionLabel ||
-                  (option.id === "onboarding"
-                    ? "Restart"
-                    : option.id === "all"
-                      ? "Clear"
-                      : "Reset")}
-              </button>
-            </div>
-          ))}
+          {setupOptions.map(renderResetOption)}
+          <div className="data-reset-section-heading">
+            <h3>Data resets</h3>
+          </div>
+          {dataResetOptions.map(renderResetOption)}
         </div>
       </section>
 
@@ -7071,12 +7268,17 @@ function DataSettings({
 function SubjectsSettings({ subjects, setSubjects }) {
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [editingSubjectId, setEditingSubjectId] = useState(null);
-  const [subjectDraft, setSubjectDraft] = useState(createSubjectDraft);
+  const [subjectDraft, setSubjectDraft] = useState(() =>
+    createSubjectDraft("IB", subjects)
+  );
+  const [subjectColourManuallySelected, setSubjectColourManuallySelected] =
+    useState(false);
   const [subjectFormError, setSubjectFormError] = useState("");
 
   function openAddSubject() {
     setEditingSubjectId(null);
-    setSubjectDraft(createSubjectDraft());
+    setSubjectDraft(createSubjectDraft("IB", subjects));
+    setSubjectColourManuallySelected(false);
     setSubjectFormError("");
     setShowSubjectForm(true);
   }
@@ -7091,6 +7293,7 @@ function SubjectsSettings({ subjects, setSubjects }) {
       targetGrade: subject.targetGrade,
       colour: subject.colour,
     });
+    setSubjectColourManuallySelected(true);
     setSubjectFormError("");
     setShowSubjectForm(true);
   }
@@ -7098,6 +7301,7 @@ function SubjectsSettings({ subjects, setSubjects }) {
   function closeSubjectForm() {
     setShowSubjectForm(false);
     setEditingSubjectId(null);
+    setSubjectColourManuallySelected(false);
     setSubjectFormError("");
   }
 
@@ -7175,9 +7379,20 @@ function SubjectsSettings({ subjects, setSubjects }) {
                   value={subjectDraft.name}
                   placeholder="e.g. Biology"
                   required
-                  onChange={(event) =>
-                    setSubjectDraft({ ...subjectDraft, name: event.target.value })
-                  }
+                  onChange={(event) => {
+                    const name = event.target.value;
+
+                    setSubjectDraft((currentDraft) => ({
+                      ...currentDraft,
+                      name,
+                      colour: suggestSubjectDraftColour({
+                        subjectName: name,
+                        currentColour: currentDraft.colour,
+                        existingSubjects: subjects,
+                        manuallySelected: subjectColourManuallySelected,
+                      }),
+                    }));
+                  }}
                 />
               </label>
 
@@ -7253,12 +7468,13 @@ function SubjectsSettings({ subjects, setSubjects }) {
                     type="color"
                     value={subjectDraft.colour}
                     aria-label="Subject colour"
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      setSubjectColourManuallySelected(true);
                       setSubjectDraft({
                         ...subjectDraft,
                         colour: event.target.value,
-                      })
-                    }
+                      });
+                    }}
                   />
                   <strong>{subjectDraft.colour.toUpperCase()}</strong>
                 </span>

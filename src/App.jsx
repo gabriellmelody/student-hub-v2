@@ -7,7 +7,6 @@ import {
   MobileTopBar,
   NavButton,
   QuickLinksNav,
-  RightRail,
 } from "./components/AppChrome.jsx";
 import SmartPlannerModal from "./components/SmartPlannerModal.jsx";
 import GuidedTour from "./components/GuidedTour.jsx";
@@ -25,7 +24,6 @@ import {
   DEFAULT_THEME_COLORS,
   themeColorPalettes,
   STUDENT_HUB_STORAGE_KEYS,
-  WIDGET_CONFIG_STORAGE_KEY,
   TODAY_PLAN_STORAGE_KEY,
   normalizeThemeColors,
   loadThemeColors,
@@ -36,7 +34,6 @@ import {
   getReadableAccent,
   colorToRgba,
   loadTasks,
-  loadWidgetConfig,
   loadSubjects,
   loadStudentProfile,
   getDaysLeft,
@@ -46,8 +43,6 @@ import {
   sortTasksForDisplay,
   cleanPlanSequence,
   recalculatePlanTimes,
-  getDefaultWidgetConfig,
-  getWidgetsForArea,
   loadSavedPlanSnapshot,
   isSavedPlanForToday,
   restoreSavedPlanBlocks,
@@ -222,8 +217,6 @@ function App() {
     initialNavigation.settingsView
   );
   const [settingsNavigationRequest, setSettingsNavigationRequest] = useState(0);
-  const [homeEditMode, setHomeEditMode] = useState(false);
-  const [rightRailEditMode, setRightRailEditMode] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [theme, setTheme] = useState(() => {
@@ -240,20 +233,6 @@ function App() {
       ? "comfortable"
       : "compact";
   });
-  const [homeLayout, setHomeLayout] = useState(() => {
-    return localStorage.getItem("student-hub-home-layout") === "dashboard"
-      ? "dashboard"
-      : "focused";
-  });
-  const [rightRailVisible, setRightRailVisible] = useState(() => {
-    return localStorage.getItem("student-hub-right-rail") !== "off";
-  });
-  const [rightRailCollapsed, setRightRailCollapsed] = useState(() => {
-    return localStorage.getItem("student-hub-right-rail-state") === "collapsed";
-  });
-  const [widgetConfig, setWidgetConfig] = useState(() =>
-    loadWidgetConfig(homeLayout)
-  );
   const [subjects, setSubjects] = useState(loadSubjects);
   const [studentProfile, setStudentProfile] = useState(loadStudentProfile);
   const [quickLinksPreferences, setQuickLinksPreferences] = useState(
@@ -689,63 +668,6 @@ function App() {
     ]
   );
 
-  const rightRailWidgets = getWidgetsForArea(
-    widgetConfig,
-    "rightRail"
-  ).map((widget) => widget.type);
-
-  function setRightRailWidgets(nextWidgetsOrUpdater) {
-    setWidgetConfig((currentConfig) => {
-      const currentWidgets = getWidgetsForArea(
-        currentConfig,
-        "rightRail"
-      ).map((widget) => widget.type);
-      const nextWidgets =
-        typeof nextWidgetsOrUpdater === "function"
-          ? nextWidgetsOrUpdater(currentWidgets)
-          : nextWidgetsOrUpdater;
-
-      return currentConfig.map((widget) =>
-        widget.area === "rightRail"
-          ? { ...widget, visible: nextWidgets.includes(widget.type) }
-          : widget
-      );
-    });
-  }
-
-  function updateHomeLayout(nextLayout) {
-    setHomeLayout(nextLayout);
-    setWidgetConfig((currentConfig) =>
-      currentConfig.map((widget) => {
-        if (
-          widget.area !== "home" ||
-          !["schoolCalendar", "progress"].includes(widget.type)
-        ) {
-          return widget;
-        }
-
-        return {
-          ...widget,
-          size: nextLayout === "dashboard" ? "expanded" : "compact",
-        };
-      })
-    );
-  }
-
-  function openHomeEditMode() {
-    setActivePage("home");
-    setRightRailEditMode(false);
-    setHomeEditMode(true);
-  }
-
-  function openRightRailEditMode() {
-    setActivePage("home");
-    setHomeEditMode(false);
-    setRightRailVisible(true);
-    setRightRailCollapsed(false);
-    setRightRailEditMode(true);
-  }
-
   function openSettings(view = "hub", sectionId = "") {
     const nextView = view || "hub";
 
@@ -791,12 +713,6 @@ function App() {
   function navigateMobilePage(page) {
     setMobileMoreOpen(false);
     setActivePage(page);
-  }
-
-  function updateRightRailVisibility(nextVisible) {
-    setRightRailVisible(nextVisible);
-
-    if (!nextVisible) setRightRailEditMode(false);
   }
 
   useEffect(() => {
@@ -848,39 +764,6 @@ function App() {
     document.documentElement.dataset.density = layoutDensity;
     localStorage.setItem("student-hub-density", layoutDensity);
   }, [layoutDensity]);
-
-  useEffect(() => {
-    localStorage.setItem("student-hub-home-layout", homeLayout);
-  }, [homeLayout]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "student-hub-right-rail",
-      rightRailVisible ? "on" : "off"
-    );
-  }, [rightRailVisible]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      "student-hub-right-rail-state",
-      rightRailCollapsed ? "collapsed" : "expanded"
-    );
-  }, [rightRailCollapsed]);
-
-  useEffect(() => {
-    localStorage.setItem(
-      WIDGET_CONFIG_STORAGE_KEY,
-      JSON.stringify(widgetConfig)
-    );
-    localStorage.setItem(
-      "student-hub-right-rail-widgets",
-      JSON.stringify(
-        getWidgetsForArea(widgetConfig, "rightRail").map(
-          (widget) => widget.type
-        )
-      )
-    );
-  }, [widgetConfig]);
 
   useEffect(() => {
     if (stalePlanDate) return;
@@ -2406,8 +2289,6 @@ function App() {
       "student-hub-student-profile",
       JSON.stringify(restartedProfile)
     );
-    setHomeEditMode(false);
-    setRightRailEditMode(false);
     setActivePage("home");
   }
 
@@ -2495,16 +2376,12 @@ function App() {
       "student-hub-right-rail",
       "student-hub-right-rail-state",
       "student-hub-right-rail-widgets",
-      WIDGET_CONFIG_STORAGE_KEY,
+      "student-hub-widget-config",
     ].forEach((storageKey) => localStorage.removeItem(storageKey));
 
     setTheme("light");
     setThemeColors(DEFAULT_THEME_COLORS);
     setLayoutDensity("compact");
-    setHomeLayout("focused");
-    setRightRailVisible(true);
-    setRightRailCollapsed(false);
-    setWidgetConfig(getDefaultWidgetConfig("focused"));
   }
 
   function clearAllStudentHubData() {
@@ -2524,15 +2401,9 @@ function App() {
     setTheme("light");
     setThemeColors(DEFAULT_THEME_COLORS);
     setLayoutDensity("compact");
-    setHomeLayout("focused");
-    setRightRailVisible(true);
-    setRightRailCollapsed(false);
-    setWidgetConfig(getDefaultWidgetConfig("focused"));
     setHoursAvailable(2);
     setStartTime("16:00");
     setSidebarCollapsed(false);
-    setHomeEditMode(false);
-    setRightRailEditMode(false);
     setActivePage("home");
     setQuickLinksPreferences(loadQuickLinksPreferences());
     setStudentProfile({
@@ -2556,12 +2427,6 @@ function App() {
         setAccentColor={setAccentColor}
         layoutDensity={layoutDensity}
         setLayoutDensity={setLayoutDensity}
-        homeLayout={homeLayout}
-        setHomeLayout={updateHomeLayout}
-        rightRailVisible={rightRailVisible}
-        setRightRailVisible={setRightRailVisible}
-        rightRailWidgets={rightRailWidgets}
-        setRightRailWidgets={setRightRailWidgets}
         onComplete={completeOnboarding}
       />
     );
@@ -2569,9 +2434,7 @@ function App() {
 
   return (
     <main
-      className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${
-        rightRailVisible ? "right-rail-visible" : ""
-      } ${rightRailCollapsed ? "right-rail-collapsed" : ""}`}
+      className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}
     >
       <MobileTopBar
         activePage={activePage}
@@ -2673,11 +2536,6 @@ function App() {
             hasPlan={planBlocks.length > 0}
             planBlocks={planBlocks}
             setActivePage={setActivePage}
-            homeLayout={homeLayout}
-            widgetConfig={widgetConfig}
-            setWidgetConfig={setWidgetConfig}
-            homeEditMode={homeEditMode}
-            setHomeEditMode={setHomeEditMode}
           />
         )}
 
@@ -2752,12 +2610,6 @@ function App() {
             themeColorPalettes={themeColorPalettes}
             layoutDensity={layoutDensity}
             setLayoutDensity={setLayoutDensity}
-            homeLayout={homeLayout}
-            setHomeLayout={updateHomeLayout}
-            rightRailVisible={rightRailVisible}
-            setRightRailVisible={updateRightRailVisibility}
-            openHomeEditMode={openHomeEditMode}
-            openRightRailEditMode={openRightRailEditMode}
             restartOnboarding={restartOnboarding}
             resetTasks={resetTasks}
             resetSubjects={resetSubjects}
@@ -2788,20 +2640,6 @@ function App() {
           />
         )}
       </section>
-
-      {rightRailVisible && (
-        <RightRail
-          tasks={visibleTasks}
-          planBlocks={planBlocks}
-          setActivePage={setActivePage}
-          collapsed={rightRailCollapsed}
-          setCollapsed={setRightRailCollapsed}
-          widgetConfig={widgetConfig}
-          setWidgetConfig={setWidgetConfig}
-          editMode={rightRailEditMode}
-          setEditMode={setRightRailEditMode}
-        />
-      )}
 
       <MobileBottomNav
         activePage={activePage}

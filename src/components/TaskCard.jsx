@@ -240,6 +240,7 @@ function TaskCard({
         hasAssessmentSignal ? " task-card-assessment" : ""
       }`}
       style={subjectStyle}
+      data-tour="todo-task-actions"
     >
       <div className="task-row">
         <button

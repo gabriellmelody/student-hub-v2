@@ -7,6 +7,8 @@ import {
   getGuidedTourDefinition,
   smartPlannerGuidedTour,
   subjectsGuidedTour,
+  todoGuidedTour,
+  todaysPlanGuidedTour,
 } from "../data/guidedTours.js";
 import {
   computeTourCardPosition,
@@ -382,9 +384,11 @@ test("getting started opens the Integrations settings view", () => {
 test("all supported forced replay identifiers resolve", () => {
   for (const tourId of [
     "getting-started",
+    "todo",
     "subjects",
     "calendar",
     "smart-planner",
+    "todays-plan",
     "demo",
   ]) {
     assert.equal(getGuidedTourDefinition(tourId)?.id, tourId);
@@ -400,6 +404,40 @@ test("Subjects steps provide empty-state fallbacks", () => {
   assert.match(subjectsGuidedTour.steps[0].fallbackTarget, /subject-empty-add/);
   assert.match(subjectsGuidedTour.steps[1].fallbackTarget, /subject-empty-add/);
   assert.match(subjectsGuidedTour.steps[2].fallbackTarget, /subject-empty-add/);
+});
+
+test("To-do tour resolves and provides safe task fallbacks", () => {
+  assert.equal(todoGuidedTour.steps.length, 4);
+  assert.deepEqual(
+    todoGuidedTour.steps.map((step) => step.page),
+    ["tasks", "tasks", "tasks", "tasks"]
+  );
+  assert.equal(
+    todoGuidedTour.steps[1].fallbackTarget,
+    '[data-tour="todo-overview"]'
+  );
+  assert.equal(
+    todoGuidedTour.steps[2].fallbackTarget,
+    '[data-tour="todo-overview"]'
+  );
+  assert.equal(
+    todoGuidedTour.steps[3].fallbackTarget,
+    '[data-tour="todo-add-task"]'
+  );
+});
+
+test("Today’s Plan tour resolves and falls back to the plan overview", () => {
+  assert.equal(todaysPlanGuidedTour.steps.length, 4);
+  assert.deepEqual(
+    todaysPlanGuidedTour.steps.map((step) => step.page),
+    ["plan", "plan", "plan", "plan"]
+  );
+  for (const step of todaysPlanGuidedTour.steps.slice(1)) {
+    assert.equal(
+      step.fallbackTarget,
+      '[data-tour="todays-plan-overview"]'
+    );
+  }
 });
 
 test("Calendar steps provide safe fallbacks for unavailable event data", () => {

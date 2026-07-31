@@ -124,36 +124,12 @@ export const helpContent = [
       "Drag unlocked study and break blocks into a new order. Their times recalculate after you drop them.",
   },
   {
-    id: "home-widgets",
-    title: "How do Home widgets work?",
-    status: "available",
-    category: "workspace",
-    summary:
-      "Home widgets show quick school context and can be dragged into your preferred order.",
-  },
-  {
-    id: "home-edit-mode",
-    title: "How do I edit the Home page?",
-    status: "available",
-    category: "workspace",
-    summary:
-      "Open Settings, then Appearance and Edit Home Page. Drag, hide, restore, or resize supported widgets there.",
-  },
-  {
-    id: "side-panel-widgets",
-    title: "How do I edit the Side Panel?",
-    status: "available",
-    category: "workspace",
-    summary:
-      "Side Panel widgets show quick context beside your work. Open Appearance and Edit Side Panel to drag, hide, or restore them.",
-  },
-  {
     id: "appearance",
     title: "What can I change in Appearance?",
     status: "available",
     category: "workspace",
     summary:
-      "Choose light or dark mode, an accent colour, layout density, Home layout, and Side Panel visibility.",
+      "Choose light, dark, or system mode, theme colours, logo appearance, background, and layout density.",
   },
   {
     id: "demo-data",

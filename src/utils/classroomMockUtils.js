@@ -1,10 +1,13 @@
 import {
-  DEFAULT_SUBJECT_COLOR,
   MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   findSubjectProfile,
   formatDateKey,
   normalizeTask,
 } from "./appUtils.js";
+import {
+  isValidSubjectColour,
+  suggestSubjectColour,
+} from "./subjectColourUtils.js";
 
 const MOCK_CLASSROOM_SOURCE = "classroom-mock";
 
@@ -150,10 +153,11 @@ export function findLinkedSubjectForMockCourse(course, subjects, links = []) {
   return savedSubject || findSubjectProfile(subjects, course?.name);
 }
 
-export function createSubjectFromMockCourse(course) {
+export function createSubjectFromMockCourse(course, existingSubjects = []) {
   const courseName = safeString(course?.name, "Untitled class");
   const courseLevel = safeString(course?.section);
   const isIbLevel = courseLevel === "HL" || courseLevel === "SL";
+  const explicitCourseColour = course?.colour || course?.color;
 
   return {
     id: `subject-${MOCK_CLASSROOM_SOURCE}-${course?.externalId}`,
@@ -164,7 +168,9 @@ export function createSubjectFromMockCourse(course) {
       : "Other",
     currentGrade: "",
     targetGrade: "",
-    colour: DEFAULT_SUBJECT_COLOR,
+    colour: isValidSubjectColour(explicitCourseColour)
+      ? explicitCourseColour
+      : suggestSubjectColour(courseName, existingSubjects, course?.externalId),
     source: MOCK_CLASSROOM_SOURCE,
     classroomCourseId: course?.externalId || null,
     externalId: course?.externalId || null,

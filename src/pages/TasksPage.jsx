@@ -101,7 +101,7 @@ function TasksPage({
           <p className="eyebrow">To-do</p>
           <h1>To-do list</h1>
           <p>Manage school work by priority, due date, effort, or subject.</p>
-          <p className="task-live-counts">
+          <p className="task-live-counts" data-tour="todo-due-navigation">
             {formatCount(activeCount, "active")} ·{" "}
             {formatCount(overdueCount, "overdue")}
             {dueTodayCount > 0 && <> · {formatCount(dueTodayCount, "due today")}</>}
@@ -118,7 +118,11 @@ function TasksPage({
             + Add task
           </button>
 
-          <div className="task-sort-row" aria-label="Organise tasks">
+          <div
+            className="task-sort-row"
+            aria-label="Organise tasks"
+            data-tour="todo-organise"
+          >
             {taskSortOptions.map((option) => (
               <button
                 key={option.value}
@@ -138,7 +142,7 @@ function TasksPage({
         </div>
       </header>
 
-      <div className="panel tasks-panel">
+      <div className="panel tasks-panel" data-tour="todo-overview">
         {!hasActiveTasks && (
           <div className="task-empty-state">
             <h3>You’re caught up.</h3>

@@ -18,9 +18,8 @@
 .onboarding-value-grid div,
 .onboarding-choice-grid button,
 .onboarding-subject-form,
-.onboarding-summary,
-.sidebar-footer,
-.right-rail-empty {
+  .onboarding-summary,
+  .sidebar-footer {
   border-radius: 8px;
 }
 
@@ -125,9 +124,8 @@
 
 .task-empty-state p,
 .calendar-empty-state p,
-.subject-empty-state p,
-.empty-plan p,
-.right-rail-empty p {
+  .subject-empty-state p,
+  .empty-plan p {
   margin: 0;
   color: var(--text-muted);
   font-size: var(--font-helper);
@@ -168,9 +166,8 @@
 .settings-hub-card,
 .task-card,
 .plan-block,
-.subject-profile-card,
-.right-rail-widget,
-.onboarding-value-grid div,
+  .subject-profile-card,
+  .onboarding-value-grid div,
 .onboarding-choice-grid button {
   transition: transform 0.18s ease, border-color 0.18s ease,
     background 0.18s ease, box-shadow 0.18s ease;

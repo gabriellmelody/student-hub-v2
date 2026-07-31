@@ -39,7 +39,7 @@ export const helpTopics = [
     id: "todo-assignments",
     title: "To-do and assignments",
     summary: "Add, organise and complete school work in one place.",
-    includedInGettingStarted: true,
+    tourId: "todo",
     sections: [
       {
         title: "Add work",
@@ -188,7 +188,7 @@ export const helpTopics = [
     id: "todays-plan",
     title: "Today’s Plan",
     summary: "Follow, edit and update the study blocks planned for today.",
-    includedInGettingStarted: true,
+    tourId: "todays-plan",
     sections: [
       {
         title: "Create the plan",

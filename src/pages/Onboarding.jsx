@@ -3,10 +3,10 @@ import {
   subjectCourseSystems,
   subjectLevels,
   accentColorPresets,
-  rightRailWidgetOptions,
   getContrastText,
   createSubjectDraft,
 } from "../utils/appUtils.js";
+import { suggestSubjectDraftColour } from "../utils/subjectColourUtils.js";
 import DayloMark from "../components/DayloMark.jsx";
 
 const onboardingSteps = [
@@ -14,7 +14,6 @@ const onboardingSteps = [
   "Appearance",
   "School system",
   "Subjects",
-  "Workspace",
   "Finish",
 ];
 
@@ -30,18 +29,14 @@ function OnboardingFlow({
   setAccentColor,
   layoutDensity,
   setLayoutDensity,
-  homeLayout,
-  setHomeLayout,
-  rightRailVisible,
-  setRightRailVisible,
-  rightRailWidgets,
-  setRightRailWidgets,
   onComplete,
 }) {
   const [step, setStep] = useState(0);
   const [subjectDraft, setSubjectDraft] = useState(() =>
-    createSubjectDraft(studentProfile.schoolSystem || "Other")
+    createSubjectDraft(studentProfile.schoolSystem || "Other", subjects)
   );
+  const [subjectColourManuallySelected, setSubjectColourManuallySelected] =
+    useState(false);
   const [subjectError, setSubjectError] = useState("");
   const subjectNameInputRef = useRef(null);
 
@@ -63,18 +58,6 @@ function OnboardingFlow({
               ? "Higher"
               : "Standard",
     }));
-  }
-
-  function toggleWidget(widgetId) {
-    setRightRailWidgets((currentWidgets) => {
-      const nextWidgets = currentWidgets.includes(widgetId)
-        ? currentWidgets.filter((currentWidget) => currentWidget !== widgetId)
-        : [...currentWidgets, widgetId];
-
-      return rightRailWidgetOptions
-        .filter((option) => nextWidgets.includes(option.value))
-        .map((option) => option.value);
-    });
   }
 
   function addOnboardingSubject(event) {
@@ -106,8 +89,12 @@ function OnboardingFlow({
       },
     ]);
     setSubjectDraft(
-      createSubjectDraft(studentProfile.schoolSystem || "Other")
+      createSubjectDraft(studentProfile.schoolSystem || "Other", [
+        ...subjects,
+        { ...subjectDraft, name },
+      ])
     );
+    setSubjectColourManuallySelected(false);
     setSubjectError("");
     requestAnimationFrame(() => subjectNameInputRef.current?.focus());
   }
@@ -320,9 +307,20 @@ function OnboardingFlow({
                       type="text"
                       value={subjectDraft.name}
                       placeholder="e.g. Biology"
-                      onChange={(event) =>
-                        setSubjectDraft({ ...subjectDraft, name: event.target.value })
-                      }
+                      onChange={(event) => {
+                        const name = event.target.value;
+
+                        setSubjectDraft((currentDraft) => ({
+                          ...currentDraft,
+                          name,
+                          colour: suggestSubjectDraftColour({
+                            subjectName: name,
+                            currentColour: currentDraft.colour,
+                            existingSubjects: subjects,
+                            manuallySelected: subjectColourManuallySelected,
+                          }),
+                        }));
+                      }}
                     />
                   </label>
                   <label className="onboarding-subject-system-field">
@@ -388,12 +386,13 @@ function OnboardingFlow({
                       <input
                         type="color"
                         value={subjectDraft.colour}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          setSubjectColourManuallySelected(true);
                           setSubjectDraft({
                             ...subjectDraft,
                             colour: event.target.value,
-                          })
-                        }
+                          });
+                        }}
                       />
                       <strong>{subjectDraft.colour.toUpperCase()}</strong>
                     </span>
@@ -439,70 +438,6 @@ function OnboardingFlow({
           )}
 
           {step === 4 && (
-            <div className="onboarding-step">
-              <div className="onboarding-step-heading">
-                <p className="eyebrow">Workspace</p>
-                <h2>Decide how much context you want at a glance.</h2>
-                <p>Keep Home focused, or show a broader school overview.</p>
-              </div>
-              <div className="onboarding-setting-row">
-                <div>
-                  <strong>Home layout</strong>
-                  <span>Choose the amount of information shown on Home.</span>
-                </div>
-                <div className="theme-toggle">
-                  {["focused", "dashboard"].map((option) => (
-                    <button
-                      key={option}
-                      type="button"
-                      className={homeLayout === option ? "active" : ""}
-                      onClick={() => setHomeLayout(option)}
-                    >
-                      {option === "focused" ? "Focused" : "Dashboard"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="onboarding-setting-row">
-                <div>
-                  <strong>Side Panel</strong>
-                  <span>Show compact school context beside your workspace.</span>
-                </div>
-                <div className="theme-toggle">
-                  <button
-                    type="button"
-                    className={rightRailVisible ? "active" : ""}
-                    onClick={() => setRightRailVisible(true)}
-                  >
-                    On
-                  </button>
-                  <button
-                    type="button"
-                    className={!rightRailVisible ? "active" : ""}
-                    onClick={() => setRightRailVisible(false)}
-                  >
-                    Off
-                  </button>
-                </div>
-              </div>
-              {rightRailVisible && (
-                <div className="onboarding-widget-options">
-                  {rightRailWidgetOptions.map((option) => (
-                    <label key={option.value}>
-                      <input
-                        type="checkbox"
-                        checked={rightRailWidgets.includes(option.value)}
-                        onChange={() => toggleWidget(option.value)}
-                      />
-                      <span>{option.label}</span>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {step === 5 && (
             <div className="onboarding-finish">
               <span className="onboarding-finish-mark">✓</span>
               <p className="eyebrow">Ready</p>
@@ -511,8 +446,6 @@ function OnboardingFlow({
               <div className="onboarding-summary">
                 <span><small>School system</small><strong>{studentProfile.schoolSystem || "Other"}</strong></span>
                 <span><small>Subjects</small><strong>{subjects.length}</strong></span>
-                <span><small>Home</small><strong>{homeLayout === "focused" ? "Focused" : "Dashboard"}</strong></span>
-                <span><small>Side Panel</small><strong>{rightRailVisible ? "On" : "Off"}</strong></span>
               </div>
             </div>
           )}

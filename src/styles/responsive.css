@@ -34,18 +34,6 @@
     transition: none;
   }
 
-  .home-widget--editing,
-  .home-widget-drag-handle {
-    transition: none;
-  }
-
-  .home-widget--dropped {
-    animation: none;
-  }
-
-  .home-widget-drawer,
-  .home-save-toast,
-  .home-save-check,
   .home-intro-active .home-hero-dashboard,
   .home-intro-active .home-next-zone,
   .home-intro-active .home-plan-zone,
@@ -57,14 +45,6 @@
     animation: none;
   }
 
-  .right-rail-widget--editing,
-  .right-rail-drag-handle {
-    transition: none;
-  }
-
-  .right-rail-widget--dropped {
-    animation: none;
-  }
 }
 
 @media (max-width: 900px) {
@@ -84,7 +64,6 @@ body,
 .main-content,
 .page,
 .panel,
-.home-widget,
 .task-card,
 .plan-block,
 .calendar-layout,
@@ -357,10 +336,6 @@ button {
     height: 28px;
   }
 
-  .home-widget-stats {
-    grid-template-columns: 1fr;
-  }
-
   .home-stat + .home-stat {
     border-top: 1px solid var(--border);
     border-left: 0;
@@ -384,11 +359,7 @@ button {
 
 @media (max-width: 700px) {
   .app-shell,
-  .app-shell.sidebar-collapsed,
-  .app-shell.right-rail-visible,
-  .app-shell.right-rail-visible.right-rail-collapsed,
-  .app-shell.sidebar-collapsed.right-rail-visible,
-  .app-shell.sidebar-collapsed.right-rail-visible.right-rail-collapsed {
+  .app-shell.sidebar-collapsed {
     display: block;
     width: 100%;
     min-width: 0;
@@ -397,9 +368,7 @@ button {
   }
 
   .sidebar,
-  .sidebar.collapsed,
-  .right-rail,
-  .right-rail.right-rail--editing {
+  .sidebar.collapsed {
     display: none;
   }
 
@@ -660,10 +629,10 @@ button {
     height: 28px;
     display: grid;
     place-items: center;
-    border: 1px solid var(--border);
+    border: 1px solid color-mix(in srgb, var(--text-secondary) 30%, var(--border));
     border-radius: 9px;
-    background: var(--surface-raised);
-    color: var(--text-muted);
+    background: color-mix(in srgb, var(--surface-raised) 88%, var(--text) 3%);
+    color: var(--text-secondary);
   }
 
   .mobile-more-quick-links svg {
