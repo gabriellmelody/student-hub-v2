@@ -205,6 +205,8 @@ export const STUDENT_HUB_STORAGE_KEYS = [
   MOCK_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY,
   REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
+  "student-hub-onboarding-draft",
+  "student-hub-planning-preferences",
   "student-hub-hours",
   "student-hub-start-time",
   "student-hub-guided-tours",

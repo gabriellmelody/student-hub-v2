@@ -73,6 +73,12 @@ import {
   shouldRequestSmartPlannerAi,
   timeStringToMinute,
 } from "./utils/smartPlannerUtils.js";
+import {
+  clearOnboardingDraft,
+  completeOnboardingProfile,
+  loadOnboardingPlanningPreferences,
+  shouldShowOnboarding,
+} from "./utils/onboardingUtils.js";
 import useGuidedTour from "./hooks/useGuidedTour.js";
 import { getGuidedTourDefinition } from "./data/guidedTours.js";
 import {
@@ -165,6 +171,21 @@ function formatPlannerMinutes(minutes) {
   if (hours === 0) return `${remainingMinutes} min`;
   if (remainingMinutes === 0) return `${hours} hr`;
   return `${hours} hr ${remainingMinutes} min`;
+}
+
+function getPreferredSmartPlannerDraft(options = {}) {
+  const draft = getDefaultSmartPlannerDraft(options);
+  const preferences = loadOnboardingPlanningPreferences();
+
+  if (!preferences) return draft;
+
+  return {
+    ...draft,
+    startTime: preferences.startTime,
+    endTime: preferences.endTime,
+    planStyle: preferences.planStyle,
+    noTimeLeftToday: false,
+  };
 }
 
 function getInitialNavigationState() {
@@ -289,7 +310,7 @@ function App() {
   const planMoveFeedbackTimerRef = useRef(null);
   const [smartPlannerOpen, setSmartPlannerOpen] = useState(false);
   const [smartPlannerDraft, setSmartPlannerDraft] = useState(() =>
-    getDefaultSmartPlannerDraft()
+    getPreferredSmartPlannerDraft()
   );
   const [smartPlannerError, setSmartPlannerError] = useState("");
   const [smartPlannerPreview, setSmartPlannerPreview] = useState(null);
@@ -467,7 +488,7 @@ function App() {
 
     setEveningPlanSuccess(null);
     setSmartPlannerDraft(
-      getDefaultSmartPlannerDraft({ calendarAvailable })
+      getPreferredSmartPlannerDraft({ calendarAvailable })
     );
     setSmartPlannerError("");
     setSmartPlannerPreview(null);
@@ -2280,11 +2301,7 @@ function App() {
   }
 
   function completeOnboarding() {
-    const completedProfile = {
-      ...studentProfile,
-      onboardingCompleted: true,
-      source: studentProfile.source || "manual",
-    };
+    const completedProfile = completeOnboardingProfile(studentProfile);
 
     setStudentProfile(completedProfile);
     localStorage.setItem(
@@ -2295,6 +2312,7 @@ function App() {
   }
 
   function restartOnboarding() {
+    clearOnboardingDraft();
     const restartedProfile = {
       ...studentProfile,
       onboardingCompleted: false,
@@ -2430,7 +2448,7 @@ function App() {
     });
   }
 
-  if (!studentProfile.onboardingCompleted) {
+  if (shouldShowOnboarding(studentProfile)) {
     return (
       <OnboardingFlow
         studentProfile={studentProfile}
@@ -2439,11 +2457,10 @@ function App() {
         setSubjects={setSubjects}
         theme={theme}
         setTheme={setTheme}
+        themeColors={themeColors}
+        saveThemeColorPreferences={saveThemeColorPreferences}
+        themeColorPalettes={themeColorPalettes}
         logoAppearance={themeColors.logoAppearance}
-        accentColor={accentColor}
-        setAccentColor={setAccentColor}
-        layoutDensity={layoutDensity}
-        setLayoutDensity={setLayoutDensity}
         onComplete={completeOnboarding}
       />
     );

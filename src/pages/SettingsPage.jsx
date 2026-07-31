@@ -64,9 +64,15 @@ import {
   validateSupportDraft,
 } from "../utils/helpSupportUtils.js";
 import { loadGuidedTourProgress } from "../utils/guidedTourStorage.js";
+import {
+  REAL_CLASSROOM_SOURCE,
+  createRealClassroomCourseLink,
+  findBestSubjectForClassroomCourse,
+  getRealClassroomCourseId,
+  getSuggestedClassroomSubjectName,
+} from "../utils/classroomCourseUtils.js";
+import { REAL_CLASSROOM_COURSE_SELECTIONS_KEY } from "../utils/onboardingUtils.js";
 
-const REAL_CLASSROOM_COURSE_SELECTIONS_KEY =
-  "studentHub.realClassroomCourseSelections";
 const STUDENT_HUB_SUPPORT_EMAIL = normalizeSupportEmail(
   import.meta.env.VITE_STUDENT_HUB_SUPPORT_EMAIL || ""
 );
@@ -92,7 +98,6 @@ const GOOGLE_CALENDAR_POPUP_SCOPES = [
   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   "https://www.googleapis.com/auth/calendar.events.readonly",
 ];
-const REAL_CLASSROOM_SOURCE = "classroom";
 const CLASSROOM_STATUS_LABELS = {
   active: "Assigned",
   missing: "Missing",
@@ -102,26 +107,6 @@ const CLASSROOM_STATUS_LABELS = {
   unknown: "Unknown status",
 };
 const CLASSROOM_DONE_CATEGORIES = new Set(["done", "returned"]);
-const COMMON_CLASSROOM_SUBJECTS = [
-  ["world studies", "World Studies"],
-  ["computer science", "Computer Science"],
-  ["biology", "Biology"],
-  ["chemistry", "Chemistry"],
-  ["physics", "Physics"],
-  ["english", "English"],
-  ["spanish", "Spanish"],
-  ["history", "History"],
-  ["geography", "Geography"],
-  ["economics", "Economics"],
-  ["maths", "Maths"],
-  ["math", "Maths"],
-  ["science", "Science"],
-  ["art", "Art"],
-  ["music", "Music"],
-  ["drama", "Drama"],
-  ["design", "Design"],
-];
-
 let googleIdentityServicesLoadPromise = null;
 
 function loadGoogleIdentityServicesScript() {
@@ -175,66 +160,8 @@ function loadGoogleIdentityServicesScript() {
   return googleIdentityServicesLoadPromise;
 }
 
-function getRealClassroomCourseId(course) {
-  return course?.classroomCourseId || course?.externalId || "";
-}
-
 function formatCountLabel(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
-}
-
-function normalizeClassroomMatchText(value) {
-  return normalizeSubjectName(value).replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function hasClassroomSubjectPhrase(courseName, subjectName) {
-  const courseText = ` ${normalizeClassroomMatchText(courseName)} `;
-  const subjectText = normalizeClassroomMatchText(subjectName);
-
-  if (!courseText.trim() || !subjectText) return false;
-
-  const aliases =
-    subjectText === "maths"
-      ? ["maths", "math"]
-      : subjectText === "math"
-        ? ["math", "maths"]
-        : [subjectText];
-
-  return aliases.some((alias) => courseText.includes(` ${alias} `));
-}
-
-function findBestSubjectForClassroomCourse(subjects, course) {
-  const exactSubject = findSubjectProfile(subjects, course?.name);
-
-  if (exactSubject) return exactSubject;
-
-  return (
-    subjects.find((subject) =>
-      hasClassroomSubjectPhrase(course?.name, subject.name)
-    ) || null
-  );
-}
-
-function getSuggestedClassroomSubjectName(course) {
-  const courseName = course?.name || "";
-  const matchedCommonSubject = COMMON_CLASSROOM_SUBJECTS.find(([keyword]) =>
-    hasClassroomSubjectPhrase(courseName, keyword)
-  );
-
-  if (matchedCommonSubject) return matchedCommonSubject[1];
-
-  return courseName.trim() || "Untitled Subject";
-}
-
-function createRealClassroomCourseLink(course, subject) {
-  return {
-    classroomCourseId: getRealClassroomCourseId(course),
-    classroomCourseName: course?.name || "Untitled class",
-    subjectId: subject.id,
-    subjectName: subject.name,
-    source: REAL_CLASSROOM_SOURCE,
-    linkedAt: new Date().toISOString(),
-  };
 }
 
 function getGoogleCalendarId(calendar) {
