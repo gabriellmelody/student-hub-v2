@@ -2655,7 +2655,7 @@ function App() {
           />
           <NavButton
             label="Calendar"
-            icon="���"
+            icon="▦"
             active={activePage === "calendar"}
             onClick={() => setActivePage("calendar")}
           />
