@@ -161,10 +161,7 @@ function MobileMoreSheet({
       >
         <div className="mobile-more-handle" aria-hidden="true" />
         <div className="mobile-more-header">
-          <div>
-            <p className="eyebrow">More</p>
-            <h2 id="mobile-more-title">DayLo</h2>
-          </div>
+          <h2 id="mobile-more-title">More</h2>
           <button
             type="button"
             className="mobile-more-close"

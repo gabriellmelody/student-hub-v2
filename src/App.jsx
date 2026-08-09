@@ -115,6 +115,12 @@ import {
   shouldShowInstallSuggestion,
 } from "./utils/pwaInstallUtils.js";
 import {
+  MOBILE_SWIPE_PAGES,
+  evaluateMobileSwipe,
+  getNavigationDirection,
+  shouldIgnorePageSwipeTarget,
+} from "./utils/mobileNavigationUtils.js";
+import {
   CLASSROOM_SETUP_TOUR_ID,
   clearClassroomSetupResume,
   markClassroomSetupIntroSeen,
@@ -271,6 +277,9 @@ function App() {
   const [settingsNavigationRequest, setSettingsNavigationRequest] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [mobilePageDirection, setMobilePageDirection] = useState("none");
+  const mobileSwipeStartRef = useRef(null);
+  const mobilePageTransitionTimerRef = useRef(null);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("student-hub-theme");
     return savedTheme === "dark" || savedTheme === "system" ? savedTheme : "light";
@@ -753,6 +762,28 @@ function App() {
     await pwaInstall.requestInstall();
   }, [pwaInstall]);
 
+  const setMobileSwipePage = useCallback(
+    (page, direction = "none") => {
+      if (!MOBILE_SWIPE_PAGES.includes(page)) return false;
+
+      setMobileMoreOpen(false);
+      setMobilePageDirection(direction);
+      setActivePage(page);
+
+      window.clearTimeout(mobilePageTransitionTimerRef.current);
+      mobilePageTransitionTimerRef.current = window.setTimeout(
+        () => setMobilePageDirection("none"),
+        260
+      );
+      return true;
+    },
+    []
+  );
+
+  useEffect(() => {
+    return () => window.clearTimeout(mobilePageTransitionTimerRef.current);
+  }, []);
+
   const navigateGuidedTour = useCallback((page, nextSettingsView) => {
     setMobileMoreOpen(false);
     if (page === "settings" && nextSettingsView) {
@@ -923,10 +954,66 @@ function App() {
   }
 
   function navigateMobilePage(page) {
+    const direction = getNavigationDirection(activePage, page);
+
+    if (direction !== "none") {
+      setMobileSwipePage(page, direction);
+      return;
+    }
+
     setMobileMoreOpen(false);
     setActivePage(page);
   }
 
+
+  function mobileSwipeIsBlocked() {
+    return Boolean(
+      mobileMoreOpen ||
+        showAddTask ||
+        eveningPlanSuccess ||
+        smartPlannerOpen ||
+        releaseWelcomeOpen ||
+        localProfileEditorOpen ||
+        installInstructionsOpen ||
+        guidedTour.isTourActive ||
+        !MOBILE_SWIPE_PAGES.includes(activePage)
+    );
+  }
+
+  function handleMobilePagePointerDown(event) {
+    if (event.pointerType === "mouse") return;
+    if (mobileSwipeIsBlocked()) return;
+    if (shouldIgnorePageSwipeTarget(event.target)) return;
+
+    mobileSwipeStartRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }
+
+  function handleMobilePagePointerUp(event) {
+    const start = mobileSwipeStartRef.current;
+    mobileSwipeStartRef.current = null;
+
+    if (!start || start.pointerId !== event.pointerId || mobileSwipeIsBlocked()) return;
+
+    const result = evaluateMobileSwipe({
+      currentPage: activePage,
+      startX: start.x,
+      startY: start.y,
+      endX: event.clientX,
+      endY: event.clientY,
+      viewportWidth: window.innerWidth,
+    });
+
+    if (!result.page) return;
+    setMobileSwipePage(result.page, result.direction);
+  }
+
+  function handleMobilePagePointerCancel() {
+    mobileSwipeStartRef.current = null;
+  }
   useEffect(() => {
     localStorage.setItem("student-hub-tasks", JSON.stringify(tasks));
   }, [tasks]);
@@ -2732,7 +2819,12 @@ function App() {
         />
       </aside>
 
-      <section className="main-content">
+      <section
+        className={`main-content mobile-page-${mobilePageDirection}`}
+        onPointerDown={handleMobilePagePointerDown}
+        onPointerUp={handleMobilePagePointerUp}
+        onPointerCancel={handleMobilePagePointerCancel}
+      >
         {activePage === "home" && (
           <HomePage
             tasks={visibleTasks}

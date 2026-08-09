@@ -918,3 +918,54 @@
     bottom: max(76px, calc(env(safe-area-inset-bottom) + 72px));
   }
 }
+
+
+@media (max-width: 700px) {
+  .main-content {
+    touch-action: pan-y;
+  }
+
+  .main-content.mobile-page-forward > .page {
+    animation-name: mobile-page-enter-forward;
+    animation-duration: 220ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .main-content.mobile-page-back > .page {
+    animation-name: mobile-page-enter-back;
+    animation-duration: 220ms;
+    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@keyframes mobile-page-enter-forward {
+  from {
+    opacity: 0.72;
+    transform: translateX(18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes mobile-page-enter-back {
+  from {
+    opacity: 0.72;
+    transform: translateX(-18px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main-content.mobile-page-forward > .page,
+  .main-content.mobile-page-back > .page {
+    animation-duration: 1ms;
+    animation-name: none;
+  }
+}

@@ -562,8 +562,8 @@ button {
     bottom: calc(76px + env(safe-area-inset-bottom, 0px));
     left: 8px;
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
-    max-height: min(76dvh, calc(100dvh - 94px - env(safe-area-inset-bottom, 0px)));
+    grid-template-rows: auto auto minmax(0, 1fr);
+    max-height: min(82dvh, calc(100dvh - 86px - env(safe-area-inset-bottom, 0px)));
     overflow: hidden;
     border: 1px solid var(--border-strong);
     border-radius: 24px;
@@ -575,7 +575,7 @@ button {
     justify-self: center;
     width: 44px;
     height: 4px;
-    margin-top: 9px;
+    margin-top: max(9px, env(safe-area-inset-top, 0px));
     border-radius: 999px;
     background: var(--border-strong);
   }
@@ -585,23 +585,23 @@ button {
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding: 14px 14px 12px;
+    padding: 12px 14px;
     border-bottom: 1px solid var(--border);
   }
 
-  .mobile-more-header h2,
-  .mobile-more-header p {
-    margin: 0;
-  }
-
   .mobile-more-header h2 {
-    font-size: 1.05rem;
+    min-width: 0;
+    margin: 0;
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 780;
     line-height: 1.1;
   }
 
   .mobile-more-close {
-    min-height: 34px;
-    padding: 7px 11px;
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 7px 12px;
     border: 1px solid var(--border-strong);
     border-radius: 11px;
     background: var(--surface);
