@@ -526,6 +526,9 @@ function SettingsPage({
   themeColorPalettes,
   layoutDensity,
   setLayoutDensity,
+  appearanceSaving = false,
+  appearanceSyncError = null,
+  retryAppearanceSync = () => {},
   restartOnboarding,
   resetTasks,
   resetSubjects,
@@ -956,6 +959,25 @@ function SettingsPage({
       ) : settingsView === "appearance" ? (
         <div className="panel appearance-panel">
           <section className="appearance-group">
+            {(appearanceSaving || appearanceSyncError) && (
+              <div
+                className={`appearance-sync-status ${
+                  appearanceSyncError ? "error" : ""
+                }`}
+                role={appearanceSyncError ? "alert" : "status"}
+              >
+                <span>
+                  {appearanceSyncError
+                    ? "Your appearance change could not sync."
+                    : "Saving appearance..."}
+                </span>
+                {appearanceSyncError && (
+                  <button type="button" onClick={retryAppearanceSync}>
+                    Try again
+                  </button>
+                )}
+              </div>
+            )}
             <div className="theme-setting">
               <div>
                 <h3>Appearance mode</h3>

@@ -17,6 +17,10 @@ import EditLocalProfileModal from "./components/EditLocalProfileModal.jsx";
 import DayloMark from "./components/DayloMark.jsx";
 import useCloudSubjects from "./hooks/useCloudSubjects.js";
 import useCloudTasks from "./hooks/useCloudTasks.js";
+import useCloudAppearancePreferences from "./hooks/useCloudAppearancePreferences.js";
+import {
+  DEFAULT_APPEARANCE_PREFERENCES,
+} from "./lib/cloudAppearancePreferences.js";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import HomePage from "./pages/HomePage.jsx";
 import OnboardingFlow from "./pages/Onboarding.jsx";
@@ -30,8 +34,6 @@ import {
   STUDENT_HUB_STORAGE_KEYS,
   TODAY_PLAN_STORAGE_KEY,
   normalizeThemeColors,
-  loadThemeColors,
-  saveThemeColors,
   deriveThemeBackground,
   mixColors,
   getContrastText,
@@ -288,20 +290,33 @@ function App() {
   const mobilePagerAdjacentRef = useRef(null);
   const mobilePagerFrameRef = useRef(null);
   const mobilePagerRafRef = useRef(null);
-  const [theme, setTheme] = useState(() => {
-    const savedTheme = localStorage.getItem("student-hub-theme");
-    return savedTheme === "dark" || savedTheme === "system" ? savedTheme : "light";
-  });
+  const {
+    preferences: cloudAppearancePreferences,
+    loading: appearanceLoading,
+    saving: appearanceSaving,
+    error: appearanceSyncError,
+    retry: retryAppearanceSync,
+    updatePreferences: updateAppearancePreferences,
+    setTheme,
+    setDensity: setLayoutDensity,
+    setThemeColors: saveCloudThemeColors,
+  } = useCloudAppearancePreferences(auth.user);
+  const appearancePreferences =
+    cloudAppearancePreferences || DEFAULT_APPEARANCE_PREFERENCES;
+  const theme = appearancePreferences.theme;
   const [resolvedTheme, setResolvedTheme] = useState(() =>
     resolveThemePreference(theme)
   );
-  const [themeColors, setThemeColorsState] = useState(loadThemeColors);
+  const [themeColors, setThemeColorsState] = useState(
+    DEFAULT_APPEARANCE_PREFERENCES.themeColors
+  );
   const accentColor = themeColors.primary;
-  const [layoutDensity, setLayoutDensity] = useState(() => {
-    return localStorage.getItem("student-hub-density") === "comfortable"
-      ? "comfortable"
-      : "compact";
-  });
+  const layoutDensity = appearancePreferences.density;
+
+  useLayoutEffect(() => {
+    if (!cloudAppearancePreferences) return;
+    setThemeColorsState(cloudAppearancePreferences.themeColors);
+  }, [cloudAppearancePreferences]);
   const {
     subjects,
     setSubjects,
@@ -576,27 +591,25 @@ function App() {
     return pendingRequest;
   }, [applySmartPlannerQuotaResponse]);
 
-  function setThemeColors(nextThemeColors, options = {}) {
+  function setThemeColors(nextThemeColors) {
     const normalizedThemeColors = normalizeThemeColors(nextThemeColors);
 
     setThemeColorsState(normalizedThemeColors);
-
-    if (options.persist) saveThemeColors(normalizedThemeColors);
   }
 
   function saveThemeColorPreferences(nextThemeColors) {
-    setThemeColors(nextThemeColors, { persist: true });
+    const normalizedThemeColors = normalizeThemeColors(nextThemeColors);
+
+    setThemeColorsState(normalizedThemeColors);
+    return saveCloudThemeColors(normalizedThemeColors);
   }
 
   function setAccentColor(nextAccentColor) {
-    setThemeColors(
-      {
-        ...themeColors,
-        paletteId: "custom",
-        primary: nextAccentColor,
-      },
-      { persist: true }
-    );
+    saveThemeColorPreferences({
+      ...themeColors,
+      paletteId: "custom",
+      primary: nextAccentColor,
+    });
   }
 
   const [newTask, setNewTask] = useState(createEmptyTaskDraft);
@@ -1380,7 +1393,6 @@ function App() {
     }
 
     applyThemePreference();
-    localStorage.setItem("student-hub-theme", theme);
 
     if (theme !== "system") return undefined;
 
@@ -1392,7 +1404,6 @@ function App() {
 
   useLayoutEffect(() => {
     document.documentElement.dataset.density = layoutDensity;
-    localStorage.setItem("student-hub-density", layoutDensity);
   }, [layoutDensity]);
 
   useEffect(() => {
@@ -2990,9 +3001,12 @@ function App() {
       "student-hub-widget-config",
     ].forEach((storageKey) => localStorage.removeItem(storageKey));
 
-    setTheme("light");
     setThemeColors(DEFAULT_THEME_COLORS);
-    setLayoutDensity("compact");
+    return updateAppearancePreferences({
+      theme: "light",
+      density: "compact",
+      themeColors: DEFAULT_THEME_COLORS,
+    });
   }
 
   function clearAllStudentHubData() {
@@ -3006,9 +3020,6 @@ function App() {
     setPlanMoveFeedback(null);
     setShowAddTask(false);
     setNewTask(createEmptyTaskDraft());
-    setTheme("light");
-    setThemeColors(DEFAULT_THEME_COLORS);
-    setLayoutDensity("compact");
     setHoursAvailable(2);
     setStartTime("16:00");
     setSidebarCollapsed(false);
@@ -3124,6 +3135,9 @@ function App() {
           themeColorPalettes={themeColorPalettes}
           layoutDensity={layoutDensity}
           setLayoutDensity={setLayoutDensity}
+          appearanceSaving={appearanceSaving}
+          appearanceSyncError={appearanceSyncError}
+          retryAppearanceSync={retryAppearanceSync}
           restartOnboarding={restartOnboarding}
           resetTasks={resetTasks}
           resetSubjects={resetSubjects}
@@ -3165,7 +3179,7 @@ function App() {
     return null;
   }
 
-  if (subjectsLoading || tasksLoading) {
+  if (subjectsLoading || tasksLoading || appearanceLoading) {
     return (
       <main className="auth-page auth-page-loading" aria-busy="true">
         <div className="auth-loading-card">
