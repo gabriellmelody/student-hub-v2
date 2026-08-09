@@ -1313,6 +1313,66 @@
   font-weight: 750;
 }
 
+.task-date-field {
+  gap: 6px;
+}
+
+.task-date-input-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-date-input-wrap input[type="date"] {
+  color-scheme: light dark;
+}
+
+.task-date-input-wrap input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 1;
+}
+
+.task-date-picker-affordance {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.task-date-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.task-date-shortcuts button {
+  min-height: 28px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 5px 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.task-date-shortcuts button:hover,
+.task-date-shortcuts button:focus-visible {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.task-date-picker-hint {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  font-weight: 500;
+}
+
 .add-task-form.task-add-sheet input,
 .add-task-form.task-add-sheet select {
   margin-bottom: 0;

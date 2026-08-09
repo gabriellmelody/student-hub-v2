@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import DueDateField from "./DueDateField.jsx";
 import RevealOnScroll from "./RevealOnScroll.jsx";
 import SubjectField from "./SubjectField.jsx";
 import TaskClassificationFields from "./TaskClassificationFields.jsx";
@@ -176,12 +177,9 @@ function TaskCard({
             onChange={setDraftTask}
           />
 
-          <input
-            type="date"
+          <DueDateField
             value={draftTask.dueDate}
-            onChange={(event) =>
-              setDraftTask({ ...draftTask, dueDate: event.target.value })
-            }
+            onChange={(dueDate) => setDraftTask({ ...draftTask, dueDate })}
           />
 
           <div className="effort-row edit-effort-row">

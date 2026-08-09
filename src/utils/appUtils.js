@@ -1372,6 +1372,19 @@ export function formatDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+export function getDueDateShortcutValue(shortcut, now = new Date()) {
+  if (shortcut === "clear") return "";
+
+  const date = new Date(now);
+  date.setHours(0, 0, 0, 0);
+
+  if (shortcut === "tomorrow") {
+    date.setDate(date.getDate() + 1);
+  }
+
+  return formatDateKey(date);
+}
+
 export function parseDateKey(dateKey) {
   const [year, month, day] = dateKey.split("-").map(Number);
   return new Date(year, month - 1, day);

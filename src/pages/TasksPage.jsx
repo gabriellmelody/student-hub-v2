@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import DueDateField from "../components/DueDateField.jsx";
 import SubjectField from "../components/SubjectField.jsx";
 import TaskClassificationFields from "../components/TaskClassificationFields.jsx";
 import TaskCard from "../components/TaskCard.jsx";
@@ -402,16 +403,10 @@ function TasksPage({
               />
             </label>
 
-            <label className="task-form-field">
-              <span>Due date</span>
-              <input
-                type="date"
-                value={newTask.dueDate}
-                onChange={(event) =>
-                  setNewTask({ ...newTask, dueDate: event.target.value })
-                }
-              />
-            </label>
+            <DueDateField
+              value={newTask.dueDate}
+              onChange={(dueDate) => setNewTask({ ...newTask, dueDate })}
+            />
 
             <button
               className="quiet-button task-more-options"
