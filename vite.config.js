@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "prompt",
-      injectRegister: "auto",
+      injectRegister: null,
       manifest: {
         id: "/",
         name: "DayLo — Student Hub",

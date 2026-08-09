@@ -85,6 +85,7 @@ import {
 } from "./utils/onboardingUtils.js";
 import useGuidedTour from "./hooks/useGuidedTour.js";
 import usePwaInstall from "./hooks/usePwaInstall.js";
+import usePwaUpdate from "./hooks/usePwaUpdate.js";
 import { getGuidedTourDefinition } from "./data/guidedTours.js";
 import {
   CURRENT_DAYLO_VERSION,
@@ -114,10 +115,18 @@ import {
   getOfflineMessage,
   shouldShowInstallSuggestion,
 } from "./utils/pwaInstallUtils.js";
+import { getUpdateErrorMessage, shouldShowUpdatePrompt } from "./utils/pwaUpdateUtils.js";
 import {
+  MOBILE_SWIPE_EDGE_GUARD_PX,
   MOBILE_SWIPE_PAGES,
-  evaluateMobileSwipe,
   getNavigationDirection,
+  getPagerCleanupPage,
+  getPagerDragState,
+  getPagerPanelTransforms,
+  getPagerSettleDuration,
+  getPagerSettleTargets,
+  getSwipeIntent,
+  shouldCommitPagerNavigation,
   shouldIgnorePageSwipeTarget,
 } from "./utils/mobileNavigationUtils.js";
 import {
@@ -277,9 +286,16 @@ function App() {
   const [settingsNavigationRequest, setSettingsNavigationRequest] = useState(0);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
-  const [mobilePageDirection, setMobilePageDirection] = useState("none");
+  const [mobilePager, setMobilePager] = useState(null);
+  const [suppressMobilePageEnter, setSuppressMobilePageEnter] = useState(false);
+  const mainContentRef = useRef(null);
   const mobileSwipeStartRef = useRef(null);
-  const mobilePageTransitionTimerRef = useRef(null);
+  const mobilePagerRef = useRef(null);
+  const mobilePagerTimerRef = useRef(null);
+  const mobilePagerCurrentRef = useRef(null);
+  const mobilePagerAdjacentRef = useRef(null);
+  const mobilePagerFrameRef = useRef(null);
+  const mobilePagerRafRef = useRef(null);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem("student-hub-theme");
     return savedTheme === "dark" || savedTheme === "system" ? savedTheme : "light";
@@ -380,9 +396,11 @@ function App() {
   const [releaseWelcomeOpen, setReleaseWelcomeOpen] = useState(false);
   const [installInstructionsOpen, setInstallInstructionsOpen] = useState(false);
   const [installSuggestionReady, setInstallSuggestionReady] = useState(false);
+  const [textEntryActive, setTextEntryActive] = useState(false);
   const [classroomSetupTourRequest, setClassroomSetupTourRequest] = useState(0);
   const classroomSetupTourStarterRef = useRef(null);
   const pwaInstall = usePwaInstall();
+  const pwaUpdate = usePwaUpdate();
   const guidedTour = useGuidedTour({
     onExit: ({ tour, status }) => {
       if (tour?.persistOutcome !== false) {
@@ -724,6 +742,27 @@ function App() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    function syncTextEntryActive() {
+      const activeElement = document.activeElement;
+      setTextEntryActive(
+        Boolean(
+          activeElement?.matches?.(
+            "input, textarea, select, [contenteditable='true']"
+          )
+        )
+      );
+    }
+
+    document.addEventListener("focusin", syncTextEntryActive);
+    document.addEventListener("focusout", syncTextEntryActive);
+
+    return () => {
+      document.removeEventListener("focusin", syncTextEntryActive);
+      document.removeEventListener("focusout", syncTextEntryActive);
+    };
+  }, []);
+
   const installBlockingUiOpen = Boolean(
     mobileMoreOpen ||
       showAddTask ||
@@ -743,6 +782,17 @@ function App() {
     elapsedMs: installSuggestionReady ? 18000 : 0,
   });
   const offlineMessage = getOfflineMessage(pwaInstall.online);
+  const updateBlockingUiOpen = Boolean(
+    installBlockingUiOpen || textEntryActive || showInstallSuggestion
+  );
+  const showUpdatePrompt = shouldShowUpdatePrompt({
+    needRefresh: pwaUpdate.needRefresh,
+    blockingUiOpen: updateBlockingUiOpen,
+    sessionDismissed: pwaUpdate.sessionDismissed,
+    supported: pwaUpdate.supported,
+  });
+  const updateErrorMessage = getUpdateErrorMessage(pwaUpdate.updateError);
+
 
   const installControl = useMemo(
     () => ({
@@ -762,26 +812,156 @@ function App() {
     await pwaInstall.requestInstall();
   }, [pwaInstall]);
 
-  const setMobileSwipePage = useCallback(
-    (page, direction = "none") => {
-      if (!MOBILE_SWIPE_PAGES.includes(page)) return false;
+  const prefersReducedMotion = () =>
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const getMobilePagerViewportWidth = useCallback(() => {
+    const width = mainContentRef.current?.getBoundingClientRect().width;
+    return Math.max(1, Math.round(width || window.innerWidth || 1));
+  }, []);
+
+  const writeMobilePagerTransforms = useCallback(({ currentX = 0, adjacentX = null, transitionMs = 0 }) => {
+    const transition = transitionMs
+      ? `transform ${transitionMs}ms cubic-bezier(0.22, 1, 0.36, 1)`
+      : "none";
+
+    if (mobilePagerCurrentRef.current) {
+      mobilePagerCurrentRef.current.style.transition = transition;
+      mobilePagerCurrentRef.current.style.transform = `translate3d(${currentX}px, 0, 0)`;
+    }
+
+    if (mobilePagerAdjacentRef.current && adjacentX !== null) {
+      mobilePagerAdjacentRef.current.style.transition = transition;
+      mobilePagerAdjacentRef.current.style.transform = `translate3d(${adjacentX}px, 0, 0)`;
+    }
+  }, []);
+
+  const scheduleMobilePagerTransforms = useCallback(
+    (transforms) => {
+      mobilePagerFrameRef.current = transforms;
+      if (mobilePagerRafRef.current) return;
+
+      mobilePagerRafRef.current = requestAnimationFrame(() => {
+        mobilePagerRafRef.current = null;
+        if (mobilePagerFrameRef.current) {
+          writeMobilePagerTransforms(mobilePagerFrameRef.current);
+        }
+      });
+    },
+    [writeMobilePagerTransforms]
+  );
+
+  const finishMobilePager = useCallback((pager = mobilePagerRef.current) => {
+    if (!pager) return;
+
+    window.clearTimeout(mobilePagerTimerRef.current);
+    const nextPage = getPagerCleanupPage(pager);
+
+    if (pager.commit && nextPage) {
+      setActivePage(nextPage);
+      setSuppressMobilePageEnter(true);
+      requestAnimationFrame(() => {
+        setMobilePager(null);
+        requestAnimationFrame(() => setSuppressMobilePageEnter(false));
+      });
+      return;
+    }
+
+    setMobilePager(null);
+  }, []);
+
+  const settleMobilePager = useCallback(
+    ({ from, to, direction, currentOffset = 0, commit, viewportWidth }) => {
+      const width = viewportWidth || getMobilePagerViewportWidth();
+      const targets = getPagerSettleTargets({ direction, commit, viewportWidth: width });
+      const transitionMs = getPagerSettleDuration({
+        currentOffset,
+        targetOffset: targets.currentX,
+        viewportWidth: width,
+        reducedMotion: prefersReducedMotion(),
+      });
+      const nextPager = {
+        from,
+        to,
+        direction,
+        viewportWidth: width,
+        currentX: targets.currentX,
+        adjacentX: targets.adjacentX,
+        transitionMs,
+        settling: true,
+        commit,
+      };
+
+      setMobilePager(nextPager);
+      requestAnimationFrame(() => writeMobilePagerTransforms({ ...targets, transitionMs }));
+
+      window.clearTimeout(mobilePagerTimerRef.current);
+      mobilePagerTimerRef.current = window.setTimeout(() => {
+        finishMobilePager(nextPager);
+      }, transitionMs + 60);
+    },
+    [finishMobilePager, getMobilePagerViewportWidth, writeMobilePagerTransforms]
+  );
+
+  const startMobilePagerNavigation = useCallback(
+    (page) => {
+      const direction = getNavigationDirection(activePage, page);
+      if (direction === "none") return false;
+
+      const viewportWidth = getMobilePagerViewportWidth();
+      const initial = getPagerPanelTransforms({ direction, offset: 0, viewportWidth });
 
       setMobileMoreOpen(false);
-      setMobilePageDirection(direction);
-      setActivePage(page);
+      setMobilePager({
+        from: activePage,
+        to: page,
+        direction,
+        viewportWidth,
+        currentX: initial.currentX,
+        adjacentX: initial.adjacentX,
+        transitionMs: 0,
+        settling: false,
+        boundary: false,
+        commit: false,
+      });
 
-      window.clearTimeout(mobilePageTransitionTimerRef.current);
-      mobilePageTransitionTimerRef.current = window.setTimeout(
-        () => setMobilePageDirection("none"),
-        260
-      );
+      requestAnimationFrame(() => {
+        writeMobilePagerTransforms({ ...initial, transitionMs: 0 });
+        requestAnimationFrame(() => {
+          settleMobilePager({
+            from: activePage,
+            to: page,
+            direction,
+            currentOffset: 0,
+            commit: true,
+            viewportWidth,
+          });
+        });
+      });
       return true;
     },
-    []
+    [activePage, getMobilePagerViewportWidth, settleMobilePager, writeMobilePagerTransforms]
   );
 
   useEffect(() => {
-    return () => window.clearTimeout(mobilePageTransitionTimerRef.current);
+    mobilePagerRef.current = mobilePager;
+  }, [mobilePager]);
+
+  useLayoutEffect(() => {
+    if (!mobilePager) return;
+    writeMobilePagerTransforms({
+      currentX: mobilePager.currentX || 0,
+      adjacentX: mobilePager.adjacentX ?? null,
+      transitionMs: mobilePager.transitionMs || 0,
+    });
+  }, [mobilePager, writeMobilePagerTransforms]);
+
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(mobilePagerTimerRef.current);
+      if (mobilePagerRafRef.current) cancelAnimationFrame(mobilePagerRafRef.current);
+    };
   }, []);
 
   const navigateGuidedTour = useCallback((page, nextSettingsView) => {
@@ -954,12 +1134,7 @@ function App() {
   }
 
   function navigateMobilePage(page) {
-    const direction = getNavigationDirection(activePage, page);
-
-    if (direction !== "none") {
-      setMobileSwipePage(page, direction);
-      return;
-    }
+    if (startMobilePagerNavigation(page)) return;
 
     setMobileMoreOpen(false);
     setActivePage(page);
@@ -976,12 +1151,20 @@ function App() {
         localProfileEditorOpen ||
         installInstructionsOpen ||
         guidedTour.isTourActive ||
+        mobilePager?.settling ||
         !MOBILE_SWIPE_PAGES.includes(activePage)
     );
   }
 
   function handleMobilePagePointerDown(event) {
     if (event.pointerType === "mouse") return;
+    const viewportWidth = getMobilePagerViewportWidth();
+    if (
+      event.clientX <= MOBILE_SWIPE_EDGE_GUARD_PX ||
+      event.clientX >= viewportWidth - MOBILE_SWIPE_EDGE_GUARD_PX
+    ) {
+      return;
+    }
     if (mobileSwipeIsBlocked()) return;
     if (shouldIgnorePageSwipeTarget(event.target)) return;
 
@@ -989,7 +1172,68 @@ function App() {
       pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
+      lastX: event.clientX,
+      lastTime: event.timeStamp || performance.now(),
+      time: event.timeStamp || performance.now(),
+      intent: "pending",
+      destination: null,
+      direction: "none",
+      viewportWidth,
+      offset: 0,
     };
+  }
+
+  function handleMobilePagePointerMove(event) {
+    const start = mobileSwipeStartRef.current;
+    if (!start || start.pointerId !== event.pointerId || mobileSwipeIsBlocked()) return;
+
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+
+    if (start.intent === "pending") {
+      start.intent = getSwipeIntent({ deltaX, deltaY });
+      if (start.intent === "vertical") {
+        mobileSwipeStartRef.current = null;
+        return;
+      }
+      if (start.intent !== "horizontal") return;
+    }
+
+    const drag = getPagerDragState({
+      currentPage: activePage,
+      deltaX,
+      viewportWidth: start.viewportWidth,
+    });
+    const transforms = getPagerPanelTransforms({
+      direction: drag.direction,
+      offset: drag.offset,
+      viewportWidth: start.viewportWidth,
+    });
+
+    start.lastX = event.clientX;
+    start.lastTime = event.timeStamp || performance.now();
+    start.destination = drag.adjacentPage;
+    start.direction = drag.direction;
+    start.offset = drag.offset;
+
+    if (!mobilePager || mobilePager.from !== activePage || mobilePager.to !== drag.adjacentPage) {
+      setMobilePager({
+        from: activePage,
+        to: drag.adjacentPage,
+        direction: drag.direction,
+        viewportWidth: start.viewportWidth,
+        currentX: transforms.currentX,
+        adjacentX: transforms.adjacentX,
+        transitionMs: 0,
+        settling: false,
+        boundary: drag.boundary,
+        commit: false,
+      });
+    }
+
+    scheduleMobilePagerTransforms({ ...transforms, transitionMs: 0 });
+
+    if (event.cancelable) event.preventDefault();
   }
 
   function handleMobilePagePointerUp(event) {
@@ -998,22 +1242,71 @@ function App() {
 
     if (!start || start.pointerId !== event.pointerId || mobileSwipeIsBlocked()) return;
 
-    const result = evaluateMobileSwipe({
+    const deltaX = event.clientX - start.x;
+    const deltaY = event.clientY - start.y;
+    const intent = start.intent === "pending" ? getSwipeIntent({ deltaX, deltaY }) : start.intent;
+
+    if (intent !== "horizontal") {
+      setMobilePager(null);
+      return;
+    }
+
+    const drag = getPagerDragState({
       currentPage: activePage,
-      startX: start.x,
-      startY: start.y,
-      endX: event.clientX,
-      endY: event.clientY,
-      viewportWidth: window.innerWidth,
+      deltaX,
+      viewportWidth: start.viewportWidth,
     });
 
-    if (!result.page) return;
-    setMobileSwipePage(result.page, result.direction);
+    if (!drag.adjacentPage) {
+      settleMobilePager({
+        from: activePage,
+        to: null,
+        direction: "none",
+        currentOffset: drag.offset,
+        commit: false,
+        viewportWidth: start.viewportWidth,
+      });
+      return;
+    }
+
+    const elapsed = Math.max(1, (event.timeStamp || performance.now()) - start.time);
+    const velocityX = deltaX / elapsed;
+    const commit = shouldCommitPagerNavigation({
+      offset: drag.offset,
+      viewportWidth: start.viewportWidth,
+      velocityX,
+    });
+
+    settleMobilePager({
+      from: activePage,
+      to: drag.adjacentPage,
+      direction: drag.direction,
+      currentOffset: drag.offset,
+      commit,
+      viewportWidth: start.viewportWidth,
+    });
   }
 
   function handleMobilePagePointerCancel() {
+    const pager = mobilePager;
     mobileSwipeStartRef.current = null;
+
+    if (!pager || pager.settling) return;
+    settleMobilePager({
+      from: pager.from || activePage,
+      to: pager.to,
+      direction: pager.direction,
+      currentOffset: mobilePagerFrameRef.current?.currentX ?? pager.currentX ?? 0,
+      commit: false,
+      viewportWidth: pager.viewportWidth,
+    });
   }
+
+  function handleMobilePagerTransitionEnd(event) {
+    if (event.target !== mobilePagerCurrentRef.current || !mobilePagerRef.current?.settling) return;
+    finishMobilePager(mobilePagerRef.current);
+  }
+
   useEffect(() => {
     localStorage.setItem("student-hub-tasks", JSON.stringify(tasks));
   }, [tasks]);
@@ -2705,6 +2998,148 @@ function App() {
     });
   }
 
+  function renderAppPage(page) {
+    if (page === "home") {
+      return (
+        <HomePage
+          tasks={visibleTasks}
+          subjects={subjects}
+          activeTasks={activeTasks}
+          completedTasks={completedTasks}
+          noDeadlineTasks={noDeadlineTasks}
+          visibleBacklog={visibleBacklog}
+          hiddenBacklogCount={hiddenBacklogCount}
+          progressPercentage={progressPercentage}
+          nextTask={nextTask}
+          openSmartPlanner={openSmartPlanner}
+          hasPlan={planBlocks.length > 0}
+          planBlocks={planBlocks}
+          setActivePage={setActivePage}
+        />
+      );
+    }
+
+    if (page === "tasks") {
+      return (
+        <TasksPage
+          subjects={subjects}
+          activeTasks={activeTasks}
+          backlogTasks={backlogTasks}
+          visibleBacklog={visibleBacklog}
+          hiddenBacklogCount={hiddenBacklogCount}
+          noDeadlineTasks={noDeadlineTasks}
+          completedTasks={completedTasks}
+          showAddTask={showAddTask}
+          setShowAddTask={setShowAddTask}
+          newTask={newTask}
+          setNewTask={setNewTask}
+          addTask={addTask}
+          addQuickTask={addQuickTask}
+          toggleTask={toggleTask}
+          deleteTask={deleteTask}
+          updateTask={updateTask}
+        />
+      );
+    }
+
+    if (page === "plan") {
+      return (
+        <PlanPage
+          planBlocks={planBlocks}
+          planMetadata={planBlocks.length > 0 ? planMetadata : null}
+          clearPlan={clearPlan}
+          addManualPlanBlock={addManualPlanBlock}
+          movePlanStudyBlock={movePlanStudyBlock}
+          updatePlanBlockDuration={updatePlanBlockDuration}
+          removePlanBlock={removePlanBlock}
+          togglePlanBlockLocked={togglePlanBlockLocked}
+          reorderPlanBlock={reorderPlanBlock}
+          planMoveFeedback={planMoveFeedback}
+          completeTaskFromPlan={completeTaskFromPlan}
+          stalePlanDate={stalePlanDate}
+          startFreshPlan={startFreshPlan}
+          openSmartPlanner={openSmartPlanner}
+        />
+      );
+    }
+
+    if (page === "calendar") {
+      return (
+        <CalendarPage
+          tasks={visibleTasks}
+          subjects={subjects}
+          setActivePage={setActivePage}
+          addTaskToList={addTaskToList}
+        />
+      );
+    }
+
+    if (page === "subjects") {
+      return (
+        <SubjectsPage
+          subjects={subjects}
+          tasks={visibleTasks}
+          completedTaskHistory={completedTaskHistory}
+          setActivePage={setActivePage}
+          openSettings={openSettings}
+        />
+      );
+    }
+
+    if (page === "settings") {
+      return (
+        <SettingsPage
+          tasks={tasks}
+          subjects={subjects}
+          setSubjects={setSubjects}
+          theme={theme}
+          setTheme={setTheme}
+          themeColors={themeColors}
+          setThemeColors={setThemeColors}
+          saveThemeColorPreferences={saveThemeColorPreferences}
+          themeColorPalettes={themeColorPalettes}
+          layoutDensity={layoutDensity}
+          setLayoutDensity={setLayoutDensity}
+          restartOnboarding={restartOnboarding}
+          resetTasks={resetTasks}
+          resetSubjects={resetSubjects}
+          resetAppearancePreferences={resetAppearancePreferences}
+          clearAllStudentHubData={clearAllStudentHubData}
+          loadDemoWorkspace={loadDemoWorkspace}
+          removeDemoData={removeDemoData}
+          hasDemoTasks={hasDemoTasks}
+          hasDemoData={hasDemoData}
+          importMockClassroomAssignments={importMockClassroomAssignments}
+          importRealClassroomAssignments={importRealClassroomAssignments}
+          removeMockClassroomTasks={removeMockClassroomTasks}
+          archiveNoDueDateClassroomTasks={archiveNoDueDateClassroomTasks}
+          restoreArchivedClassroomTasks={restoreArchivedClassroomTasks}
+          updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
+          quickLinksPreferences={quickLinksPreferences}
+          setQuickLinksPreferences={setQuickLinksPreferences}
+          initialView={settingsView}
+          classroomCallbackStatus={initialNavigation.classroomCallbackStatus}
+          googleCalendarCallbackStatus={
+            initialNavigation.googleCalendarCallbackStatus
+          }
+          smartPlannerStatus={smartPlannerQuota}
+          onRefreshSmartPlannerStatus={refreshSmartPlannerStatus}
+          onOpenSmartPlanner={openSmartPlanner}
+          onReplayTour={replayGuidedTour}
+          activeGuidedTourId={guidedTour.activeTour?.id || ""}
+          releaseWelcomeOpen={releaseWelcomeOpen}
+          classroomSetupTourRequest={classroomSetupTourRequest}
+          onStartClassroomSetupTour={startClassroomSetupTour}
+          navigationRequest={settingsNavigationRequest}
+          installControl={installControl}
+          onInstallDayLo={startInstallFlow}
+        />
+      );
+    }
+
+    return null;
+  }
+
   if (shouldShowOnboarding(studentProfile)) {
     return (
       <OnboardingFlow
@@ -2820,135 +3255,35 @@ function App() {
       </aside>
 
       <section
-        className={`main-content mobile-page-${mobilePageDirection}`}
+        ref={mainContentRef}
+        className={`main-content ${mobilePager ? "mobile-pager-active" : ""} ${
+          suppressMobilePageEnter ? "mobile-page-no-enter" : ""
+        }`}
         onPointerDown={handleMobilePagePointerDown}
+        onPointerMove={handleMobilePagePointerMove}
         onPointerUp={handleMobilePagePointerUp}
         onPointerCancel={handleMobilePagePointerCancel}
       >
-        {activePage === "home" && (
-          <HomePage
-            tasks={visibleTasks}
-            subjects={subjects}
-            activeTasks={activeTasks}
-            completedTasks={completedTasks}
-            noDeadlineTasks={noDeadlineTasks}
-            visibleBacklog={visibleBacklog}
-            hiddenBacklogCount={hiddenBacklogCount}
-            progressPercentage={progressPercentage}
-            nextTask={nextTask}
-            openSmartPlanner={openSmartPlanner}
-            hasPlan={planBlocks.length > 0}
-            planBlocks={planBlocks}
-            setActivePage={setActivePage}
-          />
-        )}
-
-        {activePage === "tasks" && (
-          <TasksPage
-            subjects={subjects}
-            activeTasks={activeTasks}
-            backlogTasks={backlogTasks}
-            visibleBacklog={visibleBacklog}
-            hiddenBacklogCount={hiddenBacklogCount}
-            noDeadlineTasks={noDeadlineTasks}
-            completedTasks={completedTasks}
-            showAddTask={showAddTask}
-            setShowAddTask={setShowAddTask}
-            newTask={newTask}
-            setNewTask={setNewTask}
-            addTask={addTask}
-            addQuickTask={addQuickTask}
-            toggleTask={toggleTask}
-            deleteTask={deleteTask}
-            updateTask={updateTask}
-          />
-        )}
-
-        {activePage === "plan" && (
-          <PlanPage
-            planBlocks={planBlocks}
-            planMetadata={planBlocks.length > 0 ? planMetadata : null}
-            clearPlan={clearPlan}
-            addManualPlanBlock={addManualPlanBlock}
-            movePlanStudyBlock={movePlanStudyBlock}
-            updatePlanBlockDuration={updatePlanBlockDuration}
-            removePlanBlock={removePlanBlock}
-            togglePlanBlockLocked={togglePlanBlockLocked}
-            reorderPlanBlock={reorderPlanBlock}
-            planMoveFeedback={planMoveFeedback}
-            completeTaskFromPlan={completeTaskFromPlan}
-            stalePlanDate={stalePlanDate}
-            startFreshPlan={startFreshPlan}
-            openSmartPlanner={openSmartPlanner}
-          />
-        )}
-
-        {activePage === "calendar" && (
-          <CalendarPage
-            tasks={visibleTasks}
-            subjects={subjects}
-            setActivePage={setActivePage}
-            addTaskToList={addTaskToList}
-          />
-        )}
-
-        {activePage === "subjects" && (
-          <SubjectsPage
-            subjects={subjects}
-            tasks={visibleTasks}
-            completedTaskHistory={completedTaskHistory}
-            setActivePage={setActivePage}
-            openSettings={openSettings}
-          />
-        )}
-
-        {activePage === "settings" && (
-          <SettingsPage
-            tasks={tasks}
-            subjects={subjects}
-            setSubjects={setSubjects}
-            theme={theme}
-            setTheme={setTheme}
-            themeColors={themeColors}
-            setThemeColors={setThemeColors}
-            saveThemeColorPreferences={saveThemeColorPreferences}
-            themeColorPalettes={themeColorPalettes}
-            layoutDensity={layoutDensity}
-            setLayoutDensity={setLayoutDensity}
-            restartOnboarding={restartOnboarding}
-            resetTasks={resetTasks}
-            resetSubjects={resetSubjects}
-            resetAppearancePreferences={resetAppearancePreferences}
-            clearAllStudentHubData={clearAllStudentHubData}
-            loadDemoWorkspace={loadDemoWorkspace}
-            removeDemoData={removeDemoData}
-            hasDemoTasks={hasDemoTasks}
-            hasDemoData={hasDemoData}
-            importMockClassroomAssignments={importMockClassroomAssignments}
-            importRealClassroomAssignments={importRealClassroomAssignments}
-            removeMockClassroomTasks={removeMockClassroomTasks}
-            archiveNoDueDateClassroomTasks={archiveNoDueDateClassroomTasks}
-            restoreArchivedClassroomTasks={restoreArchivedClassroomTasks}
-            updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
-            quickLinksPreferences={quickLinksPreferences}
-            setQuickLinksPreferences={setQuickLinksPreferences}
-            initialView={settingsView}
-            classroomCallbackStatus={initialNavigation.classroomCallbackStatus}
-            googleCalendarCallbackStatus={
-              initialNavigation.googleCalendarCallbackStatus
-            }
-            smartPlannerStatus={smartPlannerQuota}
-            onRefreshSmartPlannerStatus={refreshSmartPlannerStatus}
-            onOpenSmartPlanner={openSmartPlanner}
-            onReplayTour={replayGuidedTour}
-            activeGuidedTourId={guidedTour.activeTour?.id || ""}
-            releaseWelcomeOpen={releaseWelcomeOpen}
-            classroomSetupTourRequest={classroomSetupTourRequest}
-            onStartClassroomSetupTour={startClassroomSetupTour}
-            navigationRequest={settingsNavigationRequest}
-            installControl={installControl}
-            onInstallDayLo={startInstallFlow}
-          />
+        {mobilePager ? (
+          <div className="mobile-page-viewport">
+            <div
+              ref={mobilePagerCurrentRef}
+              className="mobile-page-panel mobile-page-panel-current"
+              onTransitionEnd={handleMobilePagerTransitionEnd}
+            >
+              {renderAppPage(mobilePager.from)}
+            </div>
+            {mobilePager.to && (
+              <div
+                ref={mobilePagerAdjacentRef}
+                className="mobile-page-panel mobile-page-panel-adjacent"
+              >
+                {renderAppPage(mobilePager.to)}
+              </div>
+            )}
+          </div>
+        ) : (
+          renderAppPage(activePage)
         )}
       </section>
 
@@ -3027,6 +3362,15 @@ function App() {
 
       {offlineMessage && <OfflineIndicator message={offlineMessage} />}
 
+      {(showUpdatePrompt || updateErrorMessage) && (
+        <DayLoUpdateToast
+          errorMessage={updateErrorMessage}
+          updating={pwaUpdate.updating}
+          onUpdate={pwaUpdate.updateNow}
+          onLater={pwaUpdate.dismissForSession}
+        />
+      )}
+
       {installInstructionsOpen && (
         <InstallInstructionsModal onClose={() => setInstallInstructionsOpen(false)} />
       )}
@@ -3087,6 +3431,35 @@ function OfflineIndicator({ message }) {
   return (
     <div className="app-offline-indicator" role="status" aria-live="polite">
       {message}
+    </div>
+  );
+}
+
+function DayLoUpdateToast({ errorMessage, updating, onUpdate, onLater }) {
+  return (
+    <div className="app-update-toast" role="status" aria-live="polite">
+      <div>
+        <strong>DayLo update available</strong>
+        <p>{errorMessage || "A newer version is ready."}</p>
+      </div>
+      <div className="app-install-toast-actions">
+        <button
+          type="button"
+          className="primary-button"
+          disabled={updating}
+          onClick={onUpdate}
+        >
+          {updating ? "Updating…" : "Update now"}
+        </button>
+        <button
+          type="button"
+          className="small-button"
+          disabled={updating}
+          onClick={onLater}
+        >
+          Later
+        </button>
+      </div>
     </div>
   );
 }

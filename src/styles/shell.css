@@ -785,7 +785,8 @@
 }
 
 
-.app-install-toast {
+.app-install-toast,
+.app-update-toast {
   position: fixed;
   right: max(18px, env(safe-area-inset-right));
   bottom: max(88px, calc(env(safe-area-inset-bottom) + 18px));
@@ -802,12 +803,14 @@
   box-shadow: var(--shadow-modal);
 }
 
-.app-install-toast strong {
+.app-install-toast strong,
+.app-update-toast strong {
   display: block;
   margin-bottom: 3px;
 }
 
-.app-install-toast p {
+.app-install-toast p,
+.app-update-toast p {
   margin: 0;
   color: var(--text-secondary);
   font-size: var(--font-helper);
@@ -901,7 +904,8 @@
 }
 
 @media (max-width: 700px) {
-  .app-install-toast {
+  .app-install-toast,
+  .app-update-toast {
     right: 12px;
     bottom: max(86px, calc(env(safe-area-inset-bottom) + 82px));
     left: 12px;
@@ -919,53 +923,44 @@
   }
 }
 
-
 @media (max-width: 700px) {
   .main-content {
     touch-action: pan-y;
   }
 
-  .main-content.mobile-page-forward > .page {
-    animation-name: mobile-page-enter-forward;
-    animation-duration: 220ms;
-    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+  .main-content.mobile-pager-active {
+    position: relative;
+    min-height: calc(100dvh - 56px);
+    overflow: hidden;
   }
 
-  .main-content.mobile-page-back > .page {
-    animation-name: mobile-page-enter-back;
-    animation-duration: 220ms;
-    animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-  }
-}
-
-@keyframes mobile-page-enter-forward {
-  from {
-    opacity: 0.72;
-    transform: translateX(18px);
+  .mobile-page-viewport {
+    position: relative;
+    width: 100%;
+    min-height: calc(100dvh - 156px - env(safe-area-inset-bottom, 0px));
+    overflow: hidden;
   }
 
-  to {
-    opacity: 1;
-    transform: translateX(0);
+  .mobile-page-panel {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--app-bg);
+    transform: translate3d(0, 0, 0);
+    will-change: transform;
   }
-}
 
-@keyframes mobile-page-enter-back {
-  from {
-    opacity: 0.72;
-    transform: translateX(-18px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0);
+  .mobile-page-panel .page,
+  .main-content.mobile-page-no-enter > .page {
+    animation: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .main-content.mobile-page-forward > .page,
-  .main-content.mobile-page-back > .page {
-    animation-duration: 1ms;
-    animation-name: none;
+  .mobile-page-panel {
+    transition-duration: 1ms !important;
   }
 }
