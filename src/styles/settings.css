@@ -3929,6 +3929,16 @@ html:has(.settings-page) {
   font-weight: 600;
 }
 
+.settings-sync-error {
+  margin: 0 0 var(--density-section-gap);
+  border: 1px solid var(--effort-high-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--effort-high-bg);
+  color: var(--urgent);
+  font-size: 0.74rem;
+}
+
 .subject-form-error {
   margin: 8px 0 0;
   color: var(--urgent);

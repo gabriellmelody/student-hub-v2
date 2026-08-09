@@ -517,6 +517,7 @@ function SettingsPage({
   tasks,
   subjects,
   setSubjects,
+  subjectSyncError = null,
   theme,
   setTheme,
   themeColors,
@@ -1312,7 +1313,11 @@ function SettingsPage({
           </section>
         </div>
       ) : settingsView === "subjects" ? (
-        <SubjectsSettings subjects={subjects} setSubjects={setSubjects} />
+        <SubjectsSettings
+          subjects={subjects}
+          setSubjects={setSubjects}
+          subjectSyncError={subjectSyncError}
+        />
       ) : settingsView === "data" ? (
         <DataSettings
           resetTasks={resetTasks}
@@ -7564,7 +7569,7 @@ function DataSettings({
   );
 }
 
-function SubjectsSettings({ subjects, setSubjects }) {
+function SubjectsSettings({ subjects, setSubjects, subjectSyncError = null }) {
   const [showSubjectForm, setShowSubjectForm] = useState(false);
   const [editingSubjectId, setEditingSubjectId] = useState(null);
   const [subjectDraft, setSubjectDraft] = useState(() =>
@@ -7686,6 +7691,12 @@ function SubjectsSettings({ subjects, setSubjects }) {
             + Add subject
           </button>
         </div>
+
+        {subjectSyncError && (
+          <p className="settings-sync-error" role="alert">
+            Subjects could not be saved. Try again in a moment.
+          </p>
+        )}
 
         {showSubjectForm && (
           <form className="subject-profile-form" onSubmit={saveSubject}>

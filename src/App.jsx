@@ -15,6 +15,7 @@ import GuidedTour from "./components/GuidedTour.jsx";
 import ReleaseWelcomeModal from "./components/ReleaseWelcomeModal.jsx";
 import EditLocalProfileModal from "./components/EditLocalProfileModal.jsx";
 import DayloMark from "./components/DayloMark.jsx";
+import useCloudSubjects from "./hooks/useCloudSubjects.js";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import HomePage from "./pages/HomePage.jsx";
 import OnboardingFlow from "./pages/Onboarding.jsx";
@@ -37,7 +38,6 @@ import {
   getReadableAccent,
   colorToRgba,
   loadTasks,
-  loadSubjects,
   loadStudentProfile,
   getDaysLeft,
   hasRealDueDate,
@@ -312,7 +312,12 @@ function App() {
       ? "comfortable"
       : "compact";
   });
-  const [subjects, setSubjects] = useState(loadSubjects);
+  const {
+    subjects,
+    setSubjects,
+    loading: subjectsLoading,
+    error: subjectsSyncError,
+  } = useCloudSubjects(auth.user);
   const [studentProfile, setStudentProfile] = useState(loadStudentProfile);
   const [localProfile, setLocalProfile] = useState(loadLocalProfile);
   const accountIdentity = {
@@ -1355,9 +1360,6 @@ function App() {
     );
   }, [completedTaskHistory]);
 
-  useEffect(() => {
-    localStorage.setItem("student-hub-subjects", JSON.stringify(subjects));
-  }, [subjects]);
 
   useEffect(() => {
     localStorage.setItem(
@@ -3129,6 +3131,7 @@ function App() {
           tasks={tasks}
           subjects={subjects}
           setSubjects={setSubjects}
+          subjectSyncError={subjectsSyncError}
           theme={theme}
           setTheme={setTheme}
           themeColors={themeColors}
@@ -3176,6 +3179,17 @@ function App() {
     }
 
     return null;
+  }
+
+  if (subjectsLoading) {
+    return (
+      <main className="auth-page auth-page-loading" aria-busy="true">
+        <div className="auth-loading-card">
+          <DayloMark className="auth-logo" aria-hidden="true" />
+          <p>Loading your Subjects...</p>
+        </div>
+      </main>
+    );
   }
 
   if (shouldShowOnboarding(studentProfile)) {
