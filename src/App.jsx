@@ -802,6 +802,36 @@ function App() {
     }),
     [pwaInstall.capability]
   );
+  const updateControl = useMemo(
+    () => ({
+      supported: pwaUpdate.supported,
+      needRefresh: pwaUpdate.needRefresh,
+      updating: pwaUpdate.updating,
+      checking: pwaUpdate.checking,
+      online: pwaUpdate.online,
+      currentVersion: pwaUpdate.currentVersion,
+      latestVersion: pwaUpdate.latestVersion,
+      metadataError: pwaUpdate.metadataError,
+      updateError: pwaUpdate.updateError,
+      onCheckForUpdates: pwaUpdate.checkNow,
+      onUpdateNow: pwaUpdate.updateNow,
+      onLater: pwaUpdate.dismissForSession,
+    }),
+    [
+      pwaUpdate.supported,
+      pwaUpdate.needRefresh,
+      pwaUpdate.updating,
+      pwaUpdate.checking,
+      pwaUpdate.online,
+      pwaUpdate.currentVersion,
+      pwaUpdate.latestVersion,
+      pwaUpdate.metadataError,
+      pwaUpdate.updateError,
+      pwaUpdate.checkNow,
+      pwaUpdate.updateNow,
+      pwaUpdate.dismissForSession,
+    ]
+  );
 
   const startInstallFlow = useCallback(async () => {
     if (pwaInstall.capability === "ios-instructions") {
@@ -3132,6 +3162,7 @@ function App() {
           onStartClassroomSetupTour={startClassroomSetupTour}
           navigationRequest={settingsNavigationRequest}
           installControl={installControl}
+          updateControl={updateControl}
           onInstallDayLo={startInstallFlow}
         />
       );

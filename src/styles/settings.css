@@ -22,7 +22,8 @@ html:has(.settings-page) {
 .settings-detail-content > .data-settings,
 .settings-detail-content > .integrations-settings,
 .settings-detail-content > .quick-links-settings,
-.settings-detail-content > .help-settings {
+.settings-detail-content > .help-settings,
+.settings-detail-content > .app-updates-settings {
   width: 100%;
   max-width: none;
 }
@@ -179,6 +180,121 @@ html:has(.settings-page) {
   color: var(--accent-soft);
   font-size: 0.62rem;
   font-weight: 650;
+}
+
+
+.app-updates-settings {
+  display: grid;
+  gap: var(--density-home-gap);
+}
+
+.settings-section-card.app-updates-card {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.settings-section-heading {
+  display: grid;
+  gap: 4px;
+}
+
+.settings-section-heading h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 760;
+}
+
+.settings-section-heading p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-helper);
+  line-height: 1.45;
+}
+
+.app-updates-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--text);
+}
+
+.app-updates-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.app-updates-status-installed {
+  background: var(--success);
+}
+
+.app-updates-status-browser {
+  background: var(--accent-soft);
+}
+
+.app-updates-facts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.app-updates-facts > div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.4fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.app-updates-facts dt,
+.app-updates-facts dd {
+  margin: 0;
+}
+
+.app-updates-facts dt {
+  color: var(--text-secondary);
+  font-size: var(--font-helper);
+}
+
+.app-updates-facts dd {
+  min-width: 0;
+  color: var(--text);
+  font-weight: 680;
+  overflow-wrap: anywhere;
+}
+
+.app-updates-status-text-up-to-date {
+  color: var(--success);
+}
+
+.app-updates-status-text-update-waiting,
+.app-updates-status-text-update-available {
+  color: var(--accent-soft);
+}
+
+.app-updates-status-text-offline,
+.app-updates-status-text-error {
+  color: var(--text-secondary);
+}
+
+.app-updates-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.app-updates-actions-wrap {
+  flex-wrap: wrap;
 }
 
 .quick-links-settings {
@@ -5322,4 +5438,25 @@ html:has(.settings-page) {
   color: var(--accent-primary-soft);
   font-size: var(--font-helper);
   font-weight: 700;
+}
+
+@media (max-width: 420px) {
+  .settings-section-card.app-updates-card {
+    padding: 15px;
+  }
+
+  .app-updates-facts > div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .app-updates-actions {
+    align-items: stretch;
+  }
+
+  .app-updates-actions .primary-button,
+  .app-updates-actions .small-button {
+    width: 100%;
+    justify-content: center;
+  }
 }

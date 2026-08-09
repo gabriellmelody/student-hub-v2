@@ -86,6 +86,10 @@ import {
   saveClassroomSetupResume,
   shouldShowClassroomSetupIntro,
 } from "../utils/classroomSetupTourUtils.js";
+import {
+  getInstallationStatus,
+  getUpdateAvailability,
+} from "../utils/pwaUpdateUtils.js";
 
 const STUDENT_HUB_SUPPORT_EMAIL = normalizeSupportEmail(
   import.meta.env.VITE_STUDENT_HUB_SUPPORT_EMAIL || ""
@@ -551,6 +555,20 @@ function SettingsPage({
   onStartClassroomSetupTour,
   navigationRequest = 0,
   installControl = { capability: "unsupported", actionLabel: "", statusLabel: "" },
+  updateControl = {
+    supported: false,
+    needRefresh: false,
+    updating: false,
+    checking: false,
+    online: true,
+    currentVersion: "",
+    latestVersion: "",
+    metadataError: false,
+    updateError: false,
+    onCheckForUpdates: () => {},
+    onUpdateNow: () => {},
+    onLater: () => {},
+  },
   onInstallDayLo = () => {},
 }) {
   const [settingsView, setSettingsView] = useState(() => initialView || "hub");
@@ -778,6 +796,11 @@ function SettingsPage({
       title: "Quick links",
       description: "Pin a few school websites in the sidebar.",
     },
+    appUpdates: {
+      eyebrow: "Settings / App & updates",
+      title: "App & updates",
+      description: "Manage installation and keep DayLo current.",
+    },
   };
   const currentViewCopy = viewCopy[settingsView];
 
@@ -897,27 +920,19 @@ function SettingsPage({
             </span>
           </button>
 
-          <div className="settings-hub-card settings-install-card">
+          <button
+            type="button"
+            className="settings-hub-card"
+            onClick={() => setSettingsView("appUpdates")}
+          >
             <span>
-              <strong>Install DayLo</strong>
-              <small>Open DayLo directly from your device like an app.</small>
+              <strong>App & updates</strong>
+              <small>Install DayLo and check for updates</small>
             </span>
-            <span className="settings-install-action">
-              {installControl.capability === "installed" ? (
-                <span className="settings-installed-badge">Installed</span>
-              ) : installControl.actionLabel ? (
-                <button
-                  type="button"
-                  className="small-button primary"
-                  onClick={onInstallDayLo}
-                >
-                  {installControl.actionLabel}
-                </button>
-              ) : (
-                <small>{installControl.statusLabel || "Open this in a supported browser."}</small>
-              )}
+            <span className="settings-hub-arrow" aria-hidden="true">
+              →
             </span>
-          </div>
+          </button>
 
           <button
             type="button"
@@ -931,6 +946,12 @@ function SettingsPage({
             <span className="settings-coming-soon">Planned later</span>
           </button>
         </div>
+      ) : settingsView === "appUpdates" ? (
+        <AppUpdatesSettings
+          installControl={installControl}
+          updateControl={updateControl}
+          onInstallDayLo={onInstallDayLo}
+        />
       ) : settingsView === "appearance" ? (
         <div className="panel appearance-panel">
           <section className="appearance-group">
@@ -1343,6 +1364,110 @@ function SettingsPage({
         />
         )}
       </div>
+    </div>
+  );
+}
+
+function AppUpdatesSettings({ installControl, updateControl, onInstallDayLo }) {
+  const installation = getInstallationStatus(installControl.capability);
+  const currentVersion = updateControl.currentVersion || "Unknown";
+  const latestVersion = updateControl.latestVersion || currentVersion;
+  const availability = getUpdateAvailability({
+    currentVersion,
+    latestVersion,
+    needRefresh: updateControl.needRefresh,
+    online: updateControl.online,
+    checking: updateControl.checking,
+    error: updateControl.metadataError || updateControl.updateError,
+  });
+  const updateAvailable = availability === "update-waiting" || availability === "update-available";
+  const statusCopy = {
+    "up-to-date": "You're up to date",
+    checking: "Checking for updates...",
+    "update-waiting": "Update available",
+    "update-available": "Update available",
+    offline: "Can't check for updates while offline.",
+    error: "Couldn't check for updates.",
+  }[availability];
+
+  return (
+    <div className="app-updates-settings">
+      <section className="settings-section-card app-updates-card">
+        <div className="settings-section-heading">
+          <h2>Installation</h2>
+          <p>Use DayLo like an app for quicker access.</p>
+        </div>
+        <div className="app-updates-status-row">
+          <span
+            className={`app-updates-status-dot app-updates-status-${installation.status}`}
+            aria-hidden="true"
+          />
+          <strong>{installation.label}</strong>
+        </div>
+        {installation.actionLabel && (
+          <div className="app-updates-actions">
+            <button type="button" className="primary-button" onClick={onInstallDayLo}>
+              {installation.actionLabel}
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="settings-section-card app-updates-card">
+        <div className="settings-section-heading">
+          <h2>Updates</h2>
+          <p>DayLo will check for updates automatically.</p>
+        </div>
+
+        <dl className="app-updates-facts">
+          <div>
+            <dt>Current version</dt>
+            <dd>DayLo {currentVersion}</dd>
+          </div>
+          <div>
+            <dt>Latest version</dt>
+            <dd>{latestVersion ? `DayLo ${latestVersion}` : "Unknown"}</dd>
+          </div>
+          <div>
+            <dt>Status</dt>
+            <dd className={`app-updates-status-text app-updates-status-text-${availability}`}>
+              {availability === "up-to-date" ? "✓ " : ""}{statusCopy}
+            </dd>
+          </div>
+        </dl>
+
+        <div className="app-updates-actions app-updates-actions-wrap">
+          {updateAvailable ? (
+            <>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={updateControl.updating}
+                onClick={updateControl.onUpdateNow}
+              >
+                {updateControl.updating ? "Updating..." : "Update now"}
+              </button>
+              <button
+                type="button"
+                className="small-button"
+                disabled={updateControl.updating}
+                onClick={updateControl.onLater}
+              >
+                Later
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="small-button"
+              disabled={updateControl.checking || updateControl.online === false}
+              onClick={updateControl.onCheckForUpdates}
+            >
+              {updateControl.checking ? "Checking..." : availability === "error" ? "Try again" : "Check for updates"}
+            </button>
+          )}
+        </div>
+      </section>
     </div>
   );
 }

@@ -1,4 +1,6 @@
-export const CURRENT_DAYLO_VERSION = "0.9.1";
+import { CURRENT_DAYLO_VERSION } from "../utils/appVersion.js";
+
+export { CURRENT_DAYLO_VERSION };
 
 export const currentDayloRelease = {
   version: CURRENT_DAYLO_VERSION,

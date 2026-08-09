@@ -1,11 +1,32 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
 
+const packageJson = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+const dayloVersion = String(packageJson.version || "0.0.0");
+
+function dayloVersionMetadataPlugin() {
+  return {
+    name: "daylo-version-metadata",
+    generateBundle() {
+      this.emitFile({
+        type: "asset",
+        fileName: "version.json",
+        source: `${JSON.stringify({ version: dayloVersion }, null, 2)}\n`,
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: {
+    __DAYLO_VERSION__: JSON.stringify(dayloVersion),
+  },
   plugins: [
     react(),
+    dayloVersionMetadataPlugin(),
     VitePWA({
       registerType: "prompt",
       injectRegister: null,

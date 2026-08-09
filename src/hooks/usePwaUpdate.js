@@ -2,16 +2,24 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import {
   PWA_UPDATE_CHECK_INTERVAL_MS,
+  fetchLatestVersionMetadata,
   isServiceWorkerUpdateSupported,
   shouldCheckForServiceWorkerUpdate,
 } from "../utils/pwaUpdateUtils.js";
+import { CURRENT_DAYLO_VERSION, VERSION_METADATA_URL } from "../utils/appVersion.js";
 
 export default function usePwaUpdate() {
   const registrationRef = useRef(null);
   const lastUpdateCheckRef = useRef(0);
   const [sessionDismissed, setSessionDismissed] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [latestVersion, setLatestVersion] = useState(CURRENT_DAYLO_VERSION);
+  const [metadataError, setMetadataError] = useState(false);
   const [updateError, setUpdateError] = useState(false);
+  const [online, setOnline] = useState(() =>
+    typeof navigator === "undefined" ? true : navigator.onLine !== false
+  );
   const supported = isServiceWorkerUpdateSupported();
   const checkForUpdate = useCallback(
     async ({ force = false } = {}) => {
@@ -19,7 +27,7 @@ export default function usePwaUpdate() {
       const now = Date.now();
       const visible =
         typeof document === "undefined" || document.visibilityState === "visible";
-      const online = typeof navigator === "undefined" || navigator.onLine !== false;
+      const onlineNow = typeof navigator === "undefined" || navigator.onLine !== false;
 
       if (
         !force &&
@@ -27,7 +35,7 @@ export default function usePwaUpdate() {
           now,
           lastCheckAt: lastUpdateCheckRef.current,
           minIntervalMs: PWA_UPDATE_CHECK_INTERVAL_MS,
-          online,
+          online: onlineNow,
           visible,
           supported,
           hasRegistration: Boolean(registration),
@@ -36,7 +44,7 @@ export default function usePwaUpdate() {
         return false;
       }
 
-      if (!registration?.update || !supported || !online || !visible) return false;
+      if (!registration?.update || !supported || !onlineNow || !visible) return false;
 
       lastUpdateCheckRef.current = now;
 
@@ -70,8 +78,52 @@ export default function usePwaUpdate() {
     setOfflineReady(false);
   }, [offlineReady, setOfflineReady]);
 
+  const refreshLatestVersion = useCallback(async () => {
+    const result = await fetchLatestVersionMetadata({ url: VERSION_METADATA_URL });
+    if (result.ok) {
+      setLatestVersion(result.version);
+      setMetadataError(false);
+      return result;
+    }
+
+    setMetadataError(true);
+    return result;
+  }, []);
+
+  const checkNow = useCallback(async () => {
+    if (checking) return { status: "ignored" };
+
+    const onlineNow = typeof navigator === "undefined" || navigator.onLine !== false;
+    setOnline(onlineNow);
+    if (!onlineNow) {
+      setMetadataError(false);
+      return { status: "offline" };
+    }
+
+    setChecking(true);
+    setMetadataError(false);
+
+    try {
+      const metadata = await refreshLatestVersion();
+      const registrationChecked = await checkForUpdate({ force: true });
+      return metadata.ok
+        ? { status: "checked", latestVersion: metadata.version, registrationChecked }
+        : { status: "metadata-error", registrationChecked };
+    } finally {
+      setChecking(false);
+    }
+  }, [checkForUpdate, checking, refreshLatestVersion]);
+
+  useEffect(() => {
+    void refreshLatestVersion();
+  }, [refreshLatestVersion]);
+
   useEffect(() => {
     if (!supported) return undefined;
+
+    function syncOnlineState() {
+      setOnline(typeof navigator === "undefined" || navigator.onLine !== false);
+    }
 
     function handleVisibilityChange() {
       if (document.visibilityState === "visible") {
@@ -80,16 +132,23 @@ export default function usePwaUpdate() {
     }
 
     function handleOnline() {
+      syncOnlineState();
       void checkForUpdate();
+    }
+
+    function handleOffline() {
+      syncOnlineState();
     }
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
     window.addEventListener("focus", handleOnline);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
       window.removeEventListener("focus", handleOnline);
     };
   }, [checkForUpdate, supported]);
@@ -120,9 +179,15 @@ export default function usePwaUpdate() {
     needRefresh,
     sessionDismissed,
     updating,
+    checking,
+    online,
+    currentVersion: CURRENT_DAYLO_VERSION,
+    latestVersion,
+    metadataError,
     updateError,
     updateNow,
     dismissForSession,
     checkForUpdate,
+    checkNow,
   };
 }
