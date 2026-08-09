@@ -19,7 +19,7 @@ function createStorage() {
 
 function createEligibleState(overrides = {}) {
   return {
-    currentVersion: "0.9.0",
+    currentVersion: "0.9.1",
     lastSeenVersion: "",
     activePage: "home",
     onboardingCompleted: true,
@@ -38,12 +38,12 @@ test("an unseen release is eligible on Home", () => {
 test("an acknowledged release does not show again", () => {
   const storage = createStorage();
 
-  assert.equal(acknowledgeReleaseVersion("0.9.0", storage), true);
-  assert.equal(storage.getItem(RELEASE_WELCOME_STORAGE_KEY), "0.9.0");
-  assert.equal(loadAcknowledgedReleaseVersion(storage), "0.9.0");
+  assert.equal(acknowledgeReleaseVersion("0.9.1", storage), true);
+  assert.equal(storage.getItem(RELEASE_WELCOME_STORAGE_KEY), "0.9.1");
+  assert.equal(loadAcknowledgedReleaseVersion(storage), "0.9.1");
   assert.equal(
     shouldShowReleaseWelcome(
-      createEligibleState({ lastSeenVersion: "0.9.0" })
+      createEligibleState({ lastSeenVersion: "0.9.1" })
     ),
     false
   );
@@ -52,8 +52,36 @@ test("an acknowledged release does not show again", () => {
 test("the welcome action keeps the existing version acknowledgement", () => {
   const storage = createStorage();
 
-  acknowledgeReleaseVersion("0.9.0", storage);
-  assert.equal(loadAcknowledgedReleaseVersion(storage), "0.9.0");
+  acknowledgeReleaseVersion("0.9.1", storage);
+  assert.equal(loadAcknowledgedReleaseVersion(storage), "0.9.1");
+});
+
+test("0.9.0 users see the 0.9.1 release once", () => {
+  assert.equal(
+    shouldShowReleaseWelcome(
+      createEligibleState({ lastSeenVersion: "0.9.0" })
+    ),
+    true
+  );
+});
+
+test("fresh users do not see the release while onboarding is active", () => {
+  assert.equal(
+    shouldShowReleaseWelcome(
+      createEligibleState({
+        lastSeenVersion: "",
+        onboardingCompleted: false,
+      })
+    ),
+    false
+  );
+});
+
+test("the release waits while another blocking welcome is open", () => {
+  assert.equal(
+    shouldShowReleaseWelcome(createEligibleState({ blockingUiOpen: true })),
+    false
+  );
 });
 
 test("the release waits while onboarding is active", () => {
@@ -89,7 +117,7 @@ test("skipping the initial tour returns Home before checking the release", () =>
 test("replaying a tour after acknowledgement does not reopen the release", () => {
   assert.equal(
     shouldShowReleaseWelcome(
-      createEligibleState({ lastSeenVersion: "0.9.0" })
+      createEligibleState({ lastSeenVersion: "0.9.1" })
     ),
     false
   );
@@ -100,7 +128,7 @@ test("a future release becomes eligible after the current release was seen", () 
     shouldShowReleaseWelcome(
       createEligibleState({
         currentVersion: "0.10.0",
-        lastSeenVersion: "0.9.0",
+        lastSeenVersion: "0.9.1",
       })
     ),
     true

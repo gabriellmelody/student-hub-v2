@@ -95,11 +95,10 @@ export default function ReleaseWelcomeModal({ release, onDismiss }) {
           <div className="release-welcome-heading">
             <span className="eyebrow">DayLo update</span>
             <h2 id="release-welcome-title">
-              Welcome to DayLo {release.version}
+              What’s new in DayLo {release.version}
             </h2>
             <p id="release-welcome-intro">
-              DayLo is ready to help you organise schoolwork, understand what is
-              due, and build a realistic plan.
+              A few improvements to make everyday planning quicker and easier.
             </p>
           </div>
 
