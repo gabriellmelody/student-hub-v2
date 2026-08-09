@@ -96,6 +96,26 @@
   margin-bottom: var(--density-section-gap);
 }
 
+.task-sync-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: var(--density-section-gap);
+  padding: 9px 10px;
+  border: 1px solid var(--effort-high-border);
+  border-radius: 8px;
+  background: var(--effort-high-bg);
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.task-sync-error .quiet-button {
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--accent-soft);
+}
+
 .task-quick-add-field {
   min-width: 0;
 }

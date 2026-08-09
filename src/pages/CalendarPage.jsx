@@ -928,10 +928,10 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     setShowCalendarTaskForm(true);
   }
 
-  function submitCalendarTask(event) {
+  async function submitCalendarTask(event) {
     event.preventDefault();
 
-    if (!addTaskToList(calendarTaskDraft)) return;
+    if (!(await addTaskToList(calendarTaskDraft))) return;
 
     const taskDate = parseDateKey(calendarTaskDraft.dueDate);
     setSelectedDate(calendarTaskDraft.dueDate);

@@ -2090,7 +2090,7 @@ function IntegrationsSettings({
     return () => window.clearTimeout(toastTimer);
   }, [successToast]);
 
-  function syncSampleClassroom({ link = false } = {}) {
+  async function syncSampleClassroom({ link = false } = {}) {
     const courseLinks = loadMockClassroomCourseLinks();
     const assignments = sampleCourses.flatMap((course) => {
       const linkedSubject = findLinkedSubjectForMockCourse(
@@ -2104,7 +2104,11 @@ function IntegrationsSettings({
         linkedSubjectId: linkedSubject?.id || null,
       }));
     });
-    const result = importMockClassroomAssignments(assignments);
+    const result = await importMockClassroomAssignments(assignments);
+    if (result.error) {
+      setSyncMessage("Sample assignments could not sync. Try again in a moment.");
+      return false;
+    }
     const syncedAt = new Date().toISOString();
     const linkedCourseCount = sampleCourses.filter((course) =>
       findLinkedSubjectForMockCourse(course, subjects, courseLinks)
@@ -2127,11 +2131,12 @@ function IntegrationsSettings({
           } synced.`
         : "Sample Classroom is up to date."
     );
+    return true;
   }
 
-  function confirmAction() {
+  async function confirmAction() {
     if (pendingAction === "link") {
-      syncSampleClassroom({ link: true });
+      if (!(await syncSampleClassroom({ link: true }))) return;
     } else if (pendingAction === "unlink") {
       setClassroomConnection((currentConnection) => ({
         ...currentConnection,
@@ -2142,13 +2147,23 @@ function IntegrationsSettings({
         "Sample Classroom unlinked. Imported tasks remain in DayLo."
       );
     } else if (pendingAction === "remove") {
-      const removedCount = removeMockClassroomTasks();
+      const removedCount = await removeMockClassroomTasks();
+      if (removedCount == null) {
+        setSyncMessage("Sample tasks could not be removed. Try again in a moment.");
+        return;
+      }
 
       setSyncMessage(
         `${removedCount} sample task${removedCount === 1 ? "" : "s"} removed. Manual tasks were kept.`
       );
     } else if (pendingAction === "archive-real-no-due") {
-      const archivedCount = archiveNoDueDateClassroomTasks();
+      const archivedCount = await archiveNoDueDateClassroomTasks();
+      if (archivedCount == null) {
+        setClassroomCleanupMessage(
+          "Classroom tasks could not be archived. Try again in a moment."
+        );
+        return;
+      }
 
       setClassroomCleanupMessage(
         `${archivedCount} no-due-date Classroom task${
@@ -2160,8 +2175,14 @@ function IntegrationsSettings({
     setPendingAction(null);
   }
 
-  function restoreArchivedRealClassroomTasks() {
-    const restoredCount = restoreArchivedClassroomTasks();
+  async function restoreArchivedRealClassroomTasks() {
+    const restoredCount = await restoreArchivedClassroomTasks();
+    if (restoredCount == null) {
+      setClassroomCleanupMessage(
+        "Classroom tasks could not be restored. Try again in a moment."
+      );
+      return;
+    }
 
     setClassroomCleanupMessage(
       `${restoredCount} archived Classroom task${
@@ -2170,8 +2191,16 @@ function IntegrationsSettings({
     );
   }
 
-  function updateCourseMapping(course, subject, courseLinks) {
-    updateMockClassroomCourseSubject(course.externalId, subject?.name || "");
+  async function updateCourseMapping(course, subject, courseLinks) {
+    if (
+      !(await updateMockClassroomCourseSubject(
+        course.externalId,
+        subject?.name || ""
+      ))
+    ) {
+      setSyncMessage("Task subjects could not sync. Try again in a moment.");
+      return;
+    }
     setClassroomConnection((currentConnection) => ({
       ...currentConnection,
       linkedCourseCount: courseLinks.length,
@@ -3388,7 +3417,7 @@ function IntegrationsSettings({
       });
   }
 
-  function importPreviewedRealClassroomAssignments() {
+  async function importPreviewedRealClassroomAssignments() {
     const importableAssignments = getImportableRealClassroomAssignments();
 
     if (importableAssignments.length === 0) {
@@ -3401,7 +3430,16 @@ function IntegrationsSettings({
       return;
     }
 
-    const result = importRealClassroomAssignments(importableAssignments);
+    const result = await importRealClassroomAssignments(importableAssignments);
+    if (result.error) {
+      setRealClassroomAssignmentPreview((currentPreview) => ({
+        ...currentPreview,
+        error: "Assignments could not be imported. Try again in a moment.",
+        importResult: null,
+        importResultCopy: null,
+      }));
+      return;
+    }
     const resultCopy = getRealClassroomImportResultCopy(
       result,
       importableAssignments.length
@@ -7467,10 +7505,11 @@ function DataSettings({
     };
   }, [pendingReset]);
 
-  function confirmReset() {
+  async function confirmReset() {
     if (!pendingReset) return;
 
-    pendingReset.action();
+    const result = await pendingReset.action();
+    if (result === false) return;
     setPendingReset(null);
   }
 

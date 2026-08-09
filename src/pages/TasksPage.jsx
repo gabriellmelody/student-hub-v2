@@ -31,6 +31,8 @@ function TasksPage({
   toggleTask,
   deleteTask,
   updateTask,
+  taskSyncError = null,
+  retryTaskSync,
 }) {
   const [taskSortMode, setTaskSortMode] = useState("smart");
   const [completedOpen, setCompletedOpen] = useState(false);
@@ -71,15 +73,15 @@ function TasksPage({
     (task) => getDaysLeft(task.dueDate) === 0
   ).length;
   const hasActiveTasks = allActiveTasks.length > 0;
-  const addTaskSubmit = (event) => {
-    addTask(event);
+  const addTaskSubmit = async (event) => {
+    await addTask(event);
     setShowMoreOptions(false);
   };
 
-  function submitQuickTask(event) {
+  async function submitQuickTask(event) {
     event.preventDefault();
 
-    if (!addQuickTask(quickTaskTitle)) return;
+    if (!(await addQuickTask(quickTaskTitle))) return;
 
     setQuickTaskTitle("");
   }
@@ -164,6 +166,14 @@ function TasksPage({
       </header>
 
       <div className="panel tasks-panel" data-tour="todo-overview">
+        {taskSyncError && (
+          <div className="task-sync-error" role="alert">
+            <span>Tasks could not sync. Check your connection and try again.</span>
+            <button type="button" className="quiet-button" onClick={retryTaskSync}>
+              Try again
+            </button>
+          </div>
+        )}
         <form
           className="task-quick-add"
           aria-label="Quick add task"

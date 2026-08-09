@@ -68,15 +68,14 @@ function TaskCard({
     ? { "--subject-color": subjectProfile.colour }
     : undefined;
 
-  function saveEdit(event) {
+  async function saveEdit(event) {
     event.preventDefault();
 
-    if (!draftTask.subject.trim() || !draftTask.title.trim()) {
+    if (!draftTask.title.trim()) {
       return;
     }
 
-    onUpdate(task.id, draftTask);
-    setIsEditing(false);
+    if (await onUpdate(task.id, draftTask)) setIsEditing(false);
   }
 
   function cancelEdit() {
