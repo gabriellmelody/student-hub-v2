@@ -22,8 +22,19 @@ import {
   loadGoogleCalendarPreferencesFromStorage,
   reconcileGoogleCalendarAccountStorage,
 } from "../utils/googleCalendarStorage.js";
+import {
+  formatCalendarWeekRange,
+  getCalendarViewAnchor,
+  getCalendarWeekDays,
+  getCalendarWeekStart,
+  getInitialGoogleEventsVisibility,
+  groupCalendarItemsByDate,
+  moveCalendarWeek,
+} from "../utils/calendarWeekUtils.js";
 
 const googleCalendarEventLimit = 2;
+const weekTaskLimit = 3;
+const weekGoogleEventLimit = 2;
 
 const effortKeywordGroups = {
   high: [
@@ -281,9 +292,8 @@ function getCalendarMobileDeadlineSummaryLabel(events) {
 }
 
 function formatSelectedTaskCount(count) {
-  if (count === 0) return "No tasks due";
-  if (count === 1) return "1 due";
-  return `${count} due`;
+  if (count === 1) return "1 task due";
+  return `${count} tasks due`;
 }
 
 function formatSelectedEventCount(count) {
@@ -333,8 +343,15 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
   const [visibleMonth, setVisibleMonth] = useState(
     () => new Date(today.getFullYear(), today.getMonth(), 1)
   );
+  const [calendarView, setCalendarView] = useState("month");
+  const [visibleWeekStart, setVisibleWeekStart] = useState(() =>
+    getCalendarWeekStart(today)
+  );
   const [selectedDate, setSelectedDate] = useState(() => formatDateKey(today));
   const [dotColourMode, setDotColourMode] = useState("subject");
+  const [showGoogleEvents, setShowGoogleEvents] = useState(
+    getInitialGoogleEventsVisibility
+  );
   const [showCalendarTaskForm, setShowCalendarTaskForm] = useState(false);
   const [calendarTaskDraft, setCalendarTaskDraft] = useState(() =>
     createCalendarTaskDraft(formatDateKey(today))
@@ -360,9 +377,13 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     key: "",
     controller: null,
   });
+  const selectedWeekDayRef = useRef(null);
   const googleCalendarEventsCacheRef = useRef(new Map());
   const calendarEvents = getTaskCalendarEvents(tasks, subjects);
   const calendarDays = getMonthCalendarDays(visibleMonth);
+  const calendarWeekDays = getCalendarWeekDays(visibleWeekStart, today);
+  const visibleCalendarDays =
+    calendarView === "week" ? calendarWeekDays : calendarDays;
   const selectedEvents = calendarEvents.filter(
     (event) => event.date === selectedDate
   );
@@ -394,10 +415,11 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     );
   }, [visibleGoogleCalendarPreferences]);
   const selectedDateValue = parseDateKey(selectedDate);
-  const eventRangeStart = calendarDays[0]?.date;
-  const eventRangeEnd = calendarDays[calendarDays.length - 1]?.date;
-  const eventRangeStartKey = calendarDays[0]?.dateKey || "";
-  const eventRangeEndKey = calendarDays[calendarDays.length - 1]?.dateKey || "";
+  const eventRangeStart = visibleCalendarDays[0]?.date;
+  const eventRangeEnd = visibleCalendarDays[visibleCalendarDays.length - 1]?.date;
+  const eventRangeStartKey = visibleCalendarDays[0]?.dateKey || "";
+  const eventRangeEndKey =
+    visibleCalendarDays[visibleCalendarDays.length - 1]?.dateKey || "";
   const googleCalendarRequestKey = [
     googleCalendarAccount.accountId || "no-calendar-account",
     eventRangeStartKey,
@@ -415,8 +437,27 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
       );
     });
   }, [currentViewGoogleCalendarEvents, tasks]);
-  const selectedScheduleEvents = visibleGoogleCalendarEvents.filter((event) =>
+  const displayedGoogleCalendarEvents = showGoogleEvents
+    ? visibleGoogleCalendarEvents
+    : [];
+  const selectedScheduleEvents = displayedGoogleCalendarEvents.filter((event) =>
     googleEventOccursOnDate(event, selectedDate)
+  );
+  const weekItemsByDate = useMemo(
+    () =>
+      groupCalendarItemsByDate({
+        dateKeys: calendarWeekDays.map((day) => day.dateKey),
+        taskEvents: calendarEvents.filter((event) => !event.completed),
+        googleEvents: visibleGoogleCalendarEvents,
+        getGoogleEventDateKeys: getGoogleEventDayKeys,
+        showGoogleEvents,
+      }),
+    [
+      calendarEvents,
+      calendarWeekDays,
+      showGoogleEvents,
+      visibleGoogleCalendarEvents,
+    ]
   );
 
   function clearGoogleCalendarEventState(message = "") {
@@ -791,6 +832,22 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     loadGoogleCalendarEvents({ quiet: true });
   }, [googleCalendarAccount.checking, googleCalendarRequestKey]);
 
+  useEffect(() => {
+    if (calendarView !== "week" || !selectedWeekDayRef.current) return undefined;
+
+    const frame = requestAnimationFrame(() => {
+      if (window.matchMedia("(max-width: 900px)").matches) {
+        selectedWeekDayRef.current?.scrollIntoView({
+          behavior: "auto",
+          block: "nearest",
+          inline: "center",
+        });
+      }
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [calendarView, selectedDate, visibleWeekStart]);
+
   function changeMonth(offset) {
     const nextMonth = new Date(
       visibleMonth.getFullYear(),
@@ -801,12 +858,52 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
     setSelectedDate(formatDateKey(nextMonth));
   }
 
+  function changeWeek(offset) {
+    const selectedDateValue = parseDateKey(selectedDate);
+    const nextSelectedDate = new Date(
+      selectedDateValue.getFullYear(),
+      selectedDateValue.getMonth(),
+      selectedDateValue.getDate() + offset * 7
+    );
+
+    setVisibleWeekStart(moveCalendarWeek(visibleWeekStart, offset));
+    setSelectedDate(formatDateKey(nextSelectedDate));
+  }
+
+  function changeCalendarPeriod(offset) {
+    if (calendarView === "week") {
+      changeWeek(offset);
+      return;
+    }
+
+    changeMonth(offset);
+  }
+
   function showToday() {
     const currentDate = new Date();
     setVisibleMonth(
       new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
     );
+    setVisibleWeekStart(getCalendarWeekStart(currentDate));
     setSelectedDate(formatDateKey(currentDate));
+  }
+
+  function changeCalendarView(nextView) {
+    if (nextView === calendarView) return;
+
+    const selectedDateValue = parseDateKey(selectedDate);
+    const nextAnchor = getCalendarViewAnchor({
+      view: nextView,
+      selectedDate: selectedDateValue,
+    });
+
+    if (nextView === "week") {
+      setVisibleWeekStart(nextAnchor);
+    } else {
+      setVisibleMonth(nextAnchor);
+    }
+
+    setCalendarView(nextView);
   }
 
   function selectCalendarDay(day) {
@@ -819,7 +916,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
       }));
     }
 
-    if (!day.isCurrentMonth) {
+    if (calendarView === "month" && !day.isCurrentMonth) {
       setVisibleMonth(
         new Date(day.date.getFullYear(), day.date.getMonth(), 1)
       );
@@ -853,9 +950,62 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
           <p>Due dates from your tasks and Classroom imports.</p>
         </div>
 
-        <div className="calendar-colour-toggle" aria-label="Calendar dot colour mode">
-          <span>Colour by</span>
-          <div>
+        <div className="calendar-header-controls">
+          <div
+            className="calendar-view-toggle"
+            role="tablist"
+            aria-label="Calendar view"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={calendarView === "week"}
+              className={calendarView === "week" ? "active" : ""}
+              onClick={() => changeCalendarView("week")}
+            >
+              Week
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={calendarView === "month"}
+              className={calendarView === "month" ? "active" : ""}
+              onClick={() => changeCalendarView("month")}
+            >
+              Month
+            </button>
+          </div>
+
+          <label
+            className="calendar-google-visibility-toggle"
+            title="Changes Calendar display only"
+          >
+            <span className="calendar-google-visibility-label">
+              Google events
+            </span>
+            <span className="calendar-google-visibility-state" aria-hidden="true">
+              {showGoogleEvents ? "Shown" : "Hidden"}
+            </span>
+            <input
+              className="sr-only"
+              type="checkbox"
+              role="switch"
+              checked={showGoogleEvents}
+              aria-describedby="calendar-google-visibility-help"
+              onChange={(event) => setShowGoogleEvents(event.target.checked)}
+            />
+            <span className="calendar-google-switch" aria-hidden="true">
+              <i />
+            </span>
+            <small id="calendar-google-visibility-help" className="sr-only">
+              This changes Calendar display only. Selected calendars and study
+              planning remain unchanged.
+            </small>
+          </label>
+
+          <div className="calendar-colour-toggle" aria-label="Calendar task colour mode">
+            <span>Colour by</span>
+            <div>
             <button
               type="button"
               className={dotColourMode === "subject" ? "active" : ""}
@@ -872,31 +1022,38 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
             >
               Effort
             </button>
+            </div>
           </div>
         </div>
       </header>
 
       <div className="calendar-layout">
         <section
-          className="panel calendar-month-panel"
+          className={`panel calendar-month-panel ${
+            calendarView === "week" ? "calendar-week-panel" : ""
+          }`}
           data-tour="calendar-overview"
         >
           <div className="calendar-toolbar">
             <div>
-              <p className="section-label">Month</p>
+              <p className="section-label">
+                {calendarView === "week" ? "Week" : "Month"}
+              </p>
               <h3>
-                {visibleMonth.toLocaleDateString(undefined, {
-                  month: "long",
-                  year: "numeric",
-                })}
+                {calendarView === "week"
+                  ? formatCalendarWeekRange(visibleWeekStart)
+                  : visibleMonth.toLocaleDateString(undefined, {
+                      month: "long",
+                      year: "numeric",
+                    })}
               </h3>
             </div>
 
             <div className="calendar-navigation" aria-label="Calendar navigation">
               <button
                 type="button"
-                aria-label="Previous month"
-                onClick={() => changeMonth(-1)}
+                aria-label={`Previous ${calendarView}`}
+                onClick={() => changeCalendarPeriod(-1)}
               >
                 ←
               </button>
@@ -905,24 +1062,26 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               </button>
               <button
                 type="button"
-                aria-label="Next month"
-                onClick={() => changeMonth(1)}
+                aria-label={`Next ${calendarView}`}
+                onClick={() => changeCalendarPeriod(1)}
               >
                 →
               </button>
             </div>
           </div>
 
-          <div className="calendar-weekdays" aria-hidden="true">
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-              (weekday) => (
-                <span key={weekday}>{weekday}</span>
-              )
-            )}
-          </div>
+          {calendarView === "month" ? (
+            <>
+              <div className="calendar-weekdays" aria-hidden="true">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                  (weekday) => (
+                    <span key={weekday}>{weekday}</span>
+                  )
+                )}
+              </div>
 
-          <div className="calendar-grid">
-            {calendarDays.map((day) => {
+              <div className="calendar-grid">
+                {calendarDays.map((day) => {
               const dayEvents = calendarEvents.filter(
                 (event) => event.date === day.dateKey
               );
@@ -932,7 +1091,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               const assessmentCount = activeDayEvents.filter(
                 isAssessmentCalendarEvent
               ).length;
-              const dayGoogleCalendarEvents = visibleGoogleCalendarEvents.filter(
+              const dayGoogleCalendarEvents = displayedGoogleCalendarEvents.filter(
                 (event) => googleEventOccursOnDate(event, day.dateKey)
               );
               const visibleEventBars = dayGoogleCalendarEvents.slice(
@@ -945,7 +1104,7 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               );
               const isSelected = day.dateKey === selectedDate;
 
-              return (
+                  return (
                 <button
                   type="button"
                   key={day.dateKey}
@@ -1044,9 +1203,204 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
                     </span>
                   )}
                 </button>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <div
+              className="calendar-week-scroll"
+              aria-label={`Week of ${formatCalendarWeekRange(visibleWeekStart)}`}
+            >
+              <div className="calendar-week-grid">
+                {calendarWeekDays.map((day) => {
+                  const dayItems = weekItemsByDate[day.dateKey] || {
+                    tasks: [],
+                    googleEvents: [],
+                  };
+                  const visibleTasks = dayItems.tasks.slice(0, weekTaskLimit);
+                  const visibleEvents = dayItems.googleEvents.slice(
+                    0,
+                    weekGoogleEventLimit
+                  );
+                  const hiddenTaskCount = Math.max(
+                    0,
+                    dayItems.tasks.length - visibleTasks.length
+                  );
+                  const hiddenGoogleEventCount = Math.max(
+                    0,
+                    dayItems.googleEvents.length - visibleEvents.length
+                  );
+                  const isSelected = day.dateKey === selectedDate;
+                  const isEmptyDay =
+                    dayItems.tasks.length === 0 &&
+                    dayItems.googleEvents.length === 0;
+                  const fullDateLabel = day.date.toLocaleDateString(undefined, {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  });
+
+                  return (
+                    <article
+                      className={`calendar-week-day ${
+                        day.isToday ? "today" : ""
+                      } ${isSelected ? "selected" : ""} ${
+                        isEmptyDay ? "empty" : "has-items"
+                      }`}
+                      key={day.dateKey}
+                      onClick={() => selectCalendarDay(day)}
+                      ref={isSelected ? selectedWeekDayRef : null}
+                    >
+                      <button
+                        type="button"
+                        className="calendar-week-day-heading"
+                        aria-label={`${fullDateLabel}, ${formatDueCount(
+                          dayItems.tasks.length
+                        )}, ${formatSelectedEventCount(
+                          dayItems.googleEvents.length
+                        )}`}
+                        aria-pressed={isSelected}
+                        onClick={() => selectCalendarDay(day)}
+                      >
+                        <span>{day.weekday}</span>
+                        <strong>{day.date.getDate()}</strong>
+                        {(day.isToday || isSelected) && (
+                          <small>
+                            {day.isToday
+                              ? `Today${isSelected ? " · Selected" : ""}`
+                              : "Selected"}
+                          </small>
+                        )}
+                      </button>
+
+                      {!isEmptyDay && (
+                        <div className="calendar-week-day-counts" aria-hidden="true">
+                          {dayItems.tasks.length > 0 && (
+                            <span>
+                              {formatDueCount(dayItems.tasks.length, {
+                                compact: true,
+                              })}
+                            </span>
+                          )}
+                          {dayItems.googleEvents.length > 0 && (
+                            <span>
+                              {dayItems.googleEvents.length} event
+                              {dayItems.googleEvents.length === 1 ? "" : "s"}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {visibleTasks.length > 0 && (
+                        <section
+                          className="calendar-week-items calendar-week-tasks"
+                          aria-label={`Tasks due ${fullDateLabel}`}
+                        >
+                          {visibleTasks.map((task) => {
+                            const daysLeft = getDaysLeft(task.date);
+                            const effortLevel = getCalendarEffortLevel(task);
+
+                            return (
+                              <button
+                                type="button"
+                                className={`calendar-week-task ${
+                                  isAssessmentCalendarEvent(task)
+                                    ? "has-assessment"
+                                    : ""
+                                }`}
+                                key={task.id}
+                                style={getCalendarDeadlineSummaryStyle(
+                                  [task],
+                                  dotColourMode
+                                )}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedDate(day.dateKey);
+                                  setActivePage("tasks");
+                                }}
+                              >
+                                <span className="calendar-week-item-kind">Task</span>
+                                <strong>{task.title}</strong>
+                                <small>
+                                  {[task.subject, effortLabels[effortLevel]]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                </small>
+                                <span className={`urgency ${getUrgencyClass(daysLeft)}`}>
+                                  {getUrgencyLabel(daysLeft)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </section>
+                      )}
+
+                      {visibleEvents.length > 0 && (
+                        <section
+                          className="calendar-week-items calendar-week-google-events"
+                          aria-label={`Google Calendar events ${fullDateLabel}`}
+                        >
+                          {visibleEvents.map((event) => (
+                            <button
+                              type="button"
+                              className="calendar-week-google-event"
+                              key={`${event.calendarId}-${event.id}-${day.dateKey}`}
+                              style={getGoogleCalendarEventStyle(event)}
+                              onClick={(clickEvent) => {
+                                clickEvent.stopPropagation();
+                                selectCalendarDay(day);
+                              }}
+                            >
+                              <span className="calendar-week-item-kind">Event</span>
+                              <strong>{event.title}</strong>
+                              <small>{getCalendarEventTimeLabel(event)}</small>
+                            </button>
+                          ))}
+                        </section>
+                      )}
+
+                      {(hiddenTaskCount > 0 || hiddenGoogleEventCount > 0) && (
+                        <div className="calendar-week-overflow">
+                          {hiddenTaskCount > 0 && (
+                            <button
+                              type="button"
+                              className="calendar-week-more"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                selectCalendarDay(day);
+                              }}
+                            >
+                              +{hiddenTaskCount} more task
+                              {hiddenTaskCount === 1 ? "" : "s"}
+                            </button>
+                          )}
+                          {hiddenGoogleEventCount > 0 && (
+                            <button
+                              type="button"
+                              className="calendar-week-more"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                selectCalendarDay(day);
+                              }}
+                            >
+                              +{hiddenGoogleEventCount} more event
+                              {hiddenGoogleEventCount === 1 ? "" : "s"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {visibleTasks.length === 0 && visibleEvents.length === 0 && (
+                        <p className="calendar-week-empty">Nothing scheduled</p>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
         <aside className="panel calendar-detail-panel">
@@ -1292,7 +1646,12 @@ function CalendarPage({ tasks, subjects, setActivePage, addTaskToList }) {
               </button>
             </div>
 
-            {googleCalendarEvents.error ? (
+            {!showGoogleEvents ? (
+              <div className="calendar-empty-state calendar-empty-state-compact">
+                <h3>Google events hidden.</h3>
+                <p>Turn on Show Google events to display this schedule.</p>
+              </div>
+            ) : googleCalendarEvents.error ? (
               <div className="calendar-empty-state">
                 <h3>Events unavailable</h3>
                 <p>{googleCalendarEvents.error}</p>
