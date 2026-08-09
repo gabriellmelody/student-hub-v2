@@ -19,7 +19,7 @@ function createStorage() {
 
 function createEligibleState(overrides = {}) {
   return {
-    currentVersion: "0.9.1",
+    currentVersion: "0.9.2",
     lastSeenVersion: "",
     activePage: "home",
     onboardingCompleted: true,
@@ -38,12 +38,12 @@ test("an unseen release is eligible on Home", () => {
 test("an acknowledged release does not show again", () => {
   const storage = createStorage();
 
-  assert.equal(acknowledgeReleaseVersion("0.9.1", storage), true);
-  assert.equal(storage.getItem(RELEASE_WELCOME_STORAGE_KEY), "0.9.1");
-  assert.equal(loadAcknowledgedReleaseVersion(storage), "0.9.1");
+  assert.equal(acknowledgeReleaseVersion("0.9.2", storage), true);
+  assert.equal(storage.getItem(RELEASE_WELCOME_STORAGE_KEY), "0.9.2");
+  assert.equal(loadAcknowledgedReleaseVersion(storage), "0.9.2");
   assert.equal(
     shouldShowReleaseWelcome(
-      createEligibleState({ lastSeenVersion: "0.9.1" })
+      createEligibleState({ lastSeenVersion: "0.9.2" })
     ),
     false
   );
@@ -52,14 +52,14 @@ test("an acknowledged release does not show again", () => {
 test("the welcome action keeps the existing version acknowledgement", () => {
   const storage = createStorage();
 
-  acknowledgeReleaseVersion("0.9.1", storage);
-  assert.equal(loadAcknowledgedReleaseVersion(storage), "0.9.1");
+  acknowledgeReleaseVersion("0.9.2", storage);
+  assert.equal(loadAcknowledgedReleaseVersion(storage), "0.9.2");
 });
 
-test("0.9.0 users see the 0.9.1 release once", () => {
+test("0.9.1 users see the 0.9.2 release once", () => {
   assert.equal(
     shouldShowReleaseWelcome(
-      createEligibleState({ lastSeenVersion: "0.9.0" })
+      createEligibleState({ lastSeenVersion: "0.9.1" })
     ),
     true
   );
@@ -117,7 +117,7 @@ test("skipping the initial tour returns Home before checking the release", () =>
 test("replaying a tour after acknowledgement does not reopen the release", () => {
   assert.equal(
     shouldShowReleaseWelcome(
-      createEligibleState({ lastSeenVersion: "0.9.1" })
+      createEligibleState({ lastSeenVersion: "0.9.2" })
     ),
     false
   );
@@ -128,7 +128,7 @@ test("a future release becomes eligible after the current release was seen", () 
     shouldShowReleaseWelcome(
       createEligibleState({
         currentVersion: "0.10.0",
-        lastSeenVersion: "0.9.1",
+        lastSeenVersion: "0.9.2",
       })
     ),
     true

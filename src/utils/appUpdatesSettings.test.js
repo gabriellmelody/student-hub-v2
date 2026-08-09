@@ -25,7 +25,7 @@ test("Settings update actions reuse the shared App update control", () => {
 });
 
 test("version metadata is generated from package version", () => {
-  assert.equal(packageJson.version, "0.9.1");
+  assert.equal(packageJson.version, "0.9.2");
   assert.match(viteConfig, /readFileSync\(new URL\("\.\/package\.json"/);
   assert.match(viteConfig, /fileName: "version\.json"/);
   assert.match(viteConfig, /__DAYLO_VERSION__/);

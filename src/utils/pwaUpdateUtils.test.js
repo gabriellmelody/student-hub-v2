@@ -123,6 +123,10 @@ test("offline state does not cause destructive update behavior", () => {
 });
 
 
+test("semantic comparison recognises 0.9.2 as newer than 0.9.1", () => {
+  assert.equal(compareDayloVersions("0.9.2", "0.9.1"), 1);
+});
+
 test("semantic comparison treats 0.10.0 as newer than 0.9.9", () => {
   assert.equal(compareDayloVersions("0.10.0", "0.9.9"), 1);
   assert.equal(compareDayloVersions("1.0.0", "0.10.0"), 1);
@@ -130,21 +134,21 @@ test("semantic comparison treats 0.10.0 as newer than 0.9.9", () => {
 
 test("latest equal to current reports up to date", () => {
   assert.equal(
-    getUpdateAvailability({ currentVersion: "0.9.1", latestVersion: "0.9.1" }),
+    getUpdateAvailability({ currentVersion: "0.9.2", latestVersion: "0.9.2" }),
     "up-to-date"
   );
 });
 
 test("latest newer than current reports update available without sequential requirements", () => {
   assert.equal(
-    getUpdateAvailability({ currentVersion: "0.9.1", latestVersion: "0.9.3" }),
+    getUpdateAvailability({ currentVersion: "0.9.2", latestVersion: "0.9.3" }),
     "update-available"
   );
 });
 
 test("waiting service worker exposes update waiting", () => {
   assert.equal(
-    getUpdateAvailability({ currentVersion: "0.9.1", latestVersion: "0.9.1", needRefresh: true }),
+    getUpdateAvailability({ currentVersion: "0.9.2", latestVersion: "0.9.2", needRefresh: true }),
     "update-waiting"
   );
 });
