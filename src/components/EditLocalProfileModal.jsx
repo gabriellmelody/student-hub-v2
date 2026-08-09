@@ -17,6 +17,8 @@ import {
 export default function EditLocalProfileModal({ profile, onSave, onClose }) {
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [avatarId, setAvatarId] = useState(profile.avatarId);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const dialogRef = useRef(null);
   const inputRef = useRef(null);
   const returnFocusRef = useRef(null);
@@ -85,10 +87,24 @@ export default function EditLocalProfileModal({ profile, onSave, onClose }) {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  function submitProfile(event) {
+  async function submitProfile(event) {
     event.preventDefault();
-    if (!nameIsValid) return;
-    onSave({ displayName: displayName.trim(), avatarId });
+    if (!nameIsValid || saving) return;
+
+    setSaving(true);
+    setSaveError("");
+    try {
+      const savedProfile = await onSave({
+        displayName: displayName.trim(),
+        avatarId,
+      });
+      if (!savedProfile) throw new Error("profile_not_saved");
+      onClose();
+    } catch {
+      setSaveError("Your profile could not be saved. Try again in a moment.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return createPortal(
@@ -110,10 +126,10 @@ export default function EditLocalProfileModal({ profile, onSave, onClose }) {
         <form onSubmit={submitProfile}>
           <div className="local-profile-scroll">
             <div className="local-profile-heading">
-              <span className="eyebrow">Local workspace</span>
+              <span className="eyebrow">DayLo account</span>
               <h2 id="local-profile-title">Edit profile</h2>
               <p id="local-profile-description">
-                Choose how your name and avatar appear in this browser.
+                Choose how your name and avatar appear across your devices.
               </p>
             </div>
 
@@ -138,7 +154,7 @@ export default function EditLocalProfileModal({ profile, onSave, onClose }) {
               <ProfileAvatar profile={previewProfile} className="local-profile-preview-avatar" />
               <span>
                 <strong>{nameIsValid ? displayName.trim() : "Student"}</strong>
-                <small>Local workspace</small>
+                <small>DayLo account</small>
                 <small>
                   Initials preview: {getLocalProfileInitials(previewProfile.displayName)}
                 </small>
@@ -173,12 +189,27 @@ export default function EditLocalProfileModal({ profile, onSave, onClose }) {
             </fieldset>
           </div>
 
+          {saveError && (
+            <p className="local-profile-save-error" role="alert">
+              {saveError}
+            </p>
+          )}
+
           <div className="local-profile-actions">
-            <button type="button" className="secondary-button" onClick={onClose}>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onClose}
+              disabled={saving}
+            >
               Cancel
             </button>
-            <button type="submit" className="primary-button" disabled={!nameIsValid}>
-              Save
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={!nameIsValid || saving}
+            >
+              {saving ? "Saving..." : "Save"}
             </button>
           </div>
         </form>

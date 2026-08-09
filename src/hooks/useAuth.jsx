@@ -1,9 +1,16 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase.js";
-import { bootstrapUserProfile, ensureUserProfile } from "../lib/profile.js";
+import {
+  bootstrapUserProfile,
+  ensureUserProfile,
+  getProfileForAuthenticatedUser,
+  saveUserProfile,
+  subscribeToUserProfileChanges,
+} from "../lib/profile.js";
 
 const AuthContext = createContext(null);
 const PROFILE_BOOTSTRAP_RETRY_DELAY_MS = 650;
+const PROFILE_REALTIME_REFETCH_DELAY_MS = 120;
 
 function wait(ms) {
   return new Promise((resolve) => {
@@ -20,8 +27,9 @@ export function AuthProvider({ children }) {
   const [profileError, setProfileError] = useState(null);
   const activeUserIdRef = useRef(null);
   const profileBootstrapRef = useRef({ userId: null, promise: null });
+  const profileRefetchTimerRef = useRef(null);
 
-  const loadProfile = useCallback(async (nextUser, { retry = true } = {}) => {
+  const loadProfile = useCallback(async (nextUser, { retry = true, silent = false } = {}) => {
     const userId = nextUser?.id || null;
 
     if (!userId) {
@@ -34,6 +42,9 @@ export function AuthProvider({ children }) {
     }
 
     activeUserIdRef.current = userId;
+    setProfile((currentProfile) =>
+      getProfileForAuthenticatedUser(currentProfile, userId)
+    );
 
     if (
       profileBootstrapRef.current.userId === userId &&
@@ -42,8 +53,10 @@ export function AuthProvider({ children }) {
       return profileBootstrapRef.current.promise;
     }
 
-    setProfileLoading(true);
-    setProfileError(null);
+    if (!silent) {
+      setProfileLoading(true);
+      setProfileError(null);
+    }
 
     const bootstrapPromise = bootstrapUserProfile({
       user: nextUser,
@@ -64,19 +77,48 @@ export function AuthProvider({ children }) {
       return nextProfile;
     } catch (error) {
       if (activeUserIdRef.current === userId) {
-        setProfileError(error);
-        setProfile(null);
+        if (!silent) {
+          setProfileError(error);
+          setProfile(null);
+        }
       }
       return null;
     } finally {
       if (profileBootstrapRef.current.promise === bootstrapPromise) {
         profileBootstrapRef.current = { userId: null, promise: null };
       }
-      if (activeUserIdRef.current === userId) {
+      if (!silent && activeUserIdRef.current === userId) {
         setProfileLoading(false);
       }
     }
   }, []);
+
+  useEffect(() => {
+    const userId = user?.id || "";
+    if (!userId) return undefined;
+
+    const scheduleRefresh = () => {
+      window.clearTimeout(profileRefetchTimerRef.current);
+      profileRefetchTimerRef.current = window.setTimeout(() => {
+        void loadProfile(user, { retry: false, silent: true });
+      }, PROFILE_REALTIME_REFETCH_DELAY_MS);
+    };
+    const unsubscribe = subscribeToUserProfileChanges(
+      supabase,
+      userId,
+      scheduleRefresh
+    );
+    const refreshOnFocus = () => {
+      void loadProfile(user, { retry: false, silent: true });
+    };
+    window.addEventListener("focus", refreshOnFocus);
+
+    return () => {
+      window.clearTimeout(profileRefetchTimerRef.current);
+      unsubscribe();
+      window.removeEventListener("focus", refreshOnFocus);
+    };
+  }, [loadProfile, user]);
 
   useEffect(() => {
     let active = true;
@@ -156,11 +198,29 @@ export function AuthProvider({ children }) {
   }, []);
 
   const retryProfile = useCallback(() => loadProfile(user, { retry: false }), [loadProfile, user]);
+  const refreshProfile = useCallback(
+    () => loadProfile(user, { retry: false, silent: true }),
+    [loadProfile, user]
+  );
+  const updateProfile = useCallback(
+    async (updates) => {
+      const userId = user?.id || "";
+      if (!userId) throw new Error("Sign in before updating your profile.");
+
+      const nextProfile = await saveUserProfile(supabase, userId, updates);
+      if (activeUserIdRef.current !== userId) return null;
+      setProfile(nextProfile);
+      setProfileError(null);
+      return nextProfile;
+    },
+    [user]
+  );
+  const visibleProfile = getProfileForAuthenticatedUser(profile, user?.id || "");
 
   const value = useMemo(() => ({
     user,
     session,
-    profile,
+    profile: visibleProfile,
     loading,
     profileLoading,
     profileError,
@@ -168,10 +228,12 @@ export function AuthProvider({ children }) {
     signIn,
     signOut,
     retryProfile,
+    refreshProfile,
+    updateProfile,
   }), [
     user,
     session,
-    profile,
+    visibleProfile,
     loading,
     profileLoading,
     profileError,
@@ -179,6 +241,8 @@ export function AuthProvider({ children }) {
     signIn,
     signOut,
     retryProfile,
+    refreshProfile,
+    updateProfile,
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

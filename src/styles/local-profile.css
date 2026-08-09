@@ -256,6 +256,15 @@
   background: var(--surface);
 }
 
+.local-profile-save-error {
+  margin: 0;
+  padding: 8px var(--density-form-padding);
+  border-top: 1px solid var(--effort-high-border);
+  background: var(--effort-high-bg);
+  color: var(--urgent);
+  font-size: 0.82rem;
+}
+
 .local-profile-actions button {
   min-width: 104px;
   min-height: 44px;
@@ -302,4 +311,3 @@
     animation: none;
   }
 }
-

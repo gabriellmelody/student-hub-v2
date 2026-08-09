@@ -37,7 +37,6 @@ import {
   getContrastText,
   getReadableAccent,
   colorToRgba,
-  loadStudentProfile,
   getDaysLeft,
   hasRealDueDate,
   formatTime,
@@ -76,7 +75,6 @@ import {
 } from "./utils/smartPlannerUtils.js";
 import {
   clearOnboardingDraft,
-  completeOnboardingProfile,
   loadOnboardingPlanningPreferences,
   shouldShowOnboarding,
 } from "./utils/onboardingUtils.js";
@@ -132,11 +130,6 @@ import {
   clearClassroomSetupResume,
   markClassroomSetupIntroSeen,
 } from "./utils/classroomSetupTourUtils.js";
-import {
-  clearLocalProfile,
-  loadLocalProfile,
-  saveLocalProfile,
-} from "./utils/localProfileUtils.js";
 
 function resolveThemePreference(themePreference) {
   if (themePreference !== "system") return themePreference === "dark" ? "dark" : "light";
@@ -329,12 +322,30 @@ function App() {
     deleteTasks: deleteCloudTasks,
     clearTasks: clearCloudTasks,
   } = useCloudTasks(auth.user);
-  const [studentProfile, setStudentProfile] = useState(loadStudentProfile);
-  const [localProfile, setLocalProfile] = useState(loadLocalProfile);
+  const studentProfile = auth.profile || {
+    id: auth.user?.id || "",
+    displayName: "Student",
+    avatarId: "initials",
+    schoolSystem: "",
+    onboardingCompleted: false,
+  };
+  const setStudentProfile = useCallback(
+    (updater) => {
+      const nextProfile =
+        typeof updater === "function" ? updater(studentProfile) : updater;
+      return auth
+        .updateProfile({
+          schoolSystem: nextProfile.schoolSystem,
+          onboardingCompleted: nextProfile.onboardingCompleted,
+        })
+        .catch(() => null);
+    },
+    [auth.updateProfile, studentProfile]
+  );
   const accountIdentity = {
-    displayName: auth.profile?.display_name || auth.user?.email || localProfile.displayName,
+    displayName: studentProfile.displayName,
     email: auth.user?.email || "",
-    avatarId: auth.profile?.avatar_id || localProfile.avatarId,
+    avatarId: studentProfile.avatarId,
   };
   const [localProfileEditorOpen, setLocalProfileEditorOpen] = useState(false);
   const [lastSeenDayloVersion, setLastSeenDayloVersion] = useState(
@@ -1355,13 +1366,6 @@ function App() {
     if (event.target !== mobilePagerCurrentRef.current || !mobilePagerRef.current?.settling) return;
     finishMobilePager(mobilePagerRef.current);
   }
-
-  useEffect(() => {
-    localStorage.setItem(
-      "student-hub-student-profile",
-      JSON.stringify(studentProfile)
-    );
-  }, [studentProfile]);
 
   useEffect(() => {
     saveQuickLinksPreferences(quickLinksPreferences);
@@ -2891,31 +2895,23 @@ function App() {
     });
   }
 
-  function completeOnboarding() {
-    const completedProfile = completeOnboardingProfile(studentProfile);
-
-    setStudentProfile(completedProfile);
-    localStorage.setItem(
-      "student-hub-student-profile",
-      JSON.stringify(completedProfile)
-    );
+  async function completeOnboarding() {
+    const savedProfile = await auth
+      .updateProfile({ onboardingCompleted: true })
+      .catch(() => null);
+    if (!savedProfile) return false;
     setActivePage("home");
+    return true;
   }
 
-  function restartOnboarding() {
+  async function restartOnboarding() {
     clearOnboardingDraft();
-    const restartedProfile = {
-      ...studentProfile,
-      onboardingCompleted: false,
-      source: studentProfile.source || "manual",
-    };
-
-    setStudentProfile(restartedProfile);
-    localStorage.setItem(
-      "student-hub-student-profile",
-      JSON.stringify(restartedProfile)
-    );
+    const savedProfile = await auth
+      .updateProfile({ onboardingCompleted: false })
+      .catch(() => null);
+    if (!savedProfile) return false;
     setActivePage("home");
+    return true;
   }
 
   async function resetTasks() {
@@ -3020,13 +3016,7 @@ function App() {
     setQuickLinksPreferences(loadQuickLinksPreferences());
     setLastSeenDayloVersion("");
     setReleaseWelcomeOpen(false);
-    setLocalProfile(clearLocalProfile());
     setLocalProfileEditorOpen(false);
-    setStudentProfile({
-      schoolSystem: "",
-      onboardingCompleted: false,
-      source: "manual",
-    });
   }
 
   function renderAppPage(page) {
@@ -3292,7 +3282,7 @@ function App() {
           collapsed={sidebarCollapsed}
           active={activePage === "settings"}
           openSettings={openSettings}
-          localProfile={localProfile}
+          localProfile={accountIdentity}
           accountIdentity={accountIdentity}
           onEditProfile={() => setLocalProfileEditorOpen(true)}
           onSignOut={auth.signOut}
@@ -3348,7 +3338,7 @@ function App() {
         setActivePage={setActivePage}
         openSettings={openSettings}
         quickLinksPreferences={quickLinksPreferences}
-        localProfile={localProfile}
+        localProfile={accountIdentity}
         accountIdentity={accountIdentity}
         onEditProfile={() => setLocalProfileEditorOpen(true)}
         onSignOut={auth.signOut}
@@ -3393,12 +3383,9 @@ function App() {
 
       {localProfileEditorOpen && (
         <EditLocalProfileModal
-          profile={localProfile}
+          profile={accountIdentity}
           onClose={() => setLocalProfileEditorOpen(false)}
-          onSave={(nextProfile) => {
-            setLocalProfile(saveLocalProfile(nextProfile));
-            setLocalProfileEditorOpen(false);
-          }}
+          onSave={(nextProfile) => auth.updateProfile(nextProfile)}
         />
       )}
 
