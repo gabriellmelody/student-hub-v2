@@ -26,6 +26,7 @@ function TasksPage({
   newTask,
   setNewTask,
   addTask,
+  addQuickTask,
   toggleTask,
   deleteTask,
   updateTask,
@@ -33,6 +34,7 @@ function TasksPage({
   const [taskSortMode, setTaskSortMode] = useState("smart");
   const [completedOpen, setCompletedOpen] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const [quickTaskTitle, setQuickTaskTitle] = useState("");
   const [dueDateSelection, setDueDateSelection] = useState("today");
   const [openMenuTaskId, setOpenMenuTaskId] = useState(null);
   const titleInputRef = useRef(null);
@@ -72,6 +74,24 @@ function TasksPage({
     addTask(event);
     setShowMoreOptions(false);
   };
+
+  function submitQuickTask(event) {
+    event.preventDefault();
+
+    if (!addQuickTask(quickTaskTitle)) return;
+
+    setQuickTaskTitle("");
+  }
+
+  function openQuickTaskDetails() {
+    const title = quickTaskTitle.trim();
+
+    if (title) {
+      setNewTask(updateTaskTitleWithDetection(newTask, title));
+    }
+
+    setShowAddTask(true);
+  }
 
   useEffect(() => {
     if (!showAddTask) return undefined;
@@ -143,6 +163,32 @@ function TasksPage({
       </header>
 
       <div className="panel tasks-panel" data-tour="todo-overview">
+        <form
+          className="task-quick-add"
+          aria-label="Quick add task"
+          onSubmit={submitQuickTask}
+        >
+          <label className="task-quick-add-field">
+            <span className="sr-only">Task title</span>
+            <input
+              type="text"
+              value={quickTaskTitle}
+              placeholder="Add a task..."
+              onChange={(event) => setQuickTaskTitle(event.target.value)}
+            />
+          </label>
+          <button className="primary-button task-quick-add-submit" type="submit">
+            Add
+          </button>
+          <button
+            className="quiet-button task-quick-add-details"
+            type="button"
+            onClick={openQuickTaskDetails}
+          >
+            More details
+          </button>
+        </form>
+
         {!hasActiveTasks && (
           <div className="task-empty-state">
             <h3>You’re caught up.</h3>

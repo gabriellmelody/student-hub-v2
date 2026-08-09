@@ -59,6 +59,7 @@ import {
   upsertCompletedTaskHistory,
   removeTaskFromCompletedHistory,
   normalizeTask,
+  createQuickTaskDraft,
   getExternalSourceKey,
 } from "./utils/appUtils.js";
 import { createTaskFromMockAssignment } from "./utils/classroomMockUtils.js";
@@ -1332,7 +1333,7 @@ function App() {
   }
 
   function addTaskToList(taskInput) {
-    if (!taskInput.subject.trim() || !taskInput.title.trim()) {
+    if (!taskInput.title.trim()) {
       return false;
     }
 
@@ -1357,6 +1358,10 @@ function App() {
 
     setTasks((currentTasks) => [...currentTasks, taskToAdd]);
     return true;
+  }
+
+  function addQuickTask(title) {
+    return addTaskToList(createQuickTaskDraft(title));
   }
 
   function addTask(event) {
@@ -2728,6 +2733,7 @@ function App() {
             newTask={newTask}
             setNewTask={setNewTask}
             addTask={addTask}
+            addQuickTask={addQuickTask}
             toggleTask={toggleTask}
             deleteTask={deleteTask}
             updateTask={updateTask}

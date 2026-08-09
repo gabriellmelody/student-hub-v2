@@ -973,6 +973,29 @@ export function updateTaskTitleWithDetection(task, title) {
   };
 }
 
+export function createQuickTaskDraft(title) {
+  return updateTaskTitleWithDetection(
+    {
+      subject: "",
+      title: "",
+      dueDate: "",
+      effort: 2,
+      completed: false,
+      source: "manual",
+      externalId: null,
+      classroomCourseId: null,
+      classroomCourseName: null,
+      importedAt: null,
+      lastSyncedAt: null,
+      taskType: "homework",
+      importance: "normal",
+      detectedTags: [],
+      importanceSource: "auto",
+    },
+    String(title || "").trim()
+  );
+}
+
 export function getTaskSignalBadges(task) {
   const badges = [];
   const primaryTag = Array.isArray(task?.detectedTags)
