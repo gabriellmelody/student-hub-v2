@@ -80,7 +80,6 @@ export function createDemoTasks() {
   });
 }
 
-export const COMPLETED_TASK_RETENTION_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_ACCENT_COLOR = "#73a8df";
 export const THEME_COLORS_STORAGE_KEY = "student-hub-theme-colors";
 export const DEFAULT_LOGO_APPEARANCE = "brand";
@@ -1160,23 +1159,12 @@ export function loadTasks() {
 
     if (!Array.isArray(parsedTasks)) return [];
 
-    const now = Date.now();
-
     return parsedTasks.flatMap((task) => {
       if (!task || typeof task !== "object") return [];
 
       const normalizedTask = normalizeTask(task);
 
-      if (!normalizedTask.completed) return normalizedTask;
-
-      const savedCompletedAt = Number(normalizedTask.completedAt);
-      const completedAt = Number.isFinite(savedCompletedAt)
-        ? savedCompletedAt
-        : now;
-
-      if (now - completedAt >= COMPLETED_TASK_RETENTION_MS) return [];
-
-      return { ...normalizedTask, completedAt };
+      return normalizedTask;
     });
   } catch {
     return [];

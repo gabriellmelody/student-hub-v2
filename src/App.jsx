@@ -24,7 +24,6 @@ import SubjectsPage from "./pages/SubjectsPage.jsx";
 import TasksPage from "./pages/TasksPage.jsx";
 import {
   COMPLETED_HISTORY_STORAGE_KEY,
-  COMPLETED_TASK_RETENTION_MS,
   DEFAULT_THEME_COLORS,
   themeColorPalettes,
   STUDENT_HUB_STORAGE_KEYS,
@@ -1046,35 +1045,6 @@ function App() {
       colorToRgba(primaryColor, resolvedTheme === "dark" ? 0.16 : 0.12)
     );
   }, [themeColors, resolvedTheme]);
-
-  useEffect(() => {
-    const completedTimestamps = tasks
-      .filter((task) => task.completed)
-      .map((task) => Number(task.completedAt))
-      .filter(Number.isFinite);
-
-    if (completedTimestamps.length === 0) return undefined;
-
-    const nextExpiry =
-      Math.min(...completedTimestamps) + COMPLETED_TASK_RETENTION_MS;
-    const expiryTimer = setTimeout(() => {
-      const now = Date.now();
-
-      setTasks((currentTasks) =>
-        currentTasks.filter((task) => {
-          if (!task.completed) return true;
-
-          const completedAt = Number(task.completedAt);
-          return (
-            !Number.isFinite(completedAt) ||
-            now - completedAt < COMPLETED_TASK_RETENTION_MS
-          );
-        })
-      );
-    }, Math.max(0, nextExpiry - Date.now()));
-
-    return () => clearTimeout(expiryTimer);
-  }, [tasks]);
 
   useEffect(() => {
     localStorage.setItem("student-hub-hours", hoursAvailable);
