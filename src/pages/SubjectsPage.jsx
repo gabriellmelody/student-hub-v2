@@ -3,6 +3,7 @@ import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
 import {
   getDaysLeft,
   getEffortLabel,
+  formatSubjectCourseLabel,
   getTaskSignalBadges,
   getUrgencyClass,
   getUrgencyLabel,
@@ -157,7 +158,7 @@ function SubjectsPage({
                   <span className="subject-overview-heading">
                     <strong>{subject.name}</strong>
                     <small>
-                      {subject.courseSystem} · {subject.level}
+                      {formatSubjectCourseLabel(subject)}
                     </small>
                   </span>
                   <span className="subject-overview-grades">

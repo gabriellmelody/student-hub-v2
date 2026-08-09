@@ -5,7 +5,10 @@ import DayloMark from "../components/DayloMark.jsx";
 import QuickLinkIcon from "../components/QuickLinkIcon.jsx";
 import {
   subjectCourseSystems,
-  subjectLevels,
+  getDefaultSubjectLevel,
+  getSubjectLevelOptions,
+  formatSubjectCourseLabel,
+  reorderSubjects,
   DEFAULT_THEME_COLORS,
   themeBackgroundModes,
   themeBackgroundStrengths,
@@ -7423,6 +7426,7 @@ function SubjectsSettings({ subjects, setSubjects }) {
   const [subjectColourManuallySelected, setSubjectColourManuallySelected] =
     useState(false);
   const [subjectFormError, setSubjectFormError] = useState("");
+  const [draggedSubjectId, setDraggedSubjectId] = useState(null);
 
   function openAddSubject() {
     setEditingSubjectId(null);
@@ -7505,6 +7509,24 @@ function SubjectsSettings({ subjects, setSubjects }) {
     if (editingSubjectId === subjectId) closeSubjectForm();
   }
 
+  function moveSubject(subjectId, direction) {
+    setSubjects((currentSubjects) =>
+      reorderSubjects(currentSubjects, subjectId, direction)
+    );
+  }
+
+  function dropSubject(targetSubjectId) {
+    if (!draggedSubjectId || draggedSubjectId === targetSubjectId) return;
+
+    const targetIndex = subjects.findIndex(
+      (subject) => subject.id === targetSubjectId
+    );
+    setSubjects((currentSubjects) =>
+      reorderSubjects(currentSubjects, draggedSubjectId, targetIndex)
+    );
+    setDraggedSubjectId(null);
+  }
+
   return (
     <div className="subjects-settings">
       <div className="panel subjects-panel">
@@ -7553,6 +7575,7 @@ function SubjectsSettings({ subjects, setSubjects }) {
                     setSubjectDraft({
                       ...subjectDraft,
                       courseSystem: event.target.value,
+                      level: getDefaultSubjectLevel(event.target.value),
                     })
                   }
                 >
@@ -7565,16 +7588,23 @@ function SubjectsSettings({ subjects, setSubjects }) {
               </label>
 
               <label>
-                <span>Level</span>
+                <span>{subjectDraft.courseSystem === "IB" ? "IB course level" : "Course level"}</span>
                 <select
                   value={subjectDraft.level}
                   onChange={(event) =>
                     setSubjectDraft({ ...subjectDraft, level: event.target.value })
                   }
                 >
-                  {subjectLevels.map((level) => (
-                    <option key={level} value={level}>
-                      {level}
+                  {!getSubjectLevelOptions(subjectDraft.courseSystem).some(
+                    (option) => option.value === subjectDraft.level
+                  ) && (
+                    <option value={subjectDraft.level}>
+                      {formatSubjectCourseLabel(subjectDraft)}
+                    </option>
+                  )}
+                  {getSubjectLevelOptions(subjectDraft.courseSystem).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -7651,19 +7681,34 @@ function SubjectsSettings({ subjects, setSubjects }) {
 
         {subjects.length > 0 ? (
           <div className="subject-profile-list">
-            {subjects.map((subject) => (
+            {subjects.map((subject, index) => (
               <article
-                className="subject-profile-card"
+                className={`subject-profile-card ${draggedSubjectId === subject.id ? "is-dragging" : ""}`}
                 key={subject.id}
                 style={{ "--subject-color": subject.colour }}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => dropSubject(subject.id)}
               >
                 <span className="subject-profile-colour" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="subject-reorder-handle"
+                  draggable
+                  aria-label={`Drag to reorder ${subject.name}`}
+                  title={`Drag to reorder ${subject.name}`}
+                  onDragStart={(event) => {
+                    setDraggedSubjectId(subject.id);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", subject.id);
+                  }}
+                  onDragEnd={() => setDraggedSubjectId(null)}
+                >
+                  Move
+                </button>
                 <div className="subject-profile-copy">
                   <div>
                     <h3>{subject.name}</h3>
-                    <span>
-                      {subject.courseSystem} · {subject.level}
-                    </span>
+                    <span>{formatSubjectCourseLabel(subject)}</span>
                   </div>
                   <p>
                     Current <strong>{subject.currentGrade || "Not set"}</strong>
@@ -7672,6 +7717,22 @@ function SubjectsSettings({ subjects, setSubjects }) {
                   </p>
                 </div>
                 <div className="subject-profile-actions">
+                  <button
+                    type="button"
+                    onClick={() => moveSubject(subject.id, "up")}
+                    disabled={index === 0}
+                    aria-label={`Move ${subject.name} up`}
+                  >
+                    Up
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => moveSubject(subject.id, "down")}
+                    disabled={index === subjects.length - 1}
+                    aria-label={`Move ${subject.name} down`}
+                  >
+                    Down
+                  </button>
                   <button type="button" onClick={() => openEditSubject(subject)}>
                     Edit
                   </button>

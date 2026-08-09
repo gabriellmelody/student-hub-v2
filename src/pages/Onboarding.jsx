@@ -3,7 +3,8 @@ import {
   REAL_CLASSROOM_COURSE_LINKS_STORAGE_KEY,
   createSubjectDraft,
   subjectCourseSystems,
-  subjectLevels,
+  getDefaultSubjectLevel,
+  getSubjectLevelOptions,
 } from "../utils/appUtils.js";
 import {
   createRealClassroomCourseLink,
@@ -730,8 +731,8 @@ function ManualSubjectForm({
             setSubjectDraft((currentDraft) => ({ ...currentDraft, name, colour: suggestSubjectDraftColour({ subjectName: name, currentColour: currentDraft.colour, existingSubjects: subjects, manuallySelected: subjectColourManuallySelected }) }));
           }} />
         </label>
-        <label className="onboarding-subject-system-field"><span>Course system</span><select value={subjectDraft.courseSystem} onChange={(event) => setSubjectDraft({ ...subjectDraft, courseSystem: event.target.value })}>{subjectCourseSystems.map((option) => <option key={option}>{option}</option>)}</select></label>
-        <label className="onboarding-subject-level-field"><span>Level</span><select value={subjectDraft.level} onChange={(event) => setSubjectDraft({ ...subjectDraft, level: event.target.value })}>{subjectLevels.map((option) => <option key={option}>{option}</option>)}</select></label>
+        <label className="onboarding-subject-system-field"><span>Course system</span><select value={subjectDraft.courseSystem} onChange={(event) => setSubjectDraft({ ...subjectDraft, courseSystem: event.target.value, level: getDefaultSubjectLevel(event.target.value) })}>{subjectCourseSystems.map((option) => <option key={option}>{option}</option>)}</select></label>
+        <label className="onboarding-subject-level-field"><span>{subjectDraft.courseSystem === "IB" ? "IB course level" : "Course level"}</span><select value={subjectDraft.level} onChange={(event) => setSubjectDraft({ ...subjectDraft, level: event.target.value })}>{getSubjectLevelOptions(subjectDraft.courseSystem).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         <label className="onboarding-subject-grade-field"><span>Current grade</span><input value={subjectDraft.currentGrade} placeholder="Optional" onChange={(event) => setSubjectDraft({ ...subjectDraft, currentGrade: event.target.value })} /></label>
         <label className="onboarding-subject-grade-field"><span>Target grade</span><input value={subjectDraft.targetGrade} placeholder="Optional" onChange={(event) => setSubjectDraft({ ...subjectDraft, targetGrade: event.target.value })} /></label>
         <label className="subject-colour-field"><span>Colour</span><span><input type="color" value={subjectDraft.colour} onChange={(event) => { setSubjectColourManuallySelected(true); setSubjectDraft({ ...subjectDraft, colour: event.target.value }); }} /><strong>{subjectDraft.colour.toUpperCase()}</strong></span></label>

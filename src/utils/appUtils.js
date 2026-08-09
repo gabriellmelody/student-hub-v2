@@ -413,6 +413,88 @@ export function getPinnedQuickLinks(preferences) {
 }
 export const subjectCourseSystems = ["IB", "AP", "GCSE", "A-level", "Other"];
 export const subjectLevels = ["HL", "SL", "AP", "Standard", "Higher", "Other"];
+
+export function getSubjectLevelOptions(courseSystem) {
+  if (courseSystem === "IB") {
+    return [
+      { value: "SL", label: "Standard Level (SL)" },
+      { value: "HL", label: "Higher Level (HL)" },
+    ];
+  }
+
+  if (courseSystem === "AP") return [{ value: "AP", label: "AP" }];
+
+  if (courseSystem === "GCSE" || courseSystem === "A-level") {
+    return [
+      { value: "Standard", label: "Standard" },
+      { value: "Higher", label: "Higher" },
+    ];
+  }
+
+  return [{ value: "Other", label: "Other" }];
+}
+
+export function getSubjectLevelLabel(subjectOrCourseSystem, maybeLevel) {
+  const courseSystem =
+    typeof subjectOrCourseSystem === "object"
+      ? subjectOrCourseSystem?.courseSystem
+      : subjectOrCourseSystem;
+  const level =
+    typeof subjectOrCourseSystem === "object"
+      ? subjectOrCourseSystem?.level
+      : maybeLevel;
+  const normalizedLevel = String(level || "Other").trim() || "Other";
+  const matchedOption = getSubjectLevelOptions(courseSystem).find(
+    (option) => option.value === normalizedLevel
+  );
+
+  if (matchedOption) return matchedOption.label;
+  if (courseSystem === "IB" && normalizedLevel === "Standard") {
+    return "Standard Level (SL)";
+  }
+  if (courseSystem === "IB" && normalizedLevel === "Higher") {
+    return "Higher Level (HL)";
+  }
+
+  return normalizedLevel;
+}
+
+export function formatSubjectCourseLabel(subject) {
+  const courseSystem = String(subject?.courseSystem || "Other").trim() || "Other";
+  const levelLabel = getSubjectLevelLabel(courseSystem, subject?.level);
+
+  return courseSystem === levelLabel ? courseSystem : `${courseSystem} · ${levelLabel}`;
+}
+
+export function getDefaultSubjectLevel(courseSystem) {
+  return getSubjectLevelOptions(courseSystem)[0]?.value || "Other";
+}
+
+export function reorderSubjects(subjects, subjectId, directionOrTargetIndex) {
+  if (!Array.isArray(subjects)) return [];
+
+  const currentIndex = subjects.findIndex(
+    (subject) => String(subject?.id) === String(subjectId)
+  );
+  if (currentIndex === -1) return subjects;
+
+  const nextSubjects = [...subjects];
+  const [subject] = nextSubjects.splice(currentIndex, 1);
+  const rawTargetIndex =
+    directionOrTargetIndex === "up"
+      ? currentIndex - 1
+      : directionOrTargetIndex === "down"
+        ? currentIndex + 1
+        : Number(directionOrTargetIndex);
+  const targetIndex = Math.min(
+    Math.max(0, Number.isFinite(rawTargetIndex) ? rawTargetIndex : currentIndex),
+    nextSubjects.length
+  );
+
+  nextSubjects.splice(targetIndex, 0, subject);
+  return nextSubjects;
+}
+
 export const taskTypeOptions = [
   { value: "homework", label: "Homework" },
   { value: "assessment", label: "Assessment" },
@@ -2163,14 +2245,7 @@ export function createSubjectDraft(
   return {
     name: subjectName,
     courseSystem,
-    level:
-      courseSystem === "IB"
-        ? "HL"
-        : courseSystem === "AP"
-          ? "AP"
-          : courseSystem === "GCSE" || courseSystem === "A-level"
-            ? "Higher"
-            : "Standard",
+    level: getDefaultSubjectLevel(courseSystem),
     currentGrade: "",
     targetGrade: "",
     colour: suggestSubjectColour(subjectName, existingSubjects, "new-subject"),
