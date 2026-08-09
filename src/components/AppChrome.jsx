@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import DayloMark from "./DayloMark.jsx";
+import ProfileAvatar from "./ProfileAvatar.jsx";
 import QuickLinkIcon from "./QuickLinkIcon.jsx";
 import { getPinnedQuickLinks } from "../utils/appUtils.js";
 
@@ -26,19 +27,6 @@ function getMobilePageTitle(activePage, settingsView) {
   }
 
   return "Home";
-}
-
-function getAccountIdentity(displayName) {
-  const accountName = (displayName || "Student").trim() || "Student";
-  const accountInitials =
-    accountName
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase())
-      .join("") || "S";
-
-  return { accountName, accountInitials };
 }
 
 function MobileTopBar({ activePage, settingsView, logoAppearance }) {
@@ -105,12 +93,13 @@ function MobileMoreSheet({
   setActivePage,
   openSettings,
   quickLinksPreferences,
-  displayName,
+  localProfile,
+  onEditProfile,
   theme,
   setTheme,
 }) {
   const closeButtonRef = useRef(null);
-  const { accountName, accountInitials } = getAccountIdentity(displayName);
+  const accountName = localProfile.displayName;
   const pinnedLinks = getPinnedQuickLinks(quickLinksPreferences);
 
   useEffect(() => {
@@ -225,14 +214,23 @@ function MobileMoreSheet({
 
           <section className="mobile-more-section" aria-labelledby="mobile-more-account">
             <div className="mobile-more-account">
-              <span className="mobile-more-avatar" aria-hidden="true">
-                {accountInitials}
-              </span>
+              <ProfileAvatar profile={localProfile} className="mobile-more-avatar" />
               <span>
                 <strong id="mobile-more-account">{accountName}</strong>
                 <small>Local workspace</small>
               </span>
             </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                onEditProfile();
+                onClose();
+              }}
+            >
+              <span aria-hidden="true">✎</span>
+              <strong>Edit profile</strong>
+            </button>
 
             <div className="mobile-more-theme" role="group" aria-label="Appearance">
               {["light", "dark", "system"].map((option) => (
@@ -327,7 +325,8 @@ function AccountMenu({
   collapsed,
   active,
   openSettings,
-  displayName,
+  localProfile,
+  onEditProfile,
   theme,
   setTheme,
   themeColors,
@@ -483,7 +482,7 @@ function AccountMenu({
     setPersonalisationOpen(false);
   }
 
-  const { accountName, accountInitials } = getAccountIdentity(displayName);
+  const accountName = localProfile.displayName;
   const backgroundStrengthLabel =
     themeColors.backgroundStrength === "medium"
       ? "Medium"
@@ -605,12 +604,10 @@ function AccountMenu({
               ) : (
                 <>
                   <div className="sidebar-account-menu-heading">
-                    <span
+                    <ProfileAvatar
+                      profile={localProfile}
                       className="sidebar-account-menu-avatar"
-                      aria-hidden="true"
-                    >
-                      {accountInitials}
-                    </span>
+                    />
                     <span className="sidebar-account-menu-copy">
                       <strong>{accountName}</strong>
                       <small>Local workspace</small>
@@ -622,6 +619,14 @@ function AccountMenu({
                       ···
                     </span>
                   </div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => chooseItem(onEditProfile)}
+                  >
+                    <span aria-hidden="true">✎</span>
+                    <span>Edit profile</span>
+                  </button>
                   <button
                     type="button"
                     role="menuitem"
@@ -699,9 +704,7 @@ function AccountMenu({
           }
         }}
       >
-        <span className="sidebar-account-avatar" aria-hidden="true">
-          {accountInitials}
-        </span>
+        <ProfileAvatar profile={localProfile} className="sidebar-account-avatar" />
         <span className="sidebar-account-copy">
           <strong>{accountName}</strong>
           <small>Local workspace</small>

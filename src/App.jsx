@@ -12,6 +12,7 @@ import {
 import SmartPlannerModal from "./components/SmartPlannerModal.jsx";
 import GuidedTour from "./components/GuidedTour.jsx";
 import ReleaseWelcomeModal from "./components/ReleaseWelcomeModal.jsx";
+import EditLocalProfileModal from "./components/EditLocalProfileModal.jsx";
 import DayloMark from "./components/DayloMark.jsx";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import HomePage from "./pages/HomePage.jsx";
@@ -110,6 +111,11 @@ import {
   clearClassroomSetupResume,
   markClassroomSetupIntroSeen,
 } from "./utils/classroomSetupTourUtils.js";
+import {
+  clearLocalProfile,
+  loadLocalProfile,
+  saveLocalProfile,
+} from "./utils/localProfileUtils.js";
 
 function resolveThemePreference(themePreference) {
   if (themePreference !== "system") return themePreference === "dark" ? "dark" : "light";
@@ -273,6 +279,8 @@ function App() {
   });
   const [subjects, setSubjects] = useState(loadSubjects);
   const [studentProfile, setStudentProfile] = useState(loadStudentProfile);
+  const [localProfile, setLocalProfile] = useState(loadLocalProfile);
+  const [localProfileEditorOpen, setLocalProfileEditorOpen] = useState(false);
   const [lastSeenDayloVersion, setLastSeenDayloVersion] = useState(
     loadAcknowledgedReleaseVersion
   );
@@ -2571,6 +2579,8 @@ function App() {
     setQuickLinksPreferences(loadQuickLinksPreferences());
     setLastSeenDayloVersion("");
     setReleaseWelcomeOpen(false);
+    setLocalProfile(clearLocalProfile());
+    setLocalProfileEditorOpen(false);
     setStudentProfile({
       schoolSystem: "",
       onboardingCompleted: false,
@@ -2677,7 +2687,8 @@ function App() {
           collapsed={sidebarCollapsed}
           active={activePage === "settings"}
           openSettings={openSettings}
-          displayName={studentProfile.displayName || studentProfile.name || "Student"}
+          localProfile={localProfile}
+          onEditProfile={() => setLocalProfileEditorOpen(true)}
           theme={theme}
           setTheme={setTheme}
           themeColors={themeColors}
@@ -2822,7 +2833,8 @@ function App() {
         setActivePage={setActivePage}
         openSettings={openSettings}
         quickLinksPreferences={quickLinksPreferences}
-        displayName={studentProfile.displayName || studentProfile.name || "Student"}
+        localProfile={localProfile}
+        onEditProfile={() => setLocalProfileEditorOpen(true)}
         theme={theme}
         setTheme={setTheme}
       />
@@ -2862,6 +2874,17 @@ function App() {
         />
       )}
 
+      {localProfileEditorOpen && (
+        <EditLocalProfileModal
+          profile={localProfile}
+          onClose={() => setLocalProfileEditorOpen(false)}
+          onSave={(nextProfile) => {
+            setLocalProfile(saveLocalProfile(nextProfile));
+            setLocalProfileEditorOpen(false);
+          }}
+        />
+      )}
+
       <GuidedTour
         activePage={activePage}
         activeSettingsView={settingsView}
@@ -2871,6 +2894,7 @@ function App() {
           mobileMoreOpen ||
           showAddTask ||
           Boolean(eveningPlanSuccess) ||
+          localProfileEditorOpen ||
           (smartPlannerOpen && guidedTour.activeTour?.id !== "smart-planner")
         }
         finishTour={guidedTour.finishTour}
