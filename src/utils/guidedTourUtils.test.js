@@ -545,6 +545,44 @@ test("Classroom setup steps provide safe missing-target fallbacks", () => {
   assert.ok(tour.steps.every((step) => step.fallbackTarget));
 });
 
+test("Classroom setup guided-tour targets exist for each reachable state", () => {
+  const expectedTargets = new Set([
+    '[data-tour="classroom-setup-connect"]',
+    '[data-tour="classroom-setup-card"]',
+    '[data-tour="classroom-setup-load"]',
+    '[data-tour="classroom-setup-manage"]',
+    '[data-tour="classroom-setup-class-choices"]',
+    '[data-tour="classroom-setup-subject-links"]',
+    '[data-tour="classroom-setup-preview"]',
+    '[data-tour="classroom-setup-import"]',
+    '[data-tour="classroom-setup-manager"]',
+  ]);
+  const tours = [
+    getGuidedTourDefinition("google-classroom-setup", { connected: false }),
+    getGuidedTourDefinition("google-classroom-setup", { connected: true, courseCount: 0 }),
+    getGuidedTourDefinition("google-classroom-setup", {
+      connected: true,
+      courseCount: 2,
+      includedCount: 1,
+      linkedIncludedCount: 1,
+      previewAssignmentCount: 3,
+      managerOpen: true,
+    }),
+  ];
+
+  tours.flatMap((tour) => tour.steps).forEach((step) => {
+    assert.ok(expectedTargets.has(step.target));
+    assert.ok(step.fallbackTarget);
+  });
+});
+
+test("Classroom setup works with mobile target configuration", () => {
+  const tour = getGuidedTourDefinition("google-classroom-setup", { connected: false });
+
+  assert.ok(tour.steps.every((step) => step.mobilePlacement));
+  assert.ok(tour.steps.every((step) => ["top", "bottom"].includes(step.mobilePlacement)));
+});
+
 test("unknown forced replay identifiers are rejected", () => {
   assert.equal(getGuidedTourDefinition("not-a-tour"), null);
 });

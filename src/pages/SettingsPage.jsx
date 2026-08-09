@@ -68,6 +68,7 @@ import {
   validateSupportDraft,
 } from "../utils/helpSupportUtils.js";
 import { loadGuidedTourProgress } from "../utils/guidedTourStorage.js";
+import { getGoogleOAuthAccessDeniedMessage } from "../utils/googleOAuthErrorUtils.js";
 import {
   REAL_CLASSROOM_SOURCE,
   createRealClassroomCourseLink,
@@ -2222,13 +2223,10 @@ function IntegrationsSettings({
         include_granted_scopes: true,
         callback: async (codeResponse) => {
           if (codeResponse?.error) {
-            const cancelled = codeResponse.error === "access_denied";
+            const accessDeniedMessage = getGoogleOAuthAccessDeniedMessage(codeResponse);
 
-            if (cancelled) {
-              setGooglePopupMessage(
-                provider,
-                "Google connection was cancelled."
-              );
+            if (accessDeniedMessage) {
+              setGooglePopupMessage(provider, accessDeniedMessage);
             } else {
               setGooglePopupError(
                 provider,

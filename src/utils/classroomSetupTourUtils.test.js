@@ -124,3 +124,72 @@ test("stale OAuth resume state is discarded", () => {
     null
   );
 });
+
+test("successful OAuth resume moves to the next relevant setup step", () => {
+  const storage = createStorage();
+  const now = () => new Date("2026-08-01T10:00:00.000Z");
+
+  saveClassroomSetupResume("load-classes", storage, now);
+  const resume = loadClassroomSetupResume(storage, now);
+
+  assert.equal(resume.phase, "load-classes");
+  assert.equal(
+    getClassroomSetupStartPhase({ connected: true, courseCount: 0 }, resume.phase),
+    "load-classes"
+  );
+});
+
+test("loaded classes advance to choosing or linking appropriately", () => {
+  assert.equal(
+    getClassroomSetupStartPhase({ connected: true, courseCount: 3, includedCount: 0 }),
+    "choose-classes"
+  );
+  assert.equal(
+    getClassroomSetupStartPhase({
+      connected: true,
+      courseCount: 3,
+      includedCount: 2,
+      linkedIncludedCount: 1,
+    }),
+    "link-subjects"
+  );
+});
+
+test("imported state skips completed setup steps", () => {
+  assert.equal(
+    getClassroomSetupStartPhase({
+      connected: true,
+      courseCount: 3,
+      includedCount: 2,
+      linkedIncludedCount: 2,
+      importedCount: 1,
+      previewAssignmentCount: 5,
+    }),
+    "manage"
+  );
+});
+
+test("replay starts safely from the current context", () => {
+  assert.equal(
+    getClassroomSetupStartPhase({ connected: true, courseCount: 0 }),
+    "load-classes"
+  );
+  assert.equal(
+    getClassroomSetupStartPhase({ connected: false, courseCount: 3 }),
+    "connect"
+  );
+});
+
+test("stale session setup phase cannot trap the user", () => {
+  const storage = createStorage();
+  storage.setItem(
+    "daylo-classroom-setup-tour-resume",
+    JSON.stringify({ phase: "choose-classes", updatedAt: "2026-08-01T08:00:00.000Z" })
+  );
+
+  assert.equal(
+    loadClassroomSetupResume(storage, () => new Date("2026-08-01T12:00:00.000Z")),
+    null
+  );
+  assert.equal(storage.getItem("daylo-classroom-setup-tour-resume"), null);
+});
