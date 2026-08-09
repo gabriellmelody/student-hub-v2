@@ -85,6 +85,7 @@ import {
 } from "./utils/onboardingUtils.js";
 import useGuidedTour from "./hooks/useGuidedTour.js";
 import usePwaInstall from "./hooks/usePwaInstall.js";
+import { useAuth } from "./hooks/useAuth.jsx";
 import usePwaUpdate from "./hooks/usePwaUpdate.js";
 import { getGuidedTourDefinition } from "./data/guidedTours.js";
 import {
@@ -278,6 +279,7 @@ function getInitialNavigationState() {
 }
 
 function App() {
+  const auth = useAuth();
   const [initialNavigation] = useState(getInitialNavigationState);
   const [activePage, setActivePage] = useState(initialNavigation.activePage);
   const [settingsView, setSettingsView] = useState(
@@ -313,6 +315,11 @@ function App() {
   const [subjects, setSubjects] = useState(loadSubjects);
   const [studentProfile, setStudentProfile] = useState(loadStudentProfile);
   const [localProfile, setLocalProfile] = useState(loadLocalProfile);
+  const accountIdentity = {
+    displayName: auth.profile?.display_name || auth.user?.email || localProfile.displayName,
+    email: auth.user?.email || "",
+    avatarId: auth.profile?.avatar_id || localProfile.avatarId,
+  };
   const [localProfileEditorOpen, setLocalProfileEditorOpen] = useState(false);
   const [lastSeenDayloVersion, setLastSeenDayloVersion] = useState(
     loadAcknowledgedReleaseVersion
@@ -3278,7 +3285,9 @@ function App() {
           active={activePage === "settings"}
           openSettings={openSettings}
           localProfile={localProfile}
+          accountIdentity={accountIdentity}
           onEditProfile={() => setLocalProfileEditorOpen(true)}
+          onSignOut={auth.signOut}
           theme={theme}
           setTheme={setTheme}
           themeColors={themeColors}
@@ -3332,7 +3341,9 @@ function App() {
         openSettings={openSettings}
         quickLinksPreferences={quickLinksPreferences}
         localProfile={localProfile}
+        accountIdentity={accountIdentity}
         onEditProfile={() => setLocalProfileEditorOpen(true)}
+        onSignOut={auth.signOut}
         theme={theme}
         setTheme={setTheme}
       />

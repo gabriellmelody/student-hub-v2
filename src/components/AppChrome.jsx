@@ -104,12 +104,15 @@ function MobileMoreSheet({
   openSettings,
   quickLinksPreferences,
   localProfile,
+  accountIdentity,
   onEditProfile,
+  onSignOut,
   theme,
   setTheme,
 }) {
   const closeButtonRef = useRef(null);
-  const accountName = localProfile.displayName;
+  const accountName = accountIdentity?.displayName || localProfile.displayName;
+  const accountEmail = accountIdentity?.email || "";
   const pinnedLinks = getPinnedQuickLinks(quickLinksPreferences);
 
   useEffect(() => {
@@ -226,10 +229,10 @@ function MobileMoreSheet({
 
           <section className="mobile-more-section" aria-labelledby="mobile-more-account">
             <div className="mobile-more-account">
-              <ProfileAvatar profile={localProfile} className="mobile-more-avatar" />
+              <ProfileAvatar profile={{ ...localProfile, avatarId: accountIdentity?.avatarId || localProfile.avatarId, displayName: accountName }} className="mobile-more-avatar" />
               <span>
                 <strong id="mobile-more-account">{accountName}</strong>
-                <small>Local workspace</small>
+                <small>{accountEmail}</small>
               </span>
             </div>
 
@@ -272,13 +275,13 @@ function MobileMoreSheet({
             </button>
             <button
               type="button"
-              className="mobile-more-disabled"
-              disabled
-              title="Log out unavailable until accounts are added"
+              onClick={() => {
+                onSignOut?.();
+                onClose();
+              }}
             >
               <span aria-hidden="true">↪</span>
-              <strong>Log out</strong>
-              <small>Accounts coming later</small>
+              <strong>Sign out</strong>
             </button>
           </section>
         </div>
@@ -357,7 +360,9 @@ function AccountMenu({
   active,
   openSettings,
   localProfile,
+  accountIdentity,
   onEditProfile,
+  onSignOut,
   theme,
   setTheme,
   themeColors,
@@ -513,7 +518,8 @@ function AccountMenu({
     setPersonalisationOpen(false);
   }
 
-  const accountName = localProfile.displayName;
+  const accountName = accountIdentity?.displayName || localProfile.displayName;
+  const accountEmail = accountIdentity?.email || "";
   const backgroundStrengthLabel =
     themeColors.backgroundStrength === "medium"
       ? "Medium"
@@ -636,12 +642,12 @@ function AccountMenu({
                 <>
                   <div className="sidebar-account-menu-heading">
                     <ProfileAvatar
-                      profile={localProfile}
+                      profile={{ ...localProfile, avatarId: accountIdentity?.avatarId || localProfile.avatarId, displayName: accountName }}
                       className="sidebar-account-menu-avatar"
                     />
                     <span className="sidebar-account-menu-copy">
                       <strong>{accountName}</strong>
-                      <small>Local workspace</small>
+                      <small>{accountEmail}</small>
                     </span>
                     <span
                       className="sidebar-account-menu-indicator"
@@ -698,13 +704,10 @@ function AccountMenu({
                   <button
                     type="button"
                     role="menuitem"
-                    className="sidebar-account-menu-disabled"
-                    disabled
-                    title="Log out unavailable until accounts are added"
+                    onClick={() => chooseItem(() => onSignOut?.())}
                   >
                     <span aria-hidden="true">↪</span>
-                    <span>Log out</span>
-                    <small>Accounts coming later</small>
+                    <span>Sign out</span>
                   </button>
                 </>
               )}
@@ -724,7 +727,7 @@ function AccountMenu({
         type="button"
         ref={accountButtonRef}
         className={`sidebar-account-button ${active ? "active" : ""}`}
-        aria-label={collapsed ? "Open local workspace menu" : undefined}
+        aria-label={collapsed ? "Open account menu" : undefined}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => {
@@ -735,10 +738,10 @@ function AccountMenu({
           }
         }}
       >
-        <ProfileAvatar profile={localProfile} className="sidebar-account-avatar" />
+        <ProfileAvatar profile={{ ...localProfile, avatarId: accountIdentity?.avatarId || localProfile.avatarId, displayName: accountName }} className="sidebar-account-avatar" />
         <span className="sidebar-account-copy">
           <strong>{accountName}</strong>
-          <small>Local workspace</small>
+          <small>{accountEmail}</small>
         </span>
         <span className="sidebar-account-chevron" aria-hidden="true">
           {open ? "⌄" : "⌃"}

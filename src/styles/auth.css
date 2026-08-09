@@ -1,0 +1,237 @@
+/* Account sign-in and sign-up gate. */
+
+.auth-page {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background:
+    radial-gradient(circle at top left, var(--accent-tint), transparent 34%),
+    var(--app-bg);
+}
+
+.auth-page-loading {
+  gap: 14px;
+  align-content: center;
+  color: var(--text-secondary);
+}
+
+.auth-panel {
+  width: min(100%, 430px);
+  display: grid;
+  gap: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: 24px;
+  background: var(--surface);
+  box-shadow: var(--shadow-modal);
+}
+
+.auth-error-panel {
+  text-align: left;
+}
+
+.auth-error-panel h1,
+.auth-brand h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1.55rem, 8vw, 2.2rem);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.auth-error-panel p,
+.auth-intro {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.auth-logo {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+}
+
+.auth-google-button {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  font: inherit;
+}
+
+.auth-google-button small {
+  color: var(--text-muted);
+  font-size: var(--font-helper);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: var(--font-helper);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--border);
+}
+
+.auth-form {
+  display: grid;
+  gap: 13px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-weight: 680;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--surface-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.auth-form input:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.auth-submit {
+  width: 100%;
+  justify-content: center;
+}
+
+.auth-message {
+  margin: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: var(--font-helper);
+  line-height: 1.4;
+}
+
+.auth-message-error {
+  border: 1px solid color-mix(in srgb, var(--urgent) 42%, var(--border));
+  background: color-mix(in srgb, var(--urgent) 12%, var(--surface));
+  color: var(--text);
+}
+
+.auth-message-success {
+  border: 1px solid color-mix(in srgb, var(--success) 42%, var(--border));
+  background: color-mix(in srgb, var(--success) 12%, var(--surface));
+  color: var(--text);
+}
+
+.auth-switch {
+  margin: 0;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.auth-switch button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent-soft);
+  font: inherit;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+@media (max-width: 430px) {
+  .auth-page {
+    padding: 14px;
+    place-items: stretch;
+    align-items: center;
+  }
+
+  .auth-panel {
+    width: 100%;
+    padding: 18px;
+  }
+
+  .auth-brand {
+    align-items: flex-start;
+  }
+}
+
+.auth-glow-surface {
+  position: relative;
+  overflow: hidden;
+  --pointer-x: 50%;
+  --pointer-y: 50%;
+}
+
+.auth-glow-surface > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) and (min-width: 641px) {
+  .auth-glow-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 260ms ease;
+    background:
+      radial-gradient(
+        260px circle at var(--pointer-x) var(--pointer-y),
+        color-mix(in srgb, var(--accent) 20%, transparent),
+        color-mix(in srgb, var(--accent-secondary) 12%, transparent) 34%,
+        transparent 68%
+      );
+  }
+
+  .auth-glow-surface.is-pointer-glowing::before {
+    opacity: 1;
+  }
+
+  .auth-glow-surface.is-pointer-glowing .auth-panel {
+    border-color: color-mix(in srgb, var(--accent) 26%, var(--border));
+    box-shadow:
+      var(--shadow-modal),
+      0 0 34px color-mix(in srgb, var(--accent) 10%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-glow-surface::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: radial-gradient(
+      circle at 50% 10%,
+      color-mix(in srgb, var(--accent) 10%, transparent),
+      transparent 42%
+    );
+  }
+}
