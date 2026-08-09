@@ -8,6 +8,7 @@ import {
   MobileTopBar,
   NavButton,
   QuickLinksNav,
+  SettingsShortcut,
 } from "./components/AppChrome.jsx";
 import SmartPlannerModal from "./components/SmartPlannerModal.jsx";
 import GuidedTour from "./components/GuidedTour.jsx";
@@ -2619,6 +2620,7 @@ function App() {
         activePage={activePage}
         settingsView={settingsView}
         logoAppearance={themeColors.logoAppearance}
+        openSettings={openSettings}
       />
 
       <aside className={`sidebar ${sidebarCollapsed ? "collapsed" : ""}`}>
@@ -2687,6 +2689,12 @@ function App() {
             openSettings={openSettings}
           />
         </nav>
+
+        <SettingsShortcut
+          collapsed={sidebarCollapsed}
+          active={activePage === "settings"}
+          openSettings={openSettings}
+        />
 
         <AccountMenu
           collapsed={sidebarCollapsed}

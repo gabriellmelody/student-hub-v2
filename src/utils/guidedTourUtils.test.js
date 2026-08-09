@@ -462,12 +462,13 @@ test("tour state transitions do not persist completion", () => {
   }
 });
 
-test("getting started contains the six required app areas", () => {
-  assert.equal(gettingStartedGuidedTour.steps.length, 6);
+test("getting started contains the required app areas and Settings shortcut", () => {
+  assert.equal(gettingStartedGuidedTour.steps.length, 7);
   assert.deepEqual(
     gettingStartedGuidedTour.steps.map((step) => step.page),
-    ["home", "tasks", "subjects", "calendar", "plan", "settings"]
+    ["home", "tasks", "subjects", "calendar", "plan", "plan", "settings"]
   );
+  assert.equal(gettingStartedGuidedTour.steps[5].id, "settings-shortcut");
 });
 
 test("getting started opens the Integrations settings view", () => {

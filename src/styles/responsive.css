@@ -393,6 +393,38 @@ button {
     gap: 10px;
   }
 
+  .mobile-settings-shortcut {
+    flex: 0 0 auto;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 740;
+  }
+
+  .mobile-settings-shortcut:hover,
+  .mobile-settings-shortcut:focus-visible {
+    background: var(--surface-hover);
+    color: var(--text);
+  }
+
+  .mobile-settings-shortcut span {
+    color: currentColor;
+  }
+
+  .mobile-settings-shortcut strong {
+    color: currentColor;
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
   .mobile-topbar-mark {
     width: 34px;
     height: 34px;
@@ -500,6 +532,7 @@ button {
   }
 
   .mobile-bottom-nav-item:focus-visible,
+  .mobile-settings-shortcut:focus-visible,
   .mobile-more-close:focus-visible,
   .mobile-more-section button:focus-visible,
   .mobile-more-quick-links a:focus-visible,
@@ -621,6 +654,11 @@ button {
     border-color: var(--border);
     background: var(--surface-hover);
     color: var(--text);
+  }
+
+  .mobile-more-settings-action {
+    border-color: color-mix(in srgb, var(--accent-border) 74%, var(--border));
+    background: var(--accent-tint);
   }
 
   .mobile-more-section button > span:first-child,

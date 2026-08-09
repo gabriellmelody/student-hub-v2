@@ -29,7 +29,7 @@ function getMobilePageTitle(activePage, settingsView) {
   return "Home";
 }
 
-function MobileTopBar({ activePage, settingsView, logoAppearance }) {
+function MobileTopBar({ activePage, settingsView, logoAppearance, openSettings }) {
   return (
     <header className="mobile-topbar" aria-label="DayLo mobile header">
       <div className="mobile-topbar-brand">
@@ -42,6 +42,16 @@ function MobileTopBar({ activePage, settingsView, logoAppearance }) {
           <small>DayLo</small>
         </div>
       </div>
+
+      <button
+        type="button"
+        className="mobile-settings-shortcut"
+        data-tour="mobile-settings-shortcut"
+        onClick={() => openSettings("hub")}
+      >
+        <span aria-hidden="true">⚙</span>
+        <strong>Settings</strong>
+      </button>
     </header>
   );
 }
@@ -171,7 +181,12 @@ function MobileMoreSheet({
               <span aria-hidden="true">◈</span>
               <strong>Subjects</strong>
             </button>
-            <button type="button" onClick={() => navigateSettings("hub")}>
+            <button
+              type="button"
+              className="mobile-more-settings-action"
+              data-tour="mobile-more-settings-action"
+              onClick={() => navigateSettings("hub")}
+            >
               <span aria-hidden="true">⚙</span>
               <strong>Settings</strong>
             </button>
@@ -273,6 +288,25 @@ function MobileMoreSheet({
       </section>
     </div>,
     document.body
+  );
+}
+
+function SettingsShortcut({ collapsed, active, openSettings }) {
+  return (
+    <button
+      type="button"
+      className={`sidebar-settings-shortcut ${active ? "active" : ""}`}
+      data-tour="settings-shortcut"
+      aria-label={collapsed ? "Open Settings" : undefined}
+      title={collapsed ? "Settings" : undefined}
+      aria-current={active ? "page" : undefined}
+      onClick={() => openSettings("hub")}
+    >
+      <span className="sidebar-settings-shortcut-icon" aria-hidden="true">
+        ⚙
+      </span>
+      <span className="sidebar-settings-shortcut-label">Settings</span>
+    </button>
   );
 }
 
@@ -725,4 +759,5 @@ export {
   MobileTopBar,
   NavButton,
   QuickLinksNav,
+  SettingsShortcut,
 };

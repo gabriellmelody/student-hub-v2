@@ -81,6 +81,16 @@ export const gettingStartedGuidedTour = {
       mobilePlacement: "bottom",
     },
     {
+      id: "settings-shortcut",
+      page: "plan",
+      target: '[data-tour="settings-shortcut"]',
+      mobileTarget: '[data-tour="mobile-settings-shortcut"]',
+      title: "Personalise DayLo",
+      description: "Open Settings to change appearance, integrations and other preferences.",
+      placement: "right",
+      mobilePlacement: "bottom",
+    },
+    {
       id: "smart-planner-status",
       page: "settings",
       settingsView: "integrations",

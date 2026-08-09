@@ -286,6 +286,62 @@
   display: none;
 }
 
+.sidebar-settings-shortcut {
+  width: 100%;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: var(--density-nav-gap);
+  padding: 8px 9px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 720;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-settings-shortcut:hover,
+.sidebar-settings-shortcut:focus-visible {
+  border-color: color-mix(in srgb, var(--border) 78%, transparent);
+  background: color-mix(in srgb, var(--surface) 68%, transparent);
+  color: var(--text);
+}
+
+.sidebar-settings-shortcut.active {
+  border-color: var(--accent-border);
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+}
+
+.sidebar-settings-shortcut-icon {
+  width: 22px;
+  display: grid;
+  place-items: center;
+  color: currentColor;
+}
+
+.sidebar-settings-shortcut-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .sidebar-settings-shortcut {
+  justify-content: center;
+  min-height: 34px;
+  padding: 5px;
+}
+
+.sidebar.collapsed .sidebar-settings-shortcut-label {
+  display: none;
+}
+
 .sidebar-account {
   position: relative;
   z-index: 12;
