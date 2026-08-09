@@ -550,6 +550,8 @@ function SettingsPage({
   classroomSetupTourRequest = 0,
   onStartClassroomSetupTour,
   navigationRequest = 0,
+  installControl = { capability: "unsupported", actionLabel: "", statusLabel: "" },
+  onInstallDayLo = () => {},
 }) {
   const [settingsView, setSettingsView] = useState(() => initialView || "hub");
   const [savedThemeColorSnapshot, setSavedThemeColorSnapshot] = useState(() =>
@@ -894,6 +896,28 @@ function SettingsPage({
               </span>
             </span>
           </button>
+
+          <div className="settings-hub-card settings-install-card">
+            <span>
+              <strong>Install DayLo</strong>
+              <small>Open DayLo directly from your device like an app.</small>
+            </span>
+            <span className="settings-install-action">
+              {installControl.capability === "installed" ? (
+                <span className="settings-installed-badge">Installed</span>
+              ) : installControl.actionLabel ? (
+                <button
+                  type="button"
+                  className="small-button primary"
+                  onClick={onInstallDayLo}
+                >
+                  {installControl.actionLabel}
+                </button>
+              ) : (
+                <small>{installControl.statusLabel || "Open this in a supported browser."}</small>
+              )}
+            </span>
+          </div>
 
           <button
             type="button"

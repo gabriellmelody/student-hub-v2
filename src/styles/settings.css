@@ -5285,3 +5285,41 @@ html:has(.settings-page) {
     animation: none;
   }
 }
+
+.settings-install-card {
+  cursor: default;
+}
+
+.settings-hub-card.settings-install-card:hover {
+  transform: none;
+  border-color: var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.settings-install-action {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 118px;
+  text-align: right;
+}
+
+.settings-install-action > small {
+  color: var(--text-secondary);
+  font-size: var(--font-helper);
+}
+
+.settings-installed-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--accent-primary-border);
+  border-radius: 999px;
+  background: var(--accent-primary-tint);
+  color: var(--accent-primary-soft);
+  font-size: var(--font-helper);
+  font-weight: 700;
+}

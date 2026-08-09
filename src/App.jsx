@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import "./App.css";
 import {
@@ -84,6 +84,7 @@ import {
   shouldShowOnboarding,
 } from "./utils/onboardingUtils.js";
 import useGuidedTour from "./hooks/useGuidedTour.js";
+import usePwaInstall from "./hooks/usePwaInstall.js";
 import { getGuidedTourDefinition } from "./data/guidedTours.js";
 import {
   CURRENT_DAYLO_VERSION,
@@ -107,6 +108,12 @@ import {
   loadAcknowledgedReleaseVersion,
   shouldShowReleaseWelcome,
 } from "./utils/releaseWelcomeUtils.js";
+import {
+  getInstallActionLabel,
+  getInstallStatusLabel,
+  getOfflineMessage,
+  shouldShowInstallSuggestion,
+} from "./utils/pwaInstallUtils.js";
 import {
   CLASSROOM_SETUP_TOUR_ID,
   clearClassroomSetupResume,
@@ -362,8 +369,11 @@ function App() {
   const smartPlannerTourOpenedModalRef = useRef(false);
   const tourStartPendingRef = useRef(false);
   const [releaseWelcomeOpen, setReleaseWelcomeOpen] = useState(false);
+  const [installInstructionsOpen, setInstallInstructionsOpen] = useState(false);
+  const [installSuggestionReady, setInstallSuggestionReady] = useState(false);
   const [classroomSetupTourRequest, setClassroomSetupTourRequest] = useState(0);
   const classroomSetupTourStarterRef = useRef(null);
+  const pwaInstall = usePwaInstall();
   const guidedTour = useGuidedTour({
     onExit: ({ tour, status }) => {
       if (tour?.persistOutcome !== false) {
@@ -698,6 +708,50 @@ function App() {
     startGuidedTour,
     studentProfile.onboardingCompleted,
   ]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setInstallSuggestionReady(true), 18000);
+
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const installBlockingUiOpen = Boolean(
+    mobileMoreOpen ||
+      showAddTask ||
+      eveningPlanSuccess ||
+      smartPlannerOpen ||
+      releaseWelcomeOpen ||
+      localProfileEditorOpen ||
+      installInstructionsOpen ||
+      guidedTour.isTourActive
+  );
+  const showInstallSuggestion = shouldShowInstallSuggestion({
+    capability: pwaInstall.capability,
+    dismissed: pwaInstall.suggestionDismissed,
+    onboardingCompleted: studentProfile.onboardingCompleted,
+    blockingUiOpen: installBlockingUiOpen,
+    standalone: pwaInstall.installed,
+    elapsedMs: installSuggestionReady ? 18000 : 0,
+  });
+  const offlineMessage = getOfflineMessage(pwaInstall.online);
+
+  const installControl = useMemo(
+    () => ({
+      capability: pwaInstall.capability,
+      actionLabel: getInstallActionLabel(pwaInstall.capability),
+      statusLabel: getInstallStatusLabel(pwaInstall.capability),
+    }),
+    [pwaInstall.capability]
+  );
+
+  const startInstallFlow = useCallback(async () => {
+    if (pwaInstall.capability === "ios-instructions") {
+      setInstallInstructionsOpen(true);
+      return;
+    }
+
+    await pwaInstall.requestInstall();
+  }, [pwaInstall]);
 
   const navigateGuidedTour = useCallback((page, nextSettingsView) => {
     setMobileMoreOpen(false);
@@ -2800,6 +2854,8 @@ function App() {
             classroomSetupTourRequest={classroomSetupTourRequest}
             onStartClassroomSetupTour={startClassroomSetupTour}
             navigationRequest={settingsNavigationRequest}
+            installControl={installControl}
+            onInstallDayLo={startInstallFlow}
           />
         )}
       </section>
@@ -2869,6 +2925,20 @@ function App() {
         />
       )}
 
+      {showInstallSuggestion && (
+        <InstallSuggestionToast
+          actionLabel={installControl.actionLabel}
+          onInstall={startInstallFlow}
+          onDismiss={pwaInstall.dismissSuggestion}
+        />
+      )}
+
+      {offlineMessage && <OfflineIndicator message={offlineMessage} />}
+
+      {installInstructionsOpen && (
+        <InstallInstructionsModal onClose={() => setInstallInstructionsOpen(false)} />
+      )}
+
       <GuidedTour
         activePage={activePage}
         activeSettingsView={settingsView}
@@ -2890,6 +2960,78 @@ function App() {
       />
       <Analytics />
     </main>
+  );
+}
+
+function InstallSuggestionToast({ actionLabel, onInstall, onDismiss }) {
+  return (
+    <div className="app-install-toast" role="status" aria-live="polite">
+      <div>
+        <strong>Install DayLo</strong>
+        <p>Add DayLo to your device for quicker access and an app-like experience.</p>
+      </div>
+      <div className="app-install-toast-actions">
+        {actionLabel && (
+          <button
+            type="button"
+            className="primary-button"
+            onClick={() => {
+              onInstall();
+              onDismiss();
+            }}
+          >
+            {actionLabel}
+          </button>
+        )}
+        <button type="button" className="small-button" onClick={onDismiss}>
+          Not now
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OfflineIndicator({ message }) {
+  return (
+    <div className="app-offline-indicator" role="status" aria-live="polite">
+      {message}
+    </div>
+  );
+}
+
+function InstallInstructionsModal({ onClose }) {
+  return (
+    <div className="install-instructions-layer" role="presentation">
+      <button
+        type="button"
+        className="install-instructions-backdrop"
+        aria-label="Close install instructions"
+        onClick={onClose}
+      />
+      <section
+        className="install-instructions-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="install-instructions-title"
+      >
+        <div className="install-instructions-copy">
+          <p className="eyebrow">Add DayLo to your device</p>
+          <h2 id="install-instructions-title">Install DayLo</h2>
+          <ol>
+            <li>Open DayLo in Safari.</li>
+            <li>Tap the Share button.</li>
+            <li>Choose Add to Home Screen.</li>
+            <li>Tap Add.</li>
+          </ol>
+          <p>DayLo will appear on your Home Screen and open like an app.</p>
+        </div>
+        <div className="install-instructions-actions">
+          <button type="button" className="primary-button" onClick={onClose}>
+            Done
+          </button>
+        </div>
+      </section>
+    </div>
   );
 }
 
