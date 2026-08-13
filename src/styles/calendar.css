@@ -250,6 +250,25 @@
   border-radius: 8px;
 }
 
+.calendar-month-schedule-toggle {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 8px auto;
+  color: var(--text-secondary);
+  font-size: var(--font-meta);
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.calendar-month-schedule-toggle input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .calendar-day {
   min-width: 0;
   min-height: var(--density-calendar-day-height);
@@ -281,6 +300,7 @@
 }
 
 .calendar-day-number {
+  grid-row: 1;
   width: 22px;
   height: 22px;
   display: grid;
@@ -296,6 +316,7 @@
 }
 
 .calendar-task-dots {
+  grid-row: 2;
   min-width: 0;
   display: flex;
   align-items: center;
@@ -303,6 +324,7 @@
 }
 
 .calendar-google-events {
+  grid-row: 3;
   min-width: 0;
   display: grid;
   gap: 3px;
@@ -312,6 +334,7 @@
 }
 
 .calendar-google-event-mobile-summary {
+  grid-row: 3;
   display: none;
 }
 

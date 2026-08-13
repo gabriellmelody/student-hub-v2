@@ -3101,6 +3101,7 @@ function App() {
       return (
         <CalendarPage
           tasks={visibleTasks}
+          classroomTasks={tasks}
           subjects={subjects}
           setActivePage={setActivePage}
           addTaskToList={addTaskToList}

@@ -109,6 +109,17 @@ function normalizeEvent(event, calendar, accountId = "") {
     end,
     allDay,
     status: String(event?.status || ""),
+    recurringEventId: String(event?.recurringEventId || ""),
+    htmlLink: String(event?.htmlLink || ""),
+    iCalUID: String(event?.iCalUID || ""),
+    organizerEmail: String(event?.organizer?.email || ""),
+    creatorEmail: String(event?.creator?.email || ""),
+    eventType: String(event?.eventType || ""),
+    sourceUrl: String(event?.source?.url || ""),
+    extendedProperties:
+      event?.extendedProperties && typeof event.extendedProperties === "object"
+        ? event.extendedProperties
+        : {},
     backgroundColor: calendar.backgroundColor,
     calendarColor: calendar.backgroundColor,
     accountId,
