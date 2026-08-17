@@ -4766,7 +4766,25 @@ function getClassroomSyncStatusLabel(syncStatus, settings = []) {
       .sort()
       .at(-1);
 
-  return lastSyncedAt ? `Synced ${formatConnectionTime(lastSyncedAt)}` : "Ready to sync";
+  return lastSyncedAt
+    ? `Synced ${formatRelativeClassroomSyncTime(lastSyncedAt)}`
+    : "Ready to sync";
+}
+
+function formatRelativeClassroomSyncTime(value, now = Date.now()) {
+  const syncedAt = Date.parse(value);
+  if (!Number.isFinite(syncedAt)) return "recently";
+  const elapsedMinutes = Math.max(0, Math.floor((now - syncedAt) / 60000));
+  if (elapsedMinutes < 1) return "just now";
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes} min ago`;
+  }
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return `${elapsedHours} hr${elapsedHours === 1 ? "" : "s"} ago`;
+  }
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `${elapsedDays} day${elapsedDays === 1 ? "" : "s"} ago`;
 }
 
 function getReliableClassroomSubject(courseId, setting, subjects) {
@@ -4789,9 +4807,13 @@ function ClassroomPreferencePanel({ preferences, onChange, includeMaster = false
   }
 
   return (
-    <div className="classroom-preference-panel">
+    <div
+      className={`classroom-preference-panel ${
+        includeMaster && preferences.syncEnabled === false ? "is-paused" : ""
+      }`}
+    >
       {includeMaster && (
-        <label>
+        <label className="classroom-toggle-row classroom-toggle-row-master">
           <input
             type="checkbox"
             checked={preferences.syncEnabled !== false}
@@ -4802,9 +4824,10 @@ function ClassroomPreferencePanel({ preferences, onChange, includeMaster = false
           <span>
             <strong>Auto-sync</strong>
           </span>
+          <em>{preferences.syncEnabled !== false ? "ON" : "OFF"}</em>
         </label>
       )}
-      <label>
+      <label className="classroom-toggle-row">
         <input
           type="checkbox"
           checked={preferences.syncActive !== false}
@@ -4814,8 +4837,9 @@ function ClassroomPreferencePanel({ preferences, onChange, includeMaster = false
           <strong>Active assignments</strong>
           <small>Current work you still need to complete.</small>
         </span>
+        <em>{preferences.syncActive !== false ? "ON" : "OFF"}</em>
       </label>
-      <label>
+      <label className="classroom-toggle-row">
         <input
           type="checkbox"
           checked={preferences.syncNoDueDate === true}
@@ -4827,8 +4851,9 @@ function ClassroomPreferencePanel({ preferences, onChange, includeMaster = false
           <strong>No due date</strong>
           <small>Coursework that has no deadline.</small>
         </span>
+        <em>{preferences.syncNoDueDate === true ? "ON" : "OFF"}</em>
       </label>
-      <label>
+      <label className="classroom-toggle-row">
         <input
           type="checkbox"
           checked={preferences.syncCompleted === true}
@@ -4837,9 +4862,10 @@ function ClassroomPreferencePanel({ preferences, onChange, includeMaster = false
           }
         />
         <span>
-          <strong>Completed history</strong>
-          <small>Import assignments already completed before DayLo saw them.</small>
+          <strong>Past completed work</strong>
+          <small>Import work you completed before DayLo first saw it.</small>
         </span>
+        <em>{preferences.syncCompleted === true ? "ON" : "OFF"}</em>
       </label>
     </div>
   );
@@ -5262,21 +5288,29 @@ function RealClassroomCourseReviewPage({
             <p>
               Connected as {session?.accountEmail || "your Google account"}
             </p>
-            <strong>{syncStatusLabel}</strong>
+            <strong title={syncStatus?.lastSyncedAt || ""}>{syncStatusLabel}</strong>
           </div>
           <div className="classroom-watch-actions">
-            <button type="button" className="primary-button" onClick={syncNow} disabled={syncStatus.syncing}>
+            <button type="button" className="small-button" onClick={syncNow} disabled={syncStatus.syncing}>
               {syncStatus.syncing ? "Syncing..." : "Sync now"}
-            </button>
-            <button type="button" className="secondary" onClick={() => setAddClassesOpen(true)}>
-              Add classes
             </button>
           </div>
         </header>
       </div>
 
       <div className="classroom-watch-section">
-        <h2>Your classes</h2>
+        <div className="classroom-watch-section-heading">
+          <h2>Your classes</h2>
+          {unconfiguredCourses.length > 0 && (
+            <button
+              type="button"
+              className="small-button classroom-add-class-button"
+              onClick={() => setAddClassesOpen((open) => !open)}
+            >
+              + Add class
+            </button>
+          )}
+        </div>
         <div className="classroom-watch-list">
           {activeSyncSettings.map((setting) => {
             const subject = getReliableClassroomSubject(
@@ -5302,40 +5336,47 @@ function RealClassroomCourseReviewPage({
                       {setting.syncActive !== false
                         ? "Active assignments"
                         : "Active assignments off"}
-                      {" · "}No due date: {setting.syncNoDueDate ? "On" : "Off"}
-                      {" · "}Completed history: {setting.syncCompleted ? "On" : "Off"}
+                      {" · "}No due date {setting.syncNoDueDate ? "on" : "off"}
+                      {" · "}Past completed work {setting.syncCompleted ? "on" : "off"}
                     </small>
                   </div>
                   <button
                     type="button"
-                    className="secondary"
+                    className="small-button classroom-manage-button"
                     onClick={() =>
                       setManagedCourseId(managed ? "" : setting.classroomCourseId)
                     }
                   >
-                    {managed ? "Done" : "Manage →"}
+                    {managed ? "Done" : "Manage ›"}
                   </button>
                 </div>
                 {managed && (
                   <div className="classroom-watch-manage">
-                    <dl>
-                      <div>
-                        <dt>Classroom course</dt>
-                        <dd>{setting.classroomCourseName}</dd>
-                      </div>
-                      <div>
-                        <dt>DayLo Subject</dt>
-                        <dd>{subject?.name || "Unlinked"}</dd>
-                      </div>
-                    </dl>
+                    <div className="classroom-manage-course-row">
+                      <span>{setting.classroomCourseName}</span>
+                      {course?.alternateLink && (
+                        <a href={course.alternateLink} target="_blank" rel="noopener noreferrer">
+                          Open Classroom ↗
+                        </a>
+                      )}
+                    </div>
+                    <div className="classroom-manage-subject-row">
+                      <span>
+                        <small>DayLo Subject</small>
+                        <strong>{subject?.name || "Unlinked"}</strong>
+                      </span>
+                      {subject && (
+                        <button
+                          type="button"
+                          className="small-button classroom-edit-subject-button"
+                          onClick={() => renameClassroomSubject(subject)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
                     {subject && (
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => renameClassroomSubject(subject)}
-                      >
-                        Rename Subject
-                      </button>
+                      <span className="sr-only">Rename Subject</span>
                     )}
                     <ClassroomPreferencePanel
                       preferences={setting}
@@ -5343,12 +5384,7 @@ function RealClassroomCourseReviewPage({
                       onChange={(updates) => updateManagedCourse(updates)}
                     />
                     <div className="classroom-watch-manage-actions">
-                      {course?.alternateLink && (
-                        <a href={course.alternateLink} target="_blank" rel="noopener noreferrer">
-                          Open Classroom
-                        </a>
-                      )}
-                      <button type="button" className="danger" onClick={() => stopSyncingCourse(setting)}>
+                      <button type="button" className="classroom-stop-sync-button" onClick={() => stopSyncingCourse(setting)}>
                         Stop syncing
                       </button>
                     </div>
@@ -5364,7 +5400,7 @@ function RealClassroomCourseReviewPage({
         <div className="classroom-add-panel">
           <div className="classroom-add-header">
             <h2>Add classes</h2>
-            <button type="button" className="secondary" onClick={() => setAddClassesOpen(false)}>
+            <button type="button" className="small-button" onClick={() => setAddClassesOpen(false)}>
               Close
             </button>
           </div>

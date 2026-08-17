@@ -32,8 +32,18 @@ test("connected unconfigured Classroom manager shows first-time setup", () => {
 
 test("configured Classroom manager shows dashboard instead of setup", () => {
   assert.match(managerSource, /Your classes/);
-  assert.match(managerSource, /Manage →/);
-  assert.match(managerSource, /Add classes/);
+  assert.match(managerSource, /Manage ›/);
+  assert.match(managerSource, /\+ Add class/);
+});
+
+test("Add class is hidden when no unconfigured courses remain", () => {
+  assert.match(managerSource, /unconfiguredCourses\.length > 0 &&/);
+});
+
+test("Add class opens the lightweight picker", () => {
+  assert.match(managerSource, /setAddClassesOpen\(\(open\) => !open\)/);
+  assert.match(managerSource, /addClassesOpen &&/);
+  assert.match(managerSource, /className="classroom-picker-list"/);
 });
 
 test("normal dashboard no longer exposes old Include or review tabs", () => {
@@ -63,7 +73,14 @@ test("sync settings preserve UUID links and defaults", () => {
 test("renamed Subject remains the card title with original course context", () => {
   assert.match(managerSource, /const title = subject\?\.name/);
   assert.match(managerSource, /setting\.classroomCourseName, "Google Classroom"/);
-  assert.match(managerSource, /Rename Subject/);
+  assert.match(managerSource, /Edit/);
+  assert.match(managerSource, /renameClassroomSubject/);
+});
+
+test("Manage expands and Done collapses the selected class", () => {
+  assert.match(managerSource, /managedCourseId === setting\.classroomCourseId/);
+  assert.match(managerSource, /setManagedCourseId\(managed \? "" : setting\.classroomCourseId\)/);
+  assert.match(managerSource, /managed \? "Done" : "Manage/);
 });
 
 test("Add classes excludes already configured courses", () => {
@@ -81,12 +98,36 @@ test("normal Sync now refreshes classes and syncs", () => {
   assert.match(managerSource, /async function syncNow/);
   assert.match(managerSource, /await onLoadCourses\(\)/);
   assert.match(managerSource, /await onSyncNow\(\)/);
+  assert.match(managerSource, /className="small-button"/);
+});
+
+test("sync preferences use student-facing switch labels", () => {
+  assert.match(settingsSource, /className="classroom-toggle-row/);
+  assert.match(settingsSource, /updatePreference\("syncEnabled"/);
+  assert.match(settingsSource, /updatePreference\("syncActive"/);
+  assert.match(settingsSource, /updatePreference\("syncNoDueDate"/);
+  assert.match(settingsSource, /updatePreference\("syncCompleted"/);
+  assert.match(settingsSource, /Past completed work/);
+  assert.match(settingsSource, /Import work you completed before DayLo first saw it/);
+});
+
+test("human-readable sync status is relative", () => {
+  assert.match(settingsSource, /function formatRelativeClassroomSyncTime/);
+  assert.match(settingsSource, /just now/);
+  assert.match(settingsSource, /min ago/);
+  assert.match(settingsSource, /hr/);
+  assert.doesNotMatch(managerSource, /Synced \$\{formatConnectionTime/);
 });
 
 test("advanced manual tools are behind progressive disclosure", () => {
   assert.match(managerSource, /className="classroom-advanced-tools"/);
   assert.match(managerSource, /Preview assignments/);
   assert.match(managerSource, /Archive no-due-date tasks/);
+});
+
+test("old Completed history label is not normal user-facing copy", () => {
+  assert.doesNotMatch(normalDashboardSource, /Completed history/);
+  assert.match(normalDashboardSource, /Past completed work/);
 });
 
 test("Open Classroom is only shown when course URL exists", () => {
