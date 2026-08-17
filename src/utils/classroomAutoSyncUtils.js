@@ -17,7 +17,7 @@ export function getDefaultClassroomSyncSetting(course, subjectId = null) {
     subjectId,
     syncEnabled: true,
     syncActive: true,
-    syncNoDueDate: false,
+    syncNoDueDate: true,
     syncCompleted: false,
     lastSyncedAt: null,
   };

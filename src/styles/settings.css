@@ -5721,10 +5721,19 @@ html:has(.settings-page) {
 
 .classroom-toggle-row {
   align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
   display: flex;
+  font: inherit;
   gap: 0.75rem;
   justify-content: space-between;
   min-height: 34px;
+  padding: 0;
+  text-align: left;
+  width: 100%;
 }
 
 .classroom-toggle-row span {
@@ -5733,12 +5742,22 @@ html:has(.settings-page) {
   min-width: 0;
 }
 
-.classroom-toggle-row input {
-  appearance: none;
+.classroom-toggle-row:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.classroom-toggle-row:focus-visible {
+  border-radius: var(--radius-button);
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.classroom-switch-track {
   background: var(--surface-muted);
   border: 1px solid var(--border-strong);
   border-radius: 999px;
-  cursor: pointer;
+  display: block;
   flex: 0 0 auto;
   height: 22px;
   margin: 0;
@@ -5747,7 +5766,7 @@ html:has(.settings-page) {
   width: 40px;
 }
 
-.classroom-toggle-row input::before {
+.classroom-switch-thumb {
   background: var(--text-muted);
   border-radius: 50%;
   content: "";
@@ -5759,12 +5778,12 @@ html:has(.settings-page) {
   width: 16px;
 }
 
-.classroom-toggle-row input:checked {
+.classroom-toggle-row[aria-checked="true"] .classroom-switch-track {
   background: var(--accent-tint);
   border-color: var(--accent);
 }
 
-.classroom-toggle-row input:checked::before {
+.classroom-toggle-row[aria-checked="true"] .classroom-switch-thumb {
   background: var(--accent);
   transform: translateX(18px);
 }
@@ -5783,8 +5802,18 @@ html:has(.settings-page) {
   padding-bottom: 0.45rem;
 }
 
+.classroom-toggle-row-master .classroom-toggle-row {
+  min-height: 34px;
+}
+
 .classroom-preference-panel.is-paused .classroom-toggle-row:not(.classroom-toggle-row-master) {
   opacity: 0.62;
+}
+
+.classroom-preference-error {
+  color: var(--danger);
+  display: block;
+  font-size: var(--font-meta);
 }
 
 .classroom-advanced-tools summary {
@@ -5879,7 +5908,7 @@ html:has(.settings-page) {
     flex-direction: column;
   }
 
-  .classroom-toggle-row input {
+  .classroom-switch-track {
     align-self: flex-start;
     order: initial;
   }

@@ -33,6 +33,22 @@ test("Classroom course configuration persists with user-scoped rows", () => {
   assert.equal(merged[0].syncEnabled, true);
 });
 
+test("new Classroom course defaults turn no-due-date imports on", () => {
+  const defaults = getDefaultClassroomSyncSetting(course, subject.id);
+  assert.equal(defaults.syncEnabled, true);
+  assert.equal(defaults.syncActive, true);
+  assert.equal(defaults.syncNoDueDate, true);
+  assert.equal(defaults.syncCompleted, false);
+});
+
+test("existing saved no-due-date false remains false", () => {
+  const merged = mergeClassroomCoursesWithSettings(
+    [course],
+    [{ ...setting, syncNoDueDate: false }]
+  );
+  assert.equal(merged[0].syncNoDueDate, false);
+});
+
 test("Subject rename keeps course linked by UUID", () => {
   const renamedSubject = { ...subject, name: "Psych" };
   const result = reconcileClassroomAssignments({
@@ -64,15 +80,39 @@ test("Active switch controls new active imports", () => {
 
 test("No-due-date switch imports without fabricating due dates", () => {
   const noDue = { ...assignment, externalId: "course-1:work-2", dueDate: "" };
-  assert.equal(shouldSyncNewClassroomAssignment(noDue, setting), false);
+  assert.equal(
+    shouldSyncNewClassroomAssignment(noDue, { ...setting, syncNoDueDate: false }),
+    false
+  );
+  assert.equal(shouldSyncNewClassroomAssignment(noDue, setting), true);
   const result = reconcileClassroomAssignments({
     assignments: [noDue],
-    settings: [{ ...setting, syncNoDueDate: true }],
+    settings: [setting],
     subjects: [subject],
     tasks: [],
     syncedAt: "2026-08-17T00:00:00.000Z",
   });
   assert.equal(result.tasksToSync[0].dueDate, "");
+  assert.equal(result.tasksToSync[0].linkedSubjectId, subject.id);
+});
+
+test("Repeated no-due-date sync does not duplicate up-to-date tasks", () => {
+  const noDue = { ...assignment, externalId: "course-1:work-2", dueDate: "" };
+  const existingTask = reconcileClassroomAssignments({
+    assignments: [noDue],
+    settings: [setting],
+    subjects: [subject],
+    tasks: [],
+    syncedAt: "2026-08-17T00:00:00.000Z",
+  }).tasksToSync[0];
+  const result = reconcileClassroomAssignments({
+    assignments: [noDue],
+    settings: [setting],
+    subjects: [subject],
+    tasks: [existingTask],
+    syncedAt: "2026-08-17T00:00:00.000Z",
+  });
+  assert.equal(result.tasksToSync.length, 0);
 });
 
 test("Completed switch controls historical completed imports", () => {

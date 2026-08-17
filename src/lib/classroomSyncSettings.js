@@ -26,7 +26,7 @@ export function mapClassroomSyncSetting(row = {}) {
     subjectId: row.subject_id || null,
     syncEnabled: row.sync_enabled !== false,
     syncActive: row.sync_active !== false,
-    syncNoDueDate: row.sync_no_due_date === true,
+    syncNoDueDate: row.sync_no_due_date !== false,
     syncCompleted: row.sync_completed === true,
     lastSyncedAt: row.last_synced_at || null,
     createdAt: row.created_at || null,
@@ -42,7 +42,7 @@ export function mapClassroomSyncSettingForUpsert(setting, userId) {
     subject_id: setting?.subjectId || null,
     sync_enabled: setting?.syncEnabled !== false,
     sync_active: setting?.syncActive !== false,
-    sync_no_due_date: setting?.syncNoDueDate === true,
+    sync_no_due_date: setting?.syncNoDueDate !== false,
     sync_completed: setting?.syncCompleted === true,
     last_synced_at: setting?.lastSyncedAt || null,
   };

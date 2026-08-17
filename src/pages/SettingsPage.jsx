@@ -1905,7 +1905,7 @@ function IntegrationsSettings({
 
   async function saveClassroomSyncSettings(nextSettings) {
     setClassroomSyncSettings(nextSettings);
-    if (!user?.id) return;
+    if (!user?.id) return false;
 
     markIntegrationAutoSaving();
     try {
@@ -1923,8 +1923,10 @@ function IntegrationsSettings({
         );
       });
       markIntegrationAutoSaved();
+      return true;
     } catch {
       markIntegrationAutoSaveError();
+      return false;
     }
   }
 
@@ -3119,7 +3121,7 @@ function IntegrationsSettings({
           ...existingSetting,
           syncEnabled: true,
           syncActive: existingSetting?.syncActive ?? true,
-          syncNoDueDate: existingSetting?.syncNoDueDate ?? false,
+          syncNoDueDate: existingSetting?.syncNoDueDate ?? true,
           syncCompleted: existingSetting?.syncCompleted ?? false,
           subjectId: existingSetting?.subjectId || suggestedLink?.subjectId || null,
         },
@@ -3683,6 +3685,7 @@ function IntegrationsSettings({
           onRestoreArchivedClassroomTasks={restoreArchivedRealClassroomTasks}
           syncSettings={classroomSyncSettings}
           syncStatus={classroomSyncStatus}
+          onSetSyncSettings={setClassroomSyncSettings}
           onUpdateSyncSettings={saveClassroomSyncSettings}
           onSyncNow={onSyncClassroomNow}
           onBack={() => setRealClassroomManagerPageOpen(false)}
@@ -4795,9 +4798,42 @@ function getReliableClassroomSubject(courseId, setting, subjects) {
   );
 }
 
-function ClassroomPreferencePanel({ preferences, onChange, includeMaster = false }) {
+function ClassroomPreferencePanel({
+  preferences,
+  onChange,
+  onToggle,
+  includeMaster = false,
+  disabledKeys = new Set(),
+}) {
   function updatePreference(key, value) {
+    if (onToggle) {
+      onToggle(key, value);
+      return;
+    }
     onChange({ ...preferences, [key]: value });
+  }
+
+  function renderSwitch({ keyName, label, description, checked }) {
+    const disabled = disabledKeys.has(keyName);
+    return (
+      <button
+        type="button"
+        className="classroom-toggle-row"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => updatePreference(keyName, !checked)}
+      >
+        <span>
+          <strong>{label}</strong>
+          {description && <small>{description}</small>}
+        </span>
+        <em>{checked ? "ON" : "OFF"}</em>
+        <span className="classroom-switch-track" aria-hidden="true">
+          <span className="classroom-switch-thumb" />
+        </span>
+      </button>
+    );
   }
 
   return (
@@ -4807,60 +4843,32 @@ function ClassroomPreferencePanel({ preferences, onChange, includeMaster = false
       }`}
     >
       {includeMaster && (
-        <label className="classroom-toggle-row classroom-toggle-row-master">
-          <input
-            type="checkbox"
-            checked={preferences.syncEnabled !== false}
-            onChange={(event) =>
-              updatePreference("syncEnabled", event.target.checked)
-            }
-          />
-          <span>
-            <strong>Auto-sync</strong>
-          </span>
-          <em>{preferences.syncEnabled !== false ? "ON" : "OFF"}</em>
-        </label>
+        <div className="classroom-toggle-row-master">
+          {renderSwitch({
+            keyName: "syncEnabled",
+            label: "Auto-sync",
+            checked: preferences.syncEnabled !== false,
+          })}
+        </div>
       )}
-      <label className="classroom-toggle-row">
-        <input
-          type="checkbox"
-          checked={preferences.syncActive !== false}
-          onChange={(event) => updatePreference("syncActive", event.target.checked)}
-        />
-        <span>
-          <strong>Active assignments</strong>
-          <small>Current work you still need to complete.</small>
-        </span>
-        <em>{preferences.syncActive !== false ? "ON" : "OFF"}</em>
-      </label>
-      <label className="classroom-toggle-row">
-        <input
-          type="checkbox"
-          checked={preferences.syncNoDueDate === true}
-          onChange={(event) =>
-            updatePreference("syncNoDueDate", event.target.checked)
-          }
-        />
-        <span>
-          <strong>No due date</strong>
-          <small>Coursework that has no deadline.</small>
-        </span>
-        <em>{preferences.syncNoDueDate === true ? "ON" : "OFF"}</em>
-      </label>
-      <label className="classroom-toggle-row">
-        <input
-          type="checkbox"
-          checked={preferences.syncCompleted === true}
-          onChange={(event) =>
-            updatePreference("syncCompleted", event.target.checked)
-          }
-        />
-        <span>
-          <strong>Past completed work</strong>
-          <small>Import work you completed before DayLo first saw it.</small>
-        </span>
-        <em>{preferences.syncCompleted === true ? "ON" : "OFF"}</em>
-      </label>
+      {renderSwitch({
+        keyName: "syncActive",
+        label: "Active assignments",
+        description: "Current work you still need to complete.",
+        checked: preferences.syncActive !== false,
+      })}
+      {renderSwitch({
+        keyName: "syncNoDueDate",
+        label: "No due date",
+        description: "Coursework that has no deadline.",
+        checked: preferences.syncNoDueDate !== false,
+      })}
+      {renderSwitch({
+        keyName: "syncCompleted",
+        label: "Past completed work",
+        description: "Import work you completed before DayLo first saw it.",
+        checked: preferences.syncCompleted === true,
+      })}
     </div>
   );
 }
@@ -4893,6 +4901,7 @@ function RealClassroomCourseReviewPage({
   onRestoreArchivedClassroomTasks,
   syncSettings = [],
   syncStatus = { syncing: false, status: "idle", message: "", lastSyncedAt: null },
+  onSetSyncSettings = () => {},
   onUpdateSyncSettings = () => {},
   onSyncNow = () => {},
   onBack,
@@ -4930,9 +4939,12 @@ function RealClassroomCourseReviewPage({
     }, 0);
   }
 
-  function updateCourseSyncSetting(course, updates) {
+  async function updateCourseSyncSetting(course, updates, preferenceKey = "") {
     const courseId = getRealClassroomCourseId(course);
     if (!courseId) return;
+    const pendingKey = preferenceKey ? `${courseId}:${preferenceKey}` : "";
+    if (pendingKey && savingPreferenceKeysRef.current.has(pendingKey)) return;
+
     const currentSetting =
       syncSettings.find((setting) => setting.classroomCourseId === courseId) ||
       getDefaultClassroomSyncSetting(course, null);
@@ -4941,7 +4953,8 @@ function RealClassroomCourseReviewPage({
       currentSetting,
       subjects
     );
-    onUpdateSyncSettings([
+    const previousSettings = syncSettings;
+    const nextSettings = [
       ...syncSettings.filter((setting) => setting.classroomCourseId !== courseId),
       {
         ...currentSetting,
@@ -4950,7 +4963,28 @@ function RealClassroomCourseReviewPage({
         subjectId: reliableSubject?.id || currentSetting.subjectId || null,
         ...updates,
       },
-    ]);
+    ];
+
+    if (pendingKey) {
+      savingPreferenceKeysRef.current.add(pendingKey);
+      setSavingPreferenceKeys((currentKeys) => new Set(currentKeys).add(pendingKey));
+      setPreferenceSaveError("");
+    }
+
+    const saved = await onUpdateSyncSettings(nextSettings);
+    if (saved === false) {
+      onSetSyncSettings(previousSettings);
+      setPreferenceSaveError("Could not save that setting. Try again.");
+    }
+
+    if (pendingKey) {
+      savingPreferenceKeysRef.current.delete(pendingKey);
+      setSavingPreferenceKeys((currentKeys) => {
+        const nextKeys = new Set(currentKeys);
+        nextKeys.delete(pendingKey);
+        return nextKeys;
+      });
+    }
   }
 
   const [setupStep, setSetupStep] = useState("classes");
@@ -4963,9 +4997,12 @@ function RealClassroomCourseReviewPage({
   const [renameSubjectDraft, setRenameSubjectDraft] = useState("");
   const [renameSubjectError, setRenameSubjectError] = useState("");
   const [renameSubjectSaving, setRenameSubjectSaving] = useState(false);
+  const [savingPreferenceKeys, setSavingPreferenceKeys] = useState(new Set());
+  const savingPreferenceKeysRef = useRef(new Set());
+  const [preferenceSaveError, setPreferenceSaveError] = useState("");
   const [setupPreferences, setSetupPreferences] = useState({
     syncActive: true,
-    syncNoDueDate: false,
+    syncNoDueDate: true,
     syncCompleted: false,
   });
   const coursesById = new Map(
@@ -5051,7 +5088,7 @@ function RealClassroomCourseReviewPage({
           subjectId: subject.id,
           syncEnabled: true,
           syncActive: preferences.syncActive !== false,
-          syncNoDueDate: preferences.syncNoDueDate === true,
+          syncNoDueDate: preferences.syncNoDueDate !== false,
           syncCompleted: preferences.syncCompleted === true,
         };
 
@@ -5090,7 +5127,13 @@ function RealClassroomCourseReviewPage({
   function updateManagedCourse(updates) {
     const course = coursesById.get(managedCourseId);
     if (!course) return;
-    updateCourseSyncSetting(course, updates);
+    void updateCourseSyncSetting(course, updates);
+  }
+
+  function toggleManagedCoursePreference(key, value) {
+    const course = coursesById.get(managedCourseId);
+    if (!course) return;
+    void updateCourseSyncSetting(course, { [key]: value }, key);
   }
 
   function stopSyncingCourse(setting) {
@@ -5460,7 +5503,23 @@ function RealClassroomCourseReviewPage({
                       preferences={setting}
                       includeMaster
                       onChange={(updates) => updateManagedCourse(updates)}
+                      onToggle={toggleManagedCoursePreference}
+                      disabledKeys={
+                        new Set(
+                          ["syncEnabled", "syncActive", "syncNoDueDate", "syncCompleted"].filter(
+                            (key) =>
+                              savingPreferenceKeys.has(
+                                `${setting.classroomCourseId}:${key}`
+                              )
+                          )
+                        )
+                      }
                     />
+                    {preferenceSaveError && (
+                      <small className="classroom-preference-error">
+                        {preferenceSaveError}
+                      </small>
+                    )}
                     <div className="classroom-watch-manage-actions">
                       <button type="button" className="classroom-stop-sync-button" onClick={() => stopSyncingCourse(setting)}>
                         Stop syncing
@@ -5518,7 +5577,7 @@ function RealClassroomCourseReviewPage({
                       .map(([courseId]) => courseId),
                     {
                       syncActive: true,
-                      syncNoDueDate: false,
+                      syncNoDueDate: true,
                       syncCompleted: false,
                     }
                   )
@@ -5879,7 +5938,7 @@ function RealClassroomCourseReviewPage({
                           <label>
                             <input
                               type="checkbox"
-                              checked={syncSetting.syncNoDueDate === true}
+                              checked={syncSetting.syncNoDueDate !== false}
                               onChange={(event) =>
                                 updateCourseSyncSetting(course, {
                                   syncNoDueDate: event.target.checked,

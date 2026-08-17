@@ -66,7 +66,7 @@ test("sync settings preserve UUID links and defaults", () => {
   assert.match(managerSource, /subjectId: subject\.id/);
   assert.match(managerSource, /syncEnabled: true/);
   assert.match(managerSource, /syncActive: preferences\.syncActive !== false/);
-  assert.match(managerSource, /syncNoDueDate: preferences\.syncNoDueDate === true/);
+  assert.match(managerSource, /syncNoDueDate: preferences\.syncNoDueDate !== false/);
   assert.match(managerSource, /syncCompleted: preferences\.syncCompleted === true/);
 });
 
@@ -133,13 +133,36 @@ test("setup syncs immediately with the freshly saved settings and Subjects", () 
 });
 
 test("sync preferences use student-facing switch labels", () => {
-  assert.match(settingsSource, /className="classroom-toggle-row/);
-  assert.match(settingsSource, /updatePreference\("syncEnabled"/);
-  assert.match(settingsSource, /updatePreference\("syncActive"/);
-  assert.match(settingsSource, /updatePreference\("syncNoDueDate"/);
-  assert.match(settingsSource, /updatePreference\("syncCompleted"/);
+  assert.match(settingsSource, /role="switch"/);
+  assert.match(settingsSource, /aria-checked=\{checked\}/);
+  assert.match(settingsSource, /keyName: "syncEnabled"/);
+  assert.match(settingsSource, /keyName: "syncActive"/);
+  assert.match(settingsSource, /keyName: "syncNoDueDate"/);
+  assert.match(settingsSource, /keyName: "syncCompleted"/);
   assert.match(settingsSource, /Past completed work/);
   assert.match(settingsSource, /Import work you completed before DayLo first saw it/);
+});
+
+test("managed Classroom switches save optimistically and revert on failure", () => {
+  assert.match(managerSource, /setSavingPreferenceKeys/);
+  assert.match(managerSource, /const saved = await onUpdateSyncSettings\(nextSettings\)/);
+  assert.match(managerSource, /if \(saved === false\)/);
+  assert.match(managerSource, /onSetSyncSettings\(previousSettings\)/);
+  assert.match(managerSource, /Could not save that setting/);
+});
+
+test("managed Classroom switches prevent duplicate writes while saving", () => {
+  assert.match(managerSource, /savingPreferenceKeysRef\.current\.has\(pendingKey\)/);
+  assert.match(managerSource, /savingPreferenceKeysRef\.current\.add\(pendingKey\)/);
+  assert.match(managerSource, /savingPreferenceKeysRef\.current\.delete\(pendingKey\)/);
+  assert.match(managerSource, /savingPreferenceKeys\.has\(/);
+  assert.match(settingsSource, /disabled=\{disabled\}/);
+  assert.doesNotMatch(settingsSource, /<label className="classroom-toggle-row/);
+});
+
+test("new Classroom configuration defaults no-due-date work on", () => {
+  assert.match(managerSource, /syncNoDueDate: true/);
+  assert.doesNotMatch(managerSource, /syncNoDueDate: false/);
 });
 
 test("human-readable sync status is relative", () => {
