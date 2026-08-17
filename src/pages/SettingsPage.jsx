@@ -1385,6 +1385,11 @@ function SettingsPage({
           classroomSetupTourRequest={classroomSetupTourRequest}
           onStartClassroomSetupTour={onStartClassroomSetupTour}
           navigationRequest={navigationRequest}
+          user={user}
+          classroomSyncSettings={classroomSyncSettings}
+          setClassroomSyncSettings={setClassroomSyncSettings}
+          classroomSyncStatus={classroomSyncStatus}
+          onSyncClassroomNow={onSyncClassroomNow}
         />
       ) : settingsView === "quickLinks" ? (
         <QuickLinksSettings
@@ -1531,6 +1536,11 @@ function IntegrationsSettings({
   classroomSetupTourRequest = 0,
   onStartClassroomSetupTour,
   navigationRequest = 0,
+  user = null,
+  classroomSyncSettings = [],
+  setClassroomSyncSettings = () => {},
+  classroomSyncStatus = { syncing: false, status: "idle", message: "", lastSyncedAt: null },
+  onSyncClassroomNow = () => {},
 }) {
   const sampleCourses = buildMockClassroomPreview(mockClassroomData);
   const importedCount = tasks.filter(
