@@ -1606,3 +1606,15 @@
     min-height: 44px;
   }
 }
+.task-classroom-link {
+  align-self: flex-start;
+  color: var(--accent-color);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.task-classroom-link:hover,
+.task-classroom-link:focus-visible {
+  text-decoration: underline;
+}

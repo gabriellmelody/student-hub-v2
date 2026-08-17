@@ -47,6 +47,10 @@ function TaskCard({
   const menuRef = useRef(null);
   const optionsButtonRef = useRef(null);
   const showOptions = openMenuTaskId === task.id;
+  const classroomLink =
+    task.source === "classroom" && typeof task.alternateLink === "string"
+      ? task.alternateLink.trim()
+      : "";
 
   function startEdit() {
     setDraftTask(createTaskDraft(task));
@@ -272,6 +276,16 @@ function TaskCard({
               </span>
             ))}
           </div>
+          {classroomLink && (
+            <a
+              className="task-classroom-link"
+              href={classroomLink}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open in Classroom
+            </a>
+          )}
         </div>
 
         <div className="task-row-end">

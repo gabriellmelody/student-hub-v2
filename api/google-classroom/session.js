@@ -1,7 +1,7 @@
-import { readClassroomSession } from "./_session.js";
+import { getValidClassroomSession } from "./_session.js";
 
-export default function handler(request, response) {
-  const sessionResult = readClassroomSession(request);
+export default async function handler(request, response) {
+  const sessionResult = await getValidClassroomSession(request);
 
   if (sessionResult.status === "no_classroom_session") {
     response.status(401).json({
@@ -16,12 +16,14 @@ export default function handler(request, response) {
   if (!sessionResult.ok) {
     response.status(401).json({
       ok: false,
-      status: "classroom_session_invalid_or_expired",
+      status: sessionResult.status || "classroom_session_invalid_or_expired",
       connected: false,
-      message: "Google Classroom session is invalid or expired. Connect again.",
+      message: "Reconnect Google Classroom.",
     });
     return;
   }
+
+  if (sessionResult.cookie) response.setHeader("Set-Cookie", sessionResult.cookie);
 
   const session = sessionResult.session;
 

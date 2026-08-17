@@ -90,6 +90,13 @@ import {
   getInstallationStatus,
   getUpdateAvailability,
 } from "../utils/pwaUpdateUtils.js";
+import { supabase } from "../lib/supabase.js";
+import { upsertClassroomSyncSettings } from "../lib/classroomSyncSettings.js";
+import {
+  getDefaultClassroomSyncSetting,
+  mergeClassroomCoursesWithSettings,
+  pruneDeletedSubjectLinks,
+} from "../utils/classroomAutoSyncUtils.js";
 
 const STUDENT_HUB_SUPPORT_EMAIL = normalizeSupportEmail(
   import.meta.env.VITE_STUDENT_HUB_SUPPORT_EMAIL || ""
@@ -574,6 +581,11 @@ function SettingsPage({
     onLater: () => {},
   },
   onInstallDayLo = () => {},
+  user = null,
+  classroomSyncSettings = [],
+  setClassroomSyncSettings = () => {},
+  classroomSyncStatus = { syncing: false, status: "idle", message: "", lastSyncedAt: null },
+  onSyncClassroomNow = () => {},
 }) {
   const [settingsView, setSettingsView] = useState(() => initialView || "hub");
   const [savedThemeColorSnapshot, setSavedThemeColorSnapshot] = useState(() =>
@@ -1880,6 +1892,31 @@ function IntegrationsSettings({
     setIntegrationAutoSaveStatus({ status: "idle", message: "" });
   }
 
+  async function saveClassroomSyncSettings(nextSettings) {
+    setClassroomSyncSettings(nextSettings);
+    if (!user?.id) return;
+
+    markIntegrationAutoSaving();
+    try {
+      const savedSettings = await upsertClassroomSyncSettings(
+        supabase,
+        user.id,
+        nextSettings
+      );
+      setClassroomSyncSettings((currentSettings) => {
+        const savedByCourse = new Map(
+          savedSettings.map((setting) => [setting.classroomCourseId, setting])
+        );
+        return currentSettings.map(
+          (setting) => savedByCourse.get(setting.classroomCourseId) || setting
+        );
+      });
+      markIntegrationAutoSaved();
+    } catch {
+      markIntegrationAutoSaveError();
+    }
+  }
+
   useEffect(() => {
     localStorage.setItem(
       MOCK_CLASSROOM_INTEGRATION_STORAGE_KEY,
@@ -1920,6 +1957,15 @@ function IntegrationsSettings({
       markIntegrationAutoSaveError();
     }
   }, [realClassroomCourseSubjectLinks]);
+
+  useEffect(() => {
+    const prunedSettings = pruneDeletedSubjectLinks(classroomSyncSettings, subjects);
+    const changed = prunedSettings.some(
+      (setting, index) => setting.subjectId !== classroomSyncSettings[index]?.subjectId
+    );
+
+    if (changed) void saveClassroomSyncSettings(prunedSettings);
+  }, [classroomSyncSettings, subjects]);
 
   useEffect(() => {
     if (!googleCalendarPreferencesReadyRef.current) {
@@ -2603,6 +2649,10 @@ function IntegrationsSettings({
       }
 
       const loadedCourses = Array.isArray(result.courses) ? result.courses : [];
+      const mergedSyncSettings = mergeClassroomCoursesWithSettings(
+        loadedCourses,
+        classroomSyncSettings
+      );
 
       setRealClassroomCourses({
         loading: false,
@@ -2626,6 +2676,7 @@ function IntegrationsSettings({
         loadedCourses,
         realClassroomCourseSelections
       );
+      void saveClassroomSyncSettings(mergedSyncSettings);
       if (loadedCourses.length > 0) {
         setRealClassroomManagerPageOpen(true, {
           push: !showRealClassroomReview,
@@ -3048,6 +3099,23 @@ function IntegrationsSettings({
     });
 
     if (selection === "included" && course) {
+      const existingSetting = classroomSyncSettings.find(
+        (setting) => setting.classroomCourseId === courseId
+      );
+      void saveClassroomSyncSettings([
+        ...classroomSyncSettings.filter(
+          (setting) => setting.classroomCourseId !== courseId
+        ),
+        {
+          ...getDefaultClassroomSyncSetting(course, suggestedLink?.subjectId || null),
+          ...existingSetting,
+          syncEnabled: true,
+          syncActive: existingSetting?.syncActive ?? true,
+          syncNoDueDate: existingSetting?.syncNoDueDate ?? false,
+          syncCompleted: existingSetting?.syncCompleted ?? false,
+          subjectId: existingSetting?.subjectId || suggestedLink?.subjectId || null,
+        },
+      ]);
       setRealClassroomCourseSubjectLinks((currentLinks) => {
         if (currentLinks[courseId]) return currentLinks;
 
@@ -3056,6 +3124,18 @@ function IntegrationsSettings({
           : currentLinks;
       });
     } else if (selection === "ignored") {
+      const existingSetting = classroomSyncSettings.find(
+        (setting) => setting.classroomCourseId === courseId
+      );
+      if (existingSetting) {
+        void saveClassroomSyncSettings(
+          classroomSyncSettings.map((setting) =>
+            setting.classroomCourseId === courseId
+              ? { ...setting, syncEnabled: false }
+              : setting
+          )
+        );
+      }
       setRealClassroomCourseSubjectLinks((currentLinks) => {
         if (!currentLinks[courseId]) return currentLinks;
 
@@ -3201,6 +3281,19 @@ function IntegrationsSettings({
     }
 
     markIntegrationAutoSaving();
+    const existingSetting = classroomSyncSettings.find(
+      (setting) => setting.classroomCourseId === courseId
+    );
+    void saveClassroomSyncSettings([
+      ...classroomSyncSettings.filter(
+        (setting) => setting.classroomCourseId !== courseId
+      ),
+      {
+        ...getDefaultClassroomSyncSetting(course, selectedSubject?.id || null),
+        ...existingSetting,
+        subjectId: selectedSubject?.id || null,
+      },
+    ]);
     setRealClassroomCourseSubjectLinks((currentLinks) => {
       if (!selectedSubject) {
         if (!currentLinks[courseId]) return currentLinks;
@@ -3577,6 +3670,10 @@ function IntegrationsSettings({
             setPendingAction("archive-real-no-due")
           }
           onRestoreArchivedClassroomTasks={restoreArchivedRealClassroomTasks}
+          syncSettings={classroomSyncSettings}
+          syncStatus={classroomSyncStatus}
+          onUpdateSyncSettings={saveClassroomSyncSettings}
+          onSyncNow={onSyncClassroomNow}
           onBack={() => setRealClassroomManagerPageOpen(false)}
         />
 
@@ -4663,6 +4760,10 @@ function RealClassroomCourseReviewPage({
   onResetChoices,
   onArchiveNoDueDateClassroomTasks,
   onRestoreArchivedClassroomTasks,
+  syncSettings = [],
+  syncStatus = { syncing: false, status: "idle", message: "", lastSyncedAt: null },
+  onUpdateSyncSettings = () => {},
+  onSyncNow = () => {},
   onBack,
 }) {
   const courses = courseState.courses;
@@ -4696,6 +4797,24 @@ function RealClassroomCourseReviewPage({
 
       courseRow?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 0);
+  }
+
+  function updateCourseSyncSetting(course, updates) {
+    const courseId = getRealClassroomCourseId(course);
+    if (!courseId) return;
+    const currentSetting =
+      syncSettings.find((setting) => setting.classroomCourseId === courseId) ||
+      getDefaultClassroomSyncSetting(course, subjectLinks[courseId]?.subjectId || null);
+    onUpdateSyncSettings([
+      ...syncSettings.filter((setting) => setting.classroomCourseId !== courseId),
+      {
+        ...currentSetting,
+        classroomCourseId: courseId,
+        classroomCourseName: course.name || currentSetting.classroomCourseName,
+        subjectId: subjectLinks[courseId]?.subjectId || currentSetting.subjectId || null,
+        ...updates,
+      },
+    ]);
   }
 
   return (
@@ -4751,6 +4870,21 @@ function RealClassroomCourseReviewPage({
             {courseState.lastCheckedAt && (
               <small>Loaded {formatConnectionTime(courseState.lastCheckedAt)}</small>
             )}
+            <small>
+              {syncStatus.syncing
+                ? "Syncing..."
+                : syncStatus.lastSyncedAt
+                  ? `Last synced ${formatConnectionTime(syncStatus.lastSyncedAt)}`
+                  : syncStatus.message || "Not synced yet"}
+            </small>
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => onSyncNow()}
+              disabled={syncStatus.syncing}
+            >
+              {syncStatus.syncing ? "Syncing..." : "Sync now"}
+            </button>
           </div>
 
           <div
@@ -4850,6 +4984,9 @@ function RealClassroomCourseReviewPage({
                   linkedSubject ||
                   findBestSubjectForClassroomCourse(subjects, course);
                 const subjectName = getSuggestedClassroomSubjectName(course);
+                const syncSetting =
+                  syncSettings.find((setting) => setting.classroomCourseId === courseId) ||
+                  getDefaultClassroomSyncSetting(course, linkedSubject?.id || null);
 
                 return (
                   <article
@@ -4947,6 +5084,65 @@ function RealClassroomCourseReviewPage({
                               : `Create and link "${subjectName}"`}
                           </button>
                         )}
+                        {course.alternateLink && (
+                          <a
+                            href={course.alternateLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            Open Classroom
+                          </a>
+                        )}
+                        <div className="real-classroom-sync-switches">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={syncSetting.syncEnabled !== false}
+                              onChange={(event) =>
+                                updateCourseSyncSetting(course, {
+                                  syncEnabled: event.target.checked,
+                                })
+                              }
+                            />
+                            <span>Auto-sync</span>
+                          </label>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={syncSetting.syncActive !== false}
+                              onChange={(event) =>
+                                updateCourseSyncSetting(course, {
+                                  syncActive: event.target.checked,
+                                })
+                              }
+                            />
+                            <span>Active</span>
+                          </label>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={syncSetting.syncNoDueDate === true}
+                              onChange={(event) =>
+                                updateCourseSyncSetting(course, {
+                                  syncNoDueDate: event.target.checked,
+                                })
+                              }
+                            />
+                            <span>No due date</span>
+                          </label>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={syncSetting.syncCompleted === true}
+                              onChange={(event) =>
+                                updateCourseSyncSetting(course, {
+                                  syncCompleted: event.target.checked,
+                                })
+                              }
+                            />
+                            <span>Completed</span>
+                          </label>
+                        </div>
                       </div>
                     )}
                   </article>

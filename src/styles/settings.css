@@ -5500,3 +5500,19 @@ html:has(.settings-page) {
     justify-content: center;
   }
 }
+.real-classroom-sync-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.real-classroom-sync-switches label {
+  align-items: center;
+  background: var(--surface-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+}

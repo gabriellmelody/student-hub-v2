@@ -84,6 +84,11 @@ import useGuidedTour from "./hooks/useGuidedTour.js";
 import usePwaInstall from "./hooks/usePwaInstall.js";
 import { useAuth } from "./hooks/useAuth.jsx";
 import usePwaUpdate from "./hooks/usePwaUpdate.js";
+import { supabase } from "./lib/supabase.js";
+import {
+  fetchClassroomSyncSettings,
+  markClassroomSyncSettingsSynced,
+} from "./lib/classroomSyncSettings.js";
 import { getGuidedTourDefinition } from "./data/guidedTours.js";
 import {
   CURRENT_DAYLO_VERSION,
@@ -132,6 +137,11 @@ import {
   clearClassroomSetupResume,
   markClassroomSetupIntroSeen,
 } from "./utils/classroomSetupTourUtils.js";
+import {
+  CLASSROOM_AUTO_SYNC_FRESHNESS_MS,
+  CLASSROOM_AUTO_SYNC_INTERVAL_MS,
+  reconcileClassroomAssignments,
+} from "./utils/classroomAutoSyncUtils.js";
 
 function resolveThemePreference(themePreference) {
   if (themePreference !== "system") return themePreference === "dark" ? "dark" : "light";
@@ -337,6 +347,62 @@ function App() {
     deleteTasks: deleteCloudTasks,
     clearTasks: clearCloudTasks,
   } = useCloudTasks(auth.user);
+  const [classroomSyncSettings, setClassroomSyncSettings] = useState([]);
+  const [classroomSyncStatus, setClassroomSyncStatus] = useState({
+    syncing: false,
+    status: "idle",
+    message: "",
+    lastSyncedAt: null,
+  });
+  const classroomSyncInFlightRef = useRef(false);
+  const classroomLastSyncAttemptRef = useRef(0);
+  const classroomSyncTimerRef = useRef(null);
+  const classroomSyncSettingsRef = useRef([]);
+  const classroomSyncUserIdRef = useRef(auth.user?.id || "");
+
+  useEffect(() => {
+    classroomSyncSettingsRef.current = classroomSyncSettings;
+  }, [classroomSyncSettings]);
+
+  useEffect(() => {
+    const userId = auth.user?.id || "";
+    classroomSyncUserIdRef.current = userId;
+    classroomSyncInFlightRef.current = false;
+    classroomLastSyncAttemptRef.current = 0;
+    window.clearInterval(classroomSyncTimerRef.current);
+    setClassroomSyncSettings([]);
+    setClassroomSyncStatus({
+      syncing: false,
+      status: "idle",
+      message: "",
+      lastSyncedAt: null,
+    });
+
+    if (!userId) return undefined;
+
+    let cancelled = false;
+    fetchClassroomSyncSettings(supabase, userId)
+      .then((settings) => {
+        if (!cancelled && classroomSyncUserIdRef.current === userId) {
+          setClassroomSyncSettings(settings);
+        }
+      })
+      .catch(() => {
+        if (!cancelled && classroomSyncUserIdRef.current === userId) {
+          setClassroomSyncStatus((current) => ({
+            ...current,
+            status: "failed",
+            message: "Sync failed",
+          }));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(classroomSyncTimerRef.current);
+      classroomSyncInFlightRef.current = false;
+    };
+  }, [auth.user?.id]);
   const studentProfile = auth.profile || {
     id: auth.user?.id || "",
     displayName: "Student",
@@ -1895,6 +1961,10 @@ function App() {
   }
 
   function createTaskFromClassroomPreviewAssignment(assignment, importedAt) {
+    const completed = ["done", "returned"].includes(
+      assignment.classroomStatusCategory || "unknown"
+    );
+
     return normalizeTask({
       id: `classroom-${String(assignment.externalId || Date.now()).replace(
         /[^a-z0-9-]+/gi,
@@ -1906,8 +1976,10 @@ function App() {
       dueDate: String(assignment.dueDate || ""),
       dueTime: String(assignment.dueTime || ""),
       effort: 2,
-      completed: false,
-      completedAt: null,
+      completed,
+      completedAt: completed
+        ? Date.parse(assignment.submissionUpdatedAt) || Date.parse(importedAt)
+        : null,
       source: "classroom",
       externalId: assignment.externalId,
       classroomCourseId: assignment.classroomCourseId || null,
@@ -2026,6 +2098,10 @@ function App() {
           description: classroomTask.description,
           dueDate: classroomTask.dueDate,
           dueTime: classroomTask.dueTime,
+          completed: classroomTask.completed,
+          completedAt: classroomTask.completed
+            ? existingTask.completedAt || classroomTask.completedAt
+            : null,
           classroomCourseId: classroomTask.classroomCourseId,
           classroomCourseName: classroomTask.classroomCourseName,
           linkedSubjectId: classroomTask.linkedSubjectId,
@@ -2042,7 +2118,9 @@ function App() {
           submissionUpdatedAt: classroomTask.submissionUpdatedAt,
           sourceUpdatedAt: classroomTask.sourceUpdatedAt,
           lastSyncedAt: importedAt,
-          subject: existingTask.subject || classroomTask.subject,
+          subject: classroomTask.linkedSubjectName || existingTask.subject,
+          archived: false,
+          archivedAt: null,
         });
         tasksToSync.push(nextTasks[existingTaskIndex]);
         return;
@@ -2072,6 +2150,156 @@ function App() {
         requestedAssignments.length - uniqueAssignments.length + upToDateCount,
     };
   }
+
+  const syncConfiguredClassroomCourses = useCallback(
+    async ({ force = false } = {}) => {
+      const userId = auth.user?.id || "";
+      const settings = classroomSyncSettingsRef.current;
+      const enabledSettings = settings.filter(
+        (setting) => setting.syncEnabled && setting.subjectId
+      );
+
+      if (!userId || enabledSettings.length === 0) return { ok: true, skipped: true };
+
+      const now = Date.now();
+      if (
+        !force &&
+        now - classroomLastSyncAttemptRef.current < CLASSROOM_AUTO_SYNC_FRESHNESS_MS
+      ) {
+        return { ok: true, skipped: true };
+      }
+      if (classroomSyncInFlightRef.current) return { ok: true, skipped: true };
+
+      classroomSyncInFlightRef.current = true;
+      classroomLastSyncAttemptRef.current = now;
+      setClassroomSyncStatus((current) => ({
+        ...current,
+        syncing: true,
+        status: "syncing",
+        message: "Syncing...",
+      }));
+
+      try {
+        const response = await fetch("/api/google-classroom/coursework-preview", {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            courses: enabledSettings.map((setting) => {
+              const subject = subjects.find(
+                (subjectItem) => subjectItem.id === setting.subjectId
+              );
+
+              return {
+                classroomCourseId: setting.classroomCourseId,
+                classroomCourseName: setting.classroomCourseName,
+                linkedSubjectId: subject?.id || "",
+                linkedSubjectName: subject?.name || "",
+              };
+            }),
+          }),
+        });
+        const result = await response.json();
+        if (!response.ok || result.ok !== true) {
+          throw new Error(result.status || "classroom_sync_failed");
+        }
+
+        const syncedAt = new Date().toISOString();
+        const reconciliation = reconcileClassroomAssignments({
+          assignments: result.assignments || [],
+          settings: enabledSettings,
+          subjects,
+          tasks,
+          syncedAt,
+        });
+
+        if (reconciliation.tasksToSync.length > 0) {
+          const savedTasks = await upsertCloudClassroomTasks(
+            reconciliation.tasksToSync
+          );
+          if (savedTasks == null) throw new Error("classroom_task_upsert_failed");
+        }
+
+        const syncedSettings = await markClassroomSyncSettingsSynced(
+          supabase,
+          userId,
+          enabledSettings.map((setting) => setting.classroomCourseId),
+          syncedAt
+        );
+
+        if (classroomSyncUserIdRef.current === userId) {
+          setClassroomSyncSettings((current) => {
+            const syncedByCourse = new Map(
+              syncedSettings.map((setting) => [setting.classroomCourseId, setting])
+            );
+            return current.map(
+              (setting) => syncedByCourse.get(setting.classroomCourseId) || setting
+            );
+          });
+
+          const changed =
+            reconciliation.counts.importedCount +
+            reconciliation.counts.updatedCount;
+          setClassroomSyncStatus({
+            syncing: false,
+            status: "synced",
+            message: changed > 0 ? `${changed} assignments updated` : "Classroom synced",
+            lastSyncedAt: syncedAt,
+          });
+        }
+
+        return { ok: true, ...reconciliation.counts };
+      } catch (error) {
+        if (classroomSyncUserIdRef.current === userId) {
+          const reconnect = [
+            "no_classroom_session",
+            "classroom_reauthorization_required",
+            "classroom_session_invalid_or_expired",
+          ].includes(error?.message);
+          setClassroomSyncStatus((current) => ({
+            ...current,
+            syncing: false,
+            status: reconnect ? "reconnect" : "failed",
+            message: reconnect
+              ? "Reconnect Classroom"
+              : "Couldn't sync Classroom. Try again.",
+          }));
+        }
+        return { ok: false, error: true };
+      } finally {
+        classroomSyncInFlightRef.current = false;
+      }
+    },
+    [auth.user?.id, subjects, tasks, upsertCloudClassroomTasks]
+  );
+
+  useEffect(() => {
+    if (!auth.user?.id || classroomSyncSettings.length === 0) return undefined;
+
+    const runFreshSync = () => {
+      if (document.visibilityState === "hidden") return;
+      void syncConfiguredClassroomCourses();
+    };
+
+    void syncConfiguredClassroomCourses();
+    window.addEventListener("focus", runFreshSync);
+    window.addEventListener("online", runFreshSync);
+    document.addEventListener("visibilitychange", runFreshSync);
+    classroomSyncTimerRef.current = window.setInterval(
+      runFreshSync,
+      CLASSROOM_AUTO_SYNC_INTERVAL_MS
+    );
+
+    return () => {
+      window.clearInterval(classroomSyncTimerRef.current);
+      window.removeEventListener("focus", runFreshSync);
+      window.removeEventListener("online", runFreshSync);
+      document.removeEventListener("visibilitychange", runFreshSync);
+    };
+  }, [auth.user?.id, classroomSyncSettings, syncConfiguredClassroomCourses]);
 
   function isNoDueDateClassroomArchiveCandidate(task) {
     return (
@@ -3173,6 +3401,11 @@ function App() {
           installControl={installControl}
           updateControl={updateControl}
           onInstallDayLo={startInstallFlow}
+          user={auth.user}
+          classroomSyncSettings={classroomSyncSettings}
+          setClassroomSyncSettings={setClassroomSyncSettings}
+          classroomSyncStatus={classroomSyncStatus}
+          onSyncClassroomNow={() => syncConfiguredClassroomCourses({ force: true })}
         />
       );
     }

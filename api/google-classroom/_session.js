@@ -2,7 +2,8 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 
 export const CLASSROOM_SESSION_COOKIE_NAME = "student_hub_classroom_session";
 
-const SESSION_MAX_AGE_SECONDS = 60 * 60;
+const ACCESS_TOKEN_SESSION_MAX_AGE_SECONDS = 60 * 60;
+const REFRESH_TOKEN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
 
 function base64UrlEncode(buffer) {
   return Buffer.from(buffer).toString("base64url");
@@ -153,8 +154,8 @@ export function createClassroomSessionCookieFromTokenResponse(
   const tokenExpiresIn = Number(tokenResponse.expires_in);
   const expiresInSeconds =
     Number.isFinite(tokenExpiresIn) && tokenExpiresIn > 0
-      ? Math.min(tokenExpiresIn, SESSION_MAX_AGE_SECONDS)
-      : SESSION_MAX_AGE_SECONDS;
+      ? Math.min(tokenExpiresIn, ACCESS_TOKEN_SESSION_MAX_AGE_SECONDS)
+      : ACCESS_TOKEN_SESSION_MAX_AGE_SECONDS;
   const createdAt =
     typeof existingSession?.created_at === "string"
       ? existingSession.created_at
@@ -187,8 +188,12 @@ export function createClassroomSessionCookieFromTokenResponse(
     created_at: createdAt,
   };
 
+  const cookieMaxAgeSeconds = refreshToken
+    ? REFRESH_TOKEN_SESSION_MAX_AGE_SECONDS
+    : expiresInSeconds;
+
   return {
-    cookie: serializeCookie(encryptSessionPayload(payload), expiresInSeconds),
+    cookie: serializeCookie(encryptSessionPayload(payload), cookieMaxAgeSeconds),
     expiresAt,
     hasRefreshToken: typeof refreshToken === "string",
     refreshTokenPreserved:
@@ -217,16 +222,20 @@ export function readClassroomSession(request) {
     const payload = decryptSessionPayload(cookieValue);
     const expiresAt = Date.parse(payload.expires_at);
 
-    if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    if (!Number.isFinite(expiresAt)) {
       return {
         ok: false,
         status: "classroom_session_invalid_or_expired",
       };
     }
 
+    const expired = expiresAt <= Date.now();
+
     return {
-      ok: true,
-      status: "classroom_session_available",
+      ok: !expired,
+      status: expired
+        ? "classroom_access_token_expired"
+        : "classroom_session_available",
       session: payload,
     };
   } catch {
@@ -235,4 +244,59 @@ export function readClassroomSession(request) {
       status: "classroom_session_invalid_or_expired",
     };
   }
+}
+
+export async function getValidClassroomSession(request) {
+  const sessionResult = readClassroomSession(request);
+
+  if (sessionResult.ok) return sessionResult;
+
+  if (
+    sessionResult.status !== "classroom_access_token_expired" ||
+    typeof sessionResult.session?.refresh_token !== "string"
+  ) {
+    return sessionResult;
+  }
+
+  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+    },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLASSROOM_CLIENT_ID,
+      client_secret: process.env.GOOGLE_CLASSROOM_CLIENT_SECRET,
+      refresh_token: sessionResult.session.refresh_token,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  let tokenJson = null;
+  try {
+    tokenJson = await tokenResponse.json();
+  } catch {
+    tokenJson = null;
+  }
+
+  if (!tokenResponse.ok || typeof tokenJson?.access_token !== "string") {
+    return {
+      ok: false,
+      status: "classroom_reauthorization_required",
+    };
+  }
+
+  const sessionCookie = createClassroomSessionCookieFromTokenResponse(
+    tokenJson,
+    sessionResult.session,
+    null
+  );
+
+  return {
+    ok: true,
+    status: "classroom_session_refreshed",
+    session: sessionCookie.session,
+    cookie: sessionCookie.cookie,
+    expiresAt: sessionCookie.expiresAt,
+  };
 }

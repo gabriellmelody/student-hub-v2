@@ -1,4 +1,4 @@
-import { readClassroomSession } from "./_session.js";
+import { getValidClassroomSession } from "./_session.js";
 
 const MAX_PREVIEW_COURSES = 40;
 
@@ -272,7 +272,7 @@ export default async function handler(request, response) {
     return;
   }
 
-  const sessionResult = readClassroomSession(request);
+  const sessionResult = await getValidClassroomSession(request);
 
   if (sessionResult.status === "no_classroom_session") {
     response.status(401).json({
@@ -287,12 +287,14 @@ export default async function handler(request, response) {
   if (!sessionResult.ok) {
     response.status(401).json({
       ok: false,
-      status: "classroom_session_invalid_or_expired",
+      status: sessionResult.status || "classroom_session_invalid_or_expired",
       connected: false,
-      message: "Google Classroom session is invalid or expired. Connect again.",
+      message: "Reconnect Google Classroom.",
     });
     return;
   }
+
+  if (sessionResult.cookie) response.setHeader("Set-Cookie", sessionResult.cookie);
 
   const requestBody = await readRequestJson(request);
   const includedCourses = Array.isArray(requestBody?.courses)
