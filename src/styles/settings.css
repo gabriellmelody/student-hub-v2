@@ -5516,3 +5516,154 @@ html:has(.settings-page) {
   gap: 0.35rem;
   padding: 0.35rem 0.6rem;
 }
+
+.classroom-watch-page {
+  gap: 1.25rem;
+}
+
+.classroom-watch-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.classroom-watch-actions,
+.classroom-setup-actions,
+.classroom-watch-manage-actions,
+.classroom-advanced-actions,
+.classroom-add-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.classroom-watch-section h2,
+.classroom-add-header h2 {
+  font-size: 1rem;
+  margin: 0 0 0.75rem;
+}
+
+.classroom-watch-list,
+.classroom-picker-list,
+.classroom-setup-flow,
+.classroom-add-panel {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.classroom-watch-card,
+.classroom-add-panel,
+.classroom-watch-empty,
+.classroom-advanced-tools {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.85rem;
+  padding: 1rem;
+}
+
+.classroom-watch-card-main,
+.classroom-picker-row {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.classroom-watch-card h3,
+.classroom-picker-row strong {
+  margin: 0;
+}
+
+.classroom-watch-card p,
+.classroom-watch-card small,
+.classroom-picker-row small,
+.classroom-watch-empty,
+.classroom-preference-panel small {
+  color: var(--text-muted);
+}
+
+.classroom-watch-card p {
+  margin: 0.15rem 0;
+}
+
+.classroom-watch-manage {
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: 0.85rem;
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+}
+
+.classroom-watch-manage dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.classroom-watch-manage dt {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.classroom-watch-manage dd {
+  margin: 0;
+}
+
+.classroom-picker-row {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.75rem;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.9rem;
+  text-align: left;
+}
+
+.classroom-picker-row.selected {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 14%, transparent);
+}
+
+.classroom-preference-panel {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.classroom-preference-panel label {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.65rem;
+}
+
+.classroom-preference-panel span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.classroom-advanced-tools summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.classroom-advanced-actions {
+  margin-top: 0.85rem;
+}
+
+@media (max-width: 560px) {
+  .classroom-watch-header,
+  .classroom-watch-card-main,
+  .classroom-picker-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .classroom-watch-actions,
+  .classroom-watch-actions button,
+  .classroom-watch-card-main button,
+  .classroom-setup-flow > button,
+  .classroom-add-panel > button {
+    width: 100%;
+  }
+}

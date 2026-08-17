@@ -90,6 +90,7 @@ import {
   getInstallationStatus,
   getUpdateAvailability,
 } from "../utils/pwaUpdateUtils.js";
+import { createCloudSubject } from "../lib/cloudSubjects.js";
 import { supabase } from "../lib/supabase.js";
 import { upsertClassroomSyncSettings } from "../lib/classroomSyncSettings.js";
 import {
@@ -1611,6 +1612,7 @@ function IntegrationsSettings({
     status: "checking",
     message: "Checking Classroom session...",
     tokenSummary: null,
+    accountEmail: "",
   });
   const [realClassroomCourses, setRealClassroomCourses] = useState({
     loading: false,
@@ -2601,6 +2603,7 @@ function IntegrationsSettings({
             ? "Google Classroom connected."
             : result.message || "No Google account connected.",
         tokenSummary: result.tokenSummary || null,
+        accountEmail: result.account?.email || "",
       });
     } catch {
       setRealClassroomSession({
@@ -2609,6 +2612,7 @@ function IntegrationsSettings({
         status: "session_check_failed",
         message: "Could not check Classroom connection status.",
         tokenSummary: null,
+        accountEmail: "",
       });
     }
   }
@@ -3645,13 +3649,16 @@ function IntegrationsSettings({
           onDismiss={dismissIntegrationAutoSaveError}
         />
 
-        <RealClassroomCourseReviewPage
-          courseState={realClassroomCourses}
-          selections={realClassroomCourseSelections}
-          subjects={subjects}
-          subjectLinks={realClassroomCourseSubjectLinks}
-          cleanup={realClassroomCleanup}
-          assignmentPreview={realClassroomAssignmentPreview}
+          <RealClassroomCourseReviewPage
+            courseState={realClassroomCourses}
+            selections={realClassroomCourseSelections}
+            subjects={subjects}
+            setSubjects={setSubjects}
+            subjectLinks={realClassroomCourseSubjectLinks}
+            session={realClassroomSession}
+            user={user}
+            cleanup={realClassroomCleanup}
+            assignmentPreview={realClassroomAssignmentPreview}
           importedClassroomTasks={getImportedClassroomTaskMap(tasks)}
           onLoadCourses={loadRealClassroomCourses}
           onSelectCourse={updateRealClassroomCourseSelection}
@@ -4051,7 +4058,7 @@ function IntegrationCard({
 
       <p className="integration-description">
         {isRealClassroom && realClassroomSession.connected
-          ? "Manage classes, preview assignments, and import selected work."
+          ? "Choose which Google Classroom classes DayLo should keep up to date."
           : isGoogleCalendar && googleCalendarSession.connected
             ? "Manage calendars, visible events, and busy time."
           : integration.description}
@@ -4747,11 +4754,105 @@ function GoogleCalendarManagerRow({ calendar, preference, onTogglePreference }) 
   );
 }
 
+function getClassroomSyncStatusLabel(syncStatus, settings = []) {
+  if (syncStatus?.syncing) return "Syncing...";
+  if (syncStatus?.status === "reconnect") return "Reconnect Classroom";
+  if (syncStatus?.status === "failed") return "Couldn't sync";
+  const lastSyncedAt =
+    syncStatus?.lastSyncedAt ||
+    settings
+      .map((setting) => setting.lastSyncedAt)
+      .filter(Boolean)
+      .sort()
+      .at(-1);
+
+  return lastSyncedAt ? `Synced ${formatConnectionTime(lastSyncedAt)}` : "Ready to sync";
+}
+
+function getReliableClassroomSubject(courseId, setting, subjects) {
+  if (setting?.subjectId) {
+    const settingSubject = subjects.find((subject) => subject.id === setting.subjectId);
+    if (settingSubject) return settingSubject;
+  }
+
+  return (
+    subjects.find(
+      (subject) =>
+        subject.classroomCourseId === courseId || subject.externalId === courseId
+    ) || null
+  );
+}
+
+function ClassroomPreferencePanel({ preferences, onChange, includeMaster = false }) {
+  function updatePreference(key, value) {
+    onChange({ ...preferences, [key]: value });
+  }
+
+  return (
+    <div className="classroom-preference-panel">
+      {includeMaster && (
+        <label>
+          <input
+            type="checkbox"
+            checked={preferences.syncEnabled !== false}
+            onChange={(event) =>
+              updatePreference("syncEnabled", event.target.checked)
+            }
+          />
+          <span>
+            <strong>Auto-sync</strong>
+          </span>
+        </label>
+      )}
+      <label>
+        <input
+          type="checkbox"
+          checked={preferences.syncActive !== false}
+          onChange={(event) => updatePreference("syncActive", event.target.checked)}
+        />
+        <span>
+          <strong>Active assignments</strong>
+          <small>Current work you still need to complete.</small>
+        </span>
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={preferences.syncNoDueDate === true}
+          onChange={(event) =>
+            updatePreference("syncNoDueDate", event.target.checked)
+          }
+        />
+        <span>
+          <strong>No due date</strong>
+          <small>Coursework that has no deadline.</small>
+        </span>
+      </label>
+      <label>
+        <input
+          type="checkbox"
+          checked={preferences.syncCompleted === true}
+          onChange={(event) =>
+            updatePreference("syncCompleted", event.target.checked)
+          }
+        />
+        <span>
+          <strong>Completed history</strong>
+          <small>Import assignments already completed before DayLo saw them.</small>
+        </span>
+      </label>
+    </div>
+  );
+}
+
 function RealClassroomCourseReviewPage({
   courseState,
   selections,
   subjects,
+  setSubjects,
   subjectLinks,
+  session,
+  user,
   onLoadCourses,
   onSelectCourse,
   onSelectSubject,
@@ -4826,6 +4927,539 @@ function RealClassroomCourseReviewPage({
       },
     ]);
   }
+
+  const [setupStep, setSetupStep] = useState("classes");
+  const [selectedSetupCourseIds, setSelectedSetupCourseIds] = useState({});
+  const [addClassesOpen, setAddClassesOpen] = useState(false);
+  const [selectedAddCourseIds, setSelectedAddCourseIds] = useState({});
+  const [managedCourseId, setManagedCourseId] = useState("");
+  const [savingCourses, setSavingCourses] = useState(false);
+  const [setupPreferences, setSetupPreferences] = useState({
+    syncActive: true,
+    syncNoDueDate: false,
+    syncCompleted: false,
+  });
+  const coursesById = new Map(
+    courses.map((course) => [getRealClassroomCourseId(course), course])
+  );
+  const activeSyncSettings = syncSettings.filter(
+    (setting) => setting.syncEnabled !== false
+  );
+  const configuredCourseIds = new Set(
+    activeSyncSettings.map((setting) => setting.classroomCourseId)
+  );
+  const unconfiguredCourses = courses.filter(
+    (course) => !configuredCourseIds.has(getRealClassroomCourseId(course))
+  );
+  const selectedSetupCount = Object.values(selectedSetupCourseIds).filter(Boolean).length;
+  const selectedAddCount = Object.values(selectedAddCourseIds).filter(Boolean).length;
+  const syncStatusLabel = getClassroomSyncStatusLabel(syncStatus, activeSyncSettings);
+
+  async function ensureSubjectForCourse(course) {
+    const courseId = getRealClassroomCourseId(course);
+    const existingSetting = syncSettings.find(
+      (setting) => setting.classroomCourseId === courseId
+    );
+    const reliableSubject = getReliableClassroomSubject(
+      courseId,
+      existingSetting,
+      subjects
+    );
+
+    if (reliableSubject) return reliableSubject;
+
+    const now = new Date().toISOString();
+    const subjectDraft = {
+      ...createSubjectDraft("Other", subjects, course.name || "Untitled class"),
+      name: course.name || "Untitled class",
+      courseSystem: "Other",
+      level: "Other",
+      colour: suggestSubjectColour(course.name || "Untitled class", subjects, courseId),
+      source: REAL_CLASSROOM_SOURCE,
+      classroomCourseId: courseId,
+      externalId: courseId,
+      importedAt: now,
+      lastSyncedAt: null,
+    };
+    const savedSubject = await createCloudSubject(
+      supabase,
+      user?.id,
+      subjectDraft,
+      subjects.length
+    );
+    await setSubjects((currentSubjects) =>
+      currentSubjects.some((subject) => subject.id === savedSubject.id)
+        ? currentSubjects
+        : [...currentSubjects, savedSubject]
+    );
+    return savedSubject;
+  }
+
+  async function configureCourses(courseIds, preferences = setupPreferences) {
+    const ids = [...new Set(courseIds)].filter(Boolean);
+    if (!user?.id || ids.length === 0) return;
+
+    setSavingCourses(true);
+    try {
+      const nextSettings = [...syncSettings];
+
+      for (const courseId of ids) {
+        const course = coursesById.get(courseId);
+        if (!course) continue;
+        const subject = await ensureSubjectForCourse(course);
+        const existingIndex = nextSettings.findIndex(
+          (setting) => setting.classroomCourseId === courseId
+        );
+        const nextSetting = {
+          ...getDefaultClassroomSyncSetting(course, subject.id),
+          ...(existingIndex >= 0 ? nextSettings[existingIndex] : {}),
+          classroomCourseId: courseId,
+          classroomCourseName: course.name || "Untitled class",
+          subjectId: subject.id,
+          syncEnabled: true,
+          syncActive: preferences.syncActive !== false,
+          syncNoDueDate: preferences.syncNoDueDate === true,
+          syncCompleted: preferences.syncCompleted === true,
+        };
+
+        if (existingIndex >= 0) {
+          nextSettings[existingIndex] = nextSetting;
+        } else {
+          nextSettings.push(nextSetting);
+        }
+      }
+
+      await onUpdateSyncSettings(nextSettings);
+      setSetupStep("classes");
+      setSelectedSetupCourseIds({});
+      setSelectedAddCourseIds({});
+      setAddClassesOpen(false);
+      await onSyncNow();
+    } finally {
+      setSavingCourses(false);
+    }
+  }
+
+  function toggleSetupCourse(courseId) {
+    setSelectedSetupCourseIds((current) => ({
+      ...current,
+      [courseId]: !current[courseId],
+    }));
+  }
+
+  function toggleAddCourse(courseId) {
+    setSelectedAddCourseIds((current) => ({
+      ...current,
+      [courseId]: !current[courseId],
+    }));
+  }
+
+  function updateManagedCourse(updates) {
+    const course = coursesById.get(managedCourseId);
+    if (!course) return;
+    updateCourseSyncSetting(course, updates);
+  }
+
+  function stopSyncingCourse(setting) {
+    const subject = getReliableClassroomSubject(
+      setting.classroomCourseId,
+      setting,
+      subjects
+    );
+    const label = subject?.name || setting.classroomCourseName || "this class";
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `Stop syncing ${label} with Google Classroom? Existing DayLo tasks will stay.`
+      )
+    ) {
+      return;
+    }
+    onUpdateSyncSettings(
+      syncSettings.map((currentSetting) =>
+        currentSetting.classroomCourseId === setting.classroomCourseId
+          ? { ...currentSetting, syncEnabled: false }
+          : currentSetting
+      )
+    );
+    if (managedCourseId === setting.classroomCourseId) setManagedCourseId("");
+  }
+
+  async function renameClassroomSubject(subject) {
+    if (!subject) return;
+    const nextName =
+      typeof window === "undefined"
+        ? ""
+        : window.prompt("Rename Subject", subject.name);
+    if (!nextName || nextName.trim() === subject.name) return;
+
+    await setSubjects((currentSubjects) =>
+      currentSubjects.map((currentSubject) =>
+        currentSubject.id === subject.id
+          ? { ...currentSubject, name: nextName.trim() }
+          : currentSubject
+      )
+    );
+  }
+
+  async function syncNow() {
+    await onLoadCourses();
+    await onSyncNow();
+  }
+
+  if (!session?.connected) {
+    return (
+      <section className="settings-provider-subpage real-classroom-manager-page classroom-watch-page">
+        <div className="settings-provider-header">
+          <button
+            type="button"
+            className="settings-back-button settings-provider-back"
+            onClick={onBack}
+            aria-label="Back to Integrations"
+          >
+            ← Integrations
+          </button>
+          <header className="real-classroom-manager-header">
+            <div>
+              <p className="settings-group-label">Settings / Integrations</p>
+              <h1>Google Classroom</h1>
+              <p>Automatically keep your DayLo assignments up to date.</p>
+            </div>
+          </header>
+        </div>
+        <div className="classroom-watch-empty">
+          <ul>
+            <li>New assignments appear automatically</li>
+            <li>Due-date changes stay updated</li>
+            <li>Submitted work is marked complete</li>
+          </ul>
+          <a className="primary-button" href="/api/google-classroom/connect">
+            Connect Google Classroom
+          </a>
+        </div>
+      </section>
+    );
+  }
+
+  if (activeSyncSettings.length === 0) {
+    const selectedIds = Object.entries(selectedSetupCourseIds)
+      .filter(([, selected]) => selected)
+      .map(([courseId]) => courseId);
+
+    return (
+      <section className="settings-provider-subpage real-classroom-manager-page classroom-watch-page">
+        <div className="settings-provider-header">
+          <button
+            type="button"
+            className="settings-back-button settings-provider-back"
+            onClick={onBack}
+            aria-label="Back to Integrations"
+          >
+            ← Integrations
+          </button>
+          <header className="real-classroom-manager-header">
+            <div>
+              <p className="settings-group-label">Google Classroom</p>
+              <h1>
+                {setupStep === "classes" ? "Choose your classes" : "What should DayLo sync?"}
+              </h1>
+              <p>
+                {setupStep === "classes"
+                  ? "Choose the Classroom classes you want DayLo to keep in sync."
+                  : "These defaults apply to the classes you selected."}
+              </p>
+            </div>
+          </header>
+        </div>
+
+        {courseState.loading && courses.length === 0 ? (
+          <div className="classroom-watch-empty">Loading classes...</div>
+        ) : setupStep === "classes" ? (
+          <div className="classroom-setup-flow">
+            <div className="classroom-setup-actions">
+              <button
+                type="button"
+                className="secondary"
+                onClick={() =>
+                  setSelectedSetupCourseIds(
+                    Object.fromEntries(courses.map((course) => [getRealClassroomCourseId(course), true]))
+                  )
+                }
+              >
+                Select all
+              </button>
+              <button type="button" className="secondary" onClick={onLoadCourses}>
+                Refresh
+              </button>
+            </div>
+            <div className="classroom-picker-list">
+              {courses.map((course) => {
+                const courseId = getRealClassroomCourseId(course);
+                return (
+                  <button
+                    type="button"
+                    className={`classroom-picker-row ${
+                      selectedSetupCourseIds[courseId] ? "selected" : ""
+                    }`}
+                    onClick={() => toggleSetupCourse(courseId)}
+                    key={courseId}
+                  >
+                    <span>
+                      <strong>{course.name}</strong>
+                      <small>{course.section || course.description || "Google Classroom"}</small>
+                    </span>
+                    <span aria-hidden="true">
+                      {selectedSetupCourseIds[courseId] ? "✓" : ""}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={selectedSetupCount === 0}
+              onClick={() => setSetupStep("preferences")}
+            >
+              Continue
+            </button>
+          </div>
+        ) : (
+          <div className="classroom-setup-flow">
+            <ClassroomPreferencePanel
+              preferences={setupPreferences}
+              onChange={setSetupPreferences}
+            />
+            <button
+              type="button"
+              className="primary-button"
+              disabled={savingCourses}
+              onClick={() => configureCourses(selectedIds, setupPreferences)}
+            >
+              {savingCourses ? "Starting..." : "Start syncing"}
+            </button>
+          </div>
+        )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="settings-provider-subpage real-classroom-manager-page classroom-watch-page">
+      <div className="settings-provider-header">
+        <button
+          type="button"
+          className="settings-back-button settings-provider-back"
+          onClick={onBack}
+          aria-label="Back to Integrations"
+        >
+          ← Integrations
+        </button>
+        <header className="real-classroom-manager-header classroom-watch-header">
+          <div>
+            <p className="settings-group-label">Google Classroom</p>
+            <h1>Google Classroom</h1>
+            <p>
+              Connected as {session?.accountEmail || "your Google account"}
+            </p>
+            <strong>{syncStatusLabel}</strong>
+          </div>
+          <div className="classroom-watch-actions">
+            <button type="button" className="primary-button" onClick={syncNow} disabled={syncStatus.syncing}>
+              {syncStatus.syncing ? "Syncing..." : "Sync now"}
+            </button>
+            <button type="button" className="secondary" onClick={() => setAddClassesOpen(true)}>
+              Add classes
+            </button>
+          </div>
+        </header>
+      </div>
+
+      <div className="classroom-watch-section">
+        <h2>Your classes</h2>
+        <div className="classroom-watch-list">
+          {activeSyncSettings.map((setting) => {
+            const subject = getReliableClassroomSubject(
+              setting.classroomCourseId,
+              setting,
+              subjects
+            );
+            const course = coursesById.get(setting.classroomCourseId);
+            const title = subject?.name || setting.classroomCourseName || "Unlinked class";
+            const managed = managedCourseId === setting.classroomCourseId;
+
+            return (
+              <article className="classroom-watch-card" key={setting.classroomCourseId}>
+                <div className="classroom-watch-card-main">
+                  <div>
+                    <h3>{title}</h3>
+                    <p>
+                      {[setting.classroomCourseName, "Google Classroom"]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                    <small>
+                      {setting.syncActive !== false
+                        ? "Active assignments"
+                        : "Active assignments off"}
+                      {" · "}No due date: {setting.syncNoDueDate ? "On" : "Off"}
+                      {" · "}Completed history: {setting.syncCompleted ? "On" : "Off"}
+                    </small>
+                  </div>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() =>
+                      setManagedCourseId(managed ? "" : setting.classroomCourseId)
+                    }
+                  >
+                    {managed ? "Done" : "Manage →"}
+                  </button>
+                </div>
+                {managed && (
+                  <div className="classroom-watch-manage">
+                    <dl>
+                      <div>
+                        <dt>Classroom course</dt>
+                        <dd>{setting.classroomCourseName}</dd>
+                      </div>
+                      <div>
+                        <dt>DayLo Subject</dt>
+                        <dd>{subject?.name || "Unlinked"}</dd>
+                      </div>
+                    </dl>
+                    {subject && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => renameClassroomSubject(subject)}
+                      >
+                        Rename Subject
+                      </button>
+                    )}
+                    <ClassroomPreferencePanel
+                      preferences={setting}
+                      includeMaster
+                      onChange={(updates) => updateManagedCourse(updates)}
+                    />
+                    <div className="classroom-watch-manage-actions">
+                      {course?.alternateLink && (
+                        <a href={course.alternateLink} target="_blank" rel="noopener noreferrer">
+                          Open Classroom
+                        </a>
+                      )}
+                      <button type="button" className="danger" onClick={() => stopSyncingCourse(setting)}>
+                        Stop syncing
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </div>
+
+      {addClassesOpen && (
+        <div className="classroom-add-panel">
+          <div className="classroom-add-header">
+            <h2>Add classes</h2>
+            <button type="button" className="secondary" onClick={() => setAddClassesOpen(false)}>
+              Close
+            </button>
+          </div>
+          {unconfiguredCourses.length === 0 ? (
+            <p>All loaded Classroom classes are already in DayLo.</p>
+          ) : (
+            <>
+              <div className="classroom-picker-list">
+                {unconfiguredCourses.map((course) => {
+                  const courseId = getRealClassroomCourseId(course);
+                  return (
+                    <button
+                      type="button"
+                      className={`classroom-picker-row ${
+                        selectedAddCourseIds[courseId] ? "selected" : ""
+                      }`}
+                      onClick={() => toggleAddCourse(courseId)}
+                      key={courseId}
+                    >
+                      <span>
+                        <strong>{course.name}</strong>
+                        <small>{course.section || course.description || "Google Classroom"}</small>
+                      </span>
+                      <span aria-hidden="true">{selectedAddCourseIds[courseId] ? "✓" : ""}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={selectedAddCount === 0 || savingCourses}
+                onClick={() =>
+                  configureCourses(
+                    Object.entries(selectedAddCourseIds)
+                      .filter(([, selected]) => selected)
+                      .map(([courseId]) => courseId),
+                    {
+                      syncActive: true,
+                      syncNoDueDate: false,
+                      syncCompleted: false,
+                    }
+                  )
+                }
+              >
+                {savingCourses
+                  ? "Adding..."
+                  : `Add ${selectedAddCount} class${selectedAddCount === 1 ? "" : "es"}`}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      <details className="classroom-advanced-tools">
+        <summary>Advanced</summary>
+        <div className="classroom-advanced-actions">
+          <button type="button" className="secondary" onClick={onLoadCourses}>
+            Refresh class list
+          </button>
+          <button type="button" className="secondary" onClick={onPreviewAssignments}>
+            Preview assignments
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={onArchiveNoDueDateClassroomTasks}
+            disabled={cleanup.candidateCount === 0}
+          >
+            Archive no-due-date tasks
+          </button>
+          {cleanup.archivedCount > 0 && (
+            <button type="button" className="secondary" onClick={onRestoreArchivedClassroomTasks}>
+              Restore archived tasks
+            </button>
+          )}
+        </div>
+        {assignmentPreview.assignments.length > 0 && (
+          <RealClassroomAssignmentPreview
+            preview={assignmentPreview}
+            unlinkedCount={0}
+            includedCourseIds={new Set(activeSyncSettings.map((setting) => setting.classroomCourseId))}
+            linkedCourseIds={new Set(activeSyncSettings.map((setting) => setting.classroomCourseId))}
+            importedClassroomTasks={importedClassroomTasks}
+            onImportAssignments={onImportAssignments}
+            onSelectAssignment={onSelectAssignment}
+            onSelectAllAssignments={onSelectAllAssignments}
+            onClearAssignmentSelection={onClearAssignmentSelection}
+            onSelectDueAssignments={onSelectDueAssignments}
+            onGoToClassSetup={() => {}}
+          />
+        )}
+      </details>
+    </section>
+  );
 
   return (
     <section
