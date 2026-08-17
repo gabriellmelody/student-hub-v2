@@ -2152,14 +2152,9 @@ function App() {
   }
 
   const syncConfiguredClassroomCourses = useCallback(
-    async ({ force = false } = {}) => {
+    async ({ force = false, settings: providedSettings, subjects: providedSubjects } = {}) => {
       const userId = auth.user?.id || "";
-      const settings = classroomSyncSettingsRef.current;
-      const enabledSettings = settings.filter(
-        (setting) => setting.syncEnabled && setting.subjectId
-      );
-
-      if (!userId || enabledSettings.length === 0) return { ok: true, skipped: true };
+      if (!userId) return { ok: true, skipped: true };
 
       const now = Date.now();
       if (
@@ -2180,6 +2175,33 @@ function App() {
       }));
 
       try {
+        const latestSettings = Array.isArray(providedSettings)
+          ? providedSettings
+          : await fetchClassroomSyncSettings(supabase, userId);
+        const subjectSnapshot = Array.isArray(providedSubjects)
+          ? providedSubjects
+          : subjects;
+        const enabledSettings = latestSettings.filter(
+          (setting) => setting.syncEnabled !== false && setting.subjectId
+        );
+
+        if (classroomSyncUserIdRef.current === userId) {
+          classroomSyncSettingsRef.current = latestSettings;
+          setClassroomSyncSettings(latestSettings);
+        }
+
+        if (enabledSettings.length === 0) {
+          if (classroomSyncUserIdRef.current === userId) {
+            setClassroomSyncStatus((current) => ({
+              ...current,
+              syncing: false,
+              status: "idle",
+              message: "Choose classes to sync",
+            }));
+          }
+          return { ok: true, skipped: true };
+        }
+
         const response = await fetch("/api/google-classroom/coursework-preview", {
           method: "POST",
           credentials: "include",
@@ -2189,7 +2211,7 @@ function App() {
           },
           body: JSON.stringify({
             courses: enabledSettings.map((setting) => {
-              const subject = subjects.find(
+              const subject = subjectSnapshot.find(
                 (subjectItem) => subjectItem.id === setting.subjectId
               );
 
@@ -2211,7 +2233,7 @@ function App() {
         const reconciliation = reconcileClassroomAssignments({
           assignments: result.assignments || [],
           settings: enabledSettings,
-          subjects,
+          subjects: subjectSnapshot,
           tasks,
           syncedAt,
         });
@@ -2235,8 +2257,14 @@ function App() {
             const syncedByCourse = new Map(
               syncedSettings.map((setting) => [setting.classroomCourseId, setting])
             );
-            return current.map(
-              (setting) => syncedByCourse.get(setting.classroomCourseId) || setting
+            return latestSettings.map(
+              (setting) =>
+                syncedByCourse.get(setting.classroomCourseId) ||
+                current.find(
+                  (currentSetting) =>
+                    currentSetting.classroomCourseId === setting.classroomCourseId
+                ) ||
+                setting
             );
           });
 
@@ -2246,7 +2274,10 @@ function App() {
           setClassroomSyncStatus({
             syncing: false,
             status: "synced",
-            message: changed > 0 ? `${changed} assignments updated` : "Classroom synced",
+            message:
+              changed > 0
+                ? `${changed} assignment${changed === 1 ? "" : "s"} updated`
+                : "Classroom synced",
             lastSyncedAt: syncedAt,
           });
         }
@@ -3405,7 +3436,9 @@ function App() {
           classroomSyncSettings={classroomSyncSettings}
           setClassroomSyncSettings={setClassroomSyncSettings}
           classroomSyncStatus={classroomSyncStatus}
-          onSyncClassroomNow={() => syncConfiguredClassroomCourses({ force: true })}
+          onSyncClassroomNow={(options = {}) =>
+            syncConfiguredClassroomCourses({ force: true, ...options })
+          }
         />
       );
     }

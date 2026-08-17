@@ -95,7 +95,6 @@ import { supabase } from "../lib/supabase.js";
 import { upsertClassroomSyncSettings } from "../lib/classroomSyncSettings.js";
 import {
   getDefaultClassroomSyncSetting,
-  mergeClassroomCoursesWithSettings,
   pruneDeletedSubjectLinks,
 } from "../utils/classroomAutoSyncUtils.js";
 
@@ -2663,10 +2662,6 @@ function IntegrationsSettings({
       }
 
       const loadedCourses = Array.isArray(result.courses) ? result.courses : [];
-      const mergedSyncSettings = mergeClassroomCoursesWithSettings(
-        loadedCourses,
-        classroomSyncSettings
-      );
 
       setRealClassroomCourses({
         loading: false,
@@ -2690,7 +2685,6 @@ function IntegrationsSettings({
         loadedCourses,
         realClassroomCourseSelections
       );
-      void saveClassroomSyncSettings(mergedSyncSettings);
       if (loadedCourses.length > 0) {
         setRealClassroomManagerPageOpen(true, {
           push: !showRealClassroomReview,
@@ -4941,14 +4935,19 @@ function RealClassroomCourseReviewPage({
     if (!courseId) return;
     const currentSetting =
       syncSettings.find((setting) => setting.classroomCourseId === courseId) ||
-      getDefaultClassroomSyncSetting(course, subjectLinks[courseId]?.subjectId || null);
+      getDefaultClassroomSyncSetting(course, null);
+    const reliableSubject = getReliableClassroomSubject(
+      courseId,
+      currentSetting,
+      subjects
+    );
     onUpdateSyncSettings([
       ...syncSettings.filter((setting) => setting.classroomCourseId !== courseId),
       {
         ...currentSetting,
         classroomCourseId: courseId,
         classroomCourseName: course.name || currentSetting.classroomCourseName,
-        subjectId: subjectLinks[courseId]?.subjectId || currentSetting.subjectId || null,
+        subjectId: reliableSubject?.id || currentSetting.subjectId || null,
         ...updates,
       },
     ]);
@@ -4960,6 +4959,10 @@ function RealClassroomCourseReviewPage({
   const [selectedAddCourseIds, setSelectedAddCourseIds] = useState({});
   const [managedCourseId, setManagedCourseId] = useState("");
   const [savingCourses, setSavingCourses] = useState(false);
+  const [renamingSubjectId, setRenamingSubjectId] = useState("");
+  const [renameSubjectDraft, setRenameSubjectDraft] = useState("");
+  const [renameSubjectError, setRenameSubjectError] = useState("");
+  const [renameSubjectSaving, setRenameSubjectSaving] = useState(false);
   const [setupPreferences, setSetupPreferences] = useState({
     syncActive: true,
     syncNoDueDate: false,
@@ -4969,7 +4972,7 @@ function RealClassroomCourseReviewPage({
     courses.map((course) => [getRealClassroomCourseId(course), course])
   );
   const activeSyncSettings = syncSettings.filter(
-    (setting) => setting.syncEnabled !== false
+    (setting) => setting.syncEnabled !== false && setting.subjectId
   );
   const configuredCourseIds = new Set(
     activeSyncSettings.map((setting) => setting.classroomCourseId)
@@ -4981,7 +4984,7 @@ function RealClassroomCourseReviewPage({
   const selectedAddCount = Object.values(selectedAddCourseIds).filter(Boolean).length;
   const syncStatusLabel = getClassroomSyncStatusLabel(syncStatus, activeSyncSettings);
 
-  async function ensureSubjectForCourse(course) {
+  async function ensureSubjectForCourse(course, subjectPool = subjects) {
     const courseId = getRealClassroomCourseId(course);
     const existingSetting = syncSettings.find(
       (setting) => setting.classroomCourseId === courseId
@@ -4989,18 +4992,18 @@ function RealClassroomCourseReviewPage({
     const reliableSubject = getReliableClassroomSubject(
       courseId,
       existingSetting,
-      subjects
+      subjectPool
     );
 
     if (reliableSubject) return reliableSubject;
 
     const now = new Date().toISOString();
     const subjectDraft = {
-      ...createSubjectDraft("Other", subjects, course.name || "Untitled class"),
+      ...createSubjectDraft("Other", subjectPool, course.name || "Untitled class"),
       name: course.name || "Untitled class",
       courseSystem: "Other",
       level: "Other",
-      colour: suggestSubjectColour(course.name || "Untitled class", subjects, courseId),
+      colour: suggestSubjectColour(course.name || "Untitled class", subjectPool, courseId),
       source: REAL_CLASSROOM_SOURCE,
       classroomCourseId: courseId,
       externalId: courseId,
@@ -5028,11 +5031,15 @@ function RealClassroomCourseReviewPage({
     setSavingCourses(true);
     try {
       const nextSettings = [...syncSettings];
+      const subjectsForSync = [...subjects];
 
       for (const courseId of ids) {
         const course = coursesById.get(courseId);
         if (!course) continue;
-        const subject = await ensureSubjectForCourse(course);
+        const subject = await ensureSubjectForCourse(course, subjectsForSync);
+        if (!subjectsForSync.some((subjectItem) => subjectItem.id === subject.id)) {
+          subjectsForSync.push(subject);
+        }
         const existingIndex = nextSettings.findIndex(
           (setting) => setting.classroomCourseId === courseId
         );
@@ -5060,7 +5067,7 @@ function RealClassroomCourseReviewPage({
       setSelectedSetupCourseIds({});
       setSelectedAddCourseIds({});
       setAddClassesOpen(false);
-      await onSyncNow();
+      await onSyncNow({ settings: nextSettings, subjects: subjectsForSync });
     } finally {
       setSavingCourses(false);
     }
@@ -5111,25 +5118,50 @@ function RealClassroomCourseReviewPage({
     if (managedCourseId === setting.classroomCourseId) setManagedCourseId("");
   }
 
-  async function renameClassroomSubject(subject) {
+  function startRenamingClassroomSubject(subject) {
     if (!subject) return;
-    const nextName =
-      typeof window === "undefined"
-        ? ""
-        : window.prompt("Rename Subject", subject.name);
-    if (!nextName || nextName.trim() === subject.name) return;
+    setRenamingSubjectId(subject.id);
+    setRenameSubjectDraft(subject.name || "");
+    setRenameSubjectError("");
+  }
 
-    await setSubjects((currentSubjects) =>
-      currentSubjects.map((currentSubject) =>
-        currentSubject.id === subject.id
-          ? { ...currentSubject, name: nextName.trim() }
-          : currentSubject
-      )
-    );
+  function cancelRenamingClassroomSubject() {
+    setRenamingSubjectId("");
+    setRenameSubjectDraft("");
+    setRenameSubjectError("");
+  }
+
+  async function saveRenamedClassroomSubject(subject) {
+    if (!subject) return;
+    const nextName = renameSubjectDraft.trim();
+    if (!nextName) {
+      setRenameSubjectError("Enter a Subject name.");
+      return;
+    }
+    if (nextName === subject.name) {
+      cancelRenamingClassroomSubject();
+      return;
+    }
+
+    setRenameSubjectSaving(true);
+    setRenameSubjectError("");
+    try {
+      await setSubjects((currentSubjects) =>
+        currentSubjects.map((currentSubject) =>
+          currentSubject.id === subject.id
+            ? { ...currentSubject, name: nextName }
+            : currentSubject
+        )
+      );
+      cancelRenamingClassroomSubject();
+    } catch {
+      setRenameSubjectError("Could not rename Subject. Try again.");
+    } finally {
+      setRenameSubjectSaving(false);
+    }
   }
 
   async function syncNow() {
-    await onLoadCourses();
     await onSyncNow();
   }
 
@@ -5361,18 +5393,64 @@ function RealClassroomCourseReviewPage({
                       )}
                     </div>
                     <div className="classroom-manage-subject-row">
-                      <span>
-                        <small>DayLo Subject</small>
-                        <strong>{subject?.name || "Unlinked"}</strong>
-                      </span>
-                      {subject && (
-                        <button
-                          type="button"
-                          className="small-button classroom-edit-subject-button"
-                          onClick={() => renameClassroomSubject(subject)}
+                      {subject && renamingSubjectId === subject.id ? (
+                        <form
+                          className="classroom-rename-form"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            void saveRenamedClassroomSubject(subject);
+                          }}
                         >
-                          Edit
-                        </button>
+                          <label>
+                            <small>DayLo Subject</small>
+                            <input
+                              value={renameSubjectDraft}
+                              onChange={(event) => {
+                                setRenameSubjectDraft(event.target.value);
+                                setRenameSubjectError("");
+                              }}
+                              autoFocus
+                            />
+                          </label>
+                          <div className="classroom-rename-actions">
+                            <button
+                              type="submit"
+                              className="small-button"
+                              disabled={renameSubjectSaving}
+                            >
+                              {renameSubjectSaving ? "Saving..." : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              className="small-button secondary"
+                              onClick={cancelRenamingClassroomSubject}
+                              disabled={renameSubjectSaving}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {renameSubjectError && (
+                            <small className="classroom-rename-error">
+                              {renameSubjectError}
+                            </small>
+                          )}
+                        </form>
+                      ) : (
+                        <>
+                          <span>
+                            <small>DayLo Subject</small>
+                            <strong>{subject?.name || "Unlinked"}</strong>
+                          </span>
+                          {subject && (
+                            <button
+                              type="button"
+                              className="small-button classroom-edit-subject-button"
+                              onClick={() => startRenamingClassroomSubject(subject)}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                     {subject && (

@@ -74,7 +74,10 @@ test("renamed Subject remains the card title with original course context", () =
   assert.match(managerSource, /const title = subject\?\.name/);
   assert.match(managerSource, /setting\.classroomCourseName, "Google Classroom"/);
   assert.match(managerSource, /Edit/);
-  assert.match(managerSource, /renameClassroomSubject/);
+  assert.match(managerSource, /startRenamingClassroomSubject/);
+  assert.match(managerSource, /saveRenamedClassroomSubject/);
+  assert.match(managerSource, /renameSubjectDraft/);
+  assert.doesNotMatch(managerSource, /window\.prompt/);
 });
 
 test("Manage expands and Done collapses the selected class", () => {
@@ -94,11 +97,39 @@ test("Stop syncing keeps existing DayLo data", () => {
   assert.doesNotMatch(managerSource, /deleteCloudTask|deleteCloudSubject/);
 });
 
-test("normal Sync now refreshes classes and syncs", () => {
+test("normal Sync now runs assignment sync without refreshing the class list", () => {
   assert.match(managerSource, /async function syncNow/);
-  assert.match(managerSource, /await onLoadCourses\(\)/);
-  assert.match(managerSource, /await onSyncNow\(\)/);
+  const syncNowStart = managerSource.indexOf("async function syncNow");
+  const syncNowEnd = managerSource.indexOf("if (!session?.connected)", syncNowStart);
+  const syncNowSource = managerSource.slice(syncNowStart, syncNowEnd);
+
+  assert.doesNotMatch(syncNowSource, /onLoadCourses/);
+  assert.match(syncNowSource, /await onSyncNow\(\)/);
   assert.match(managerSource, /className="small-button"/);
+});
+
+test("class refresh does not create phantom sync settings", () => {
+  const loadCoursesStart = settingsSource.indexOf("async function loadRealClassroomCourses");
+  const loadCoursesEnd = settingsSource.indexOf("function setRealClassroomManagerPageOpen", loadCoursesStart);
+  const loadCoursesSource = settingsSource.slice(loadCoursesStart, loadCoursesEnd);
+
+  assert.doesNotMatch(loadCoursesSource, /mergeClassroomCoursesWithSettings/);
+  assert.doesNotMatch(loadCoursesSource, /saveClassroomSyncSettings/);
+});
+
+test("configured dashboard requires a linked Subject row", () => {
+  assert.match(
+    managerSource,
+    /setting\.syncEnabled !== false && setting\.subjectId/
+  );
+});
+
+test("setup syncs immediately with the freshly saved settings and Subjects", () => {
+  assert.match(managerSource, /const subjectsForSync = \[\.\.\.subjects\]/);
+  assert.match(
+    managerSource,
+    /await onSyncNow\(\{ settings: nextSettings, subjects: subjectsForSync \}\)/
+  );
 });
 
 test("sync preferences use student-facing switch labels", () => {

@@ -5671,6 +5671,34 @@ html:has(.settings-page) {
   color: var(--text-primary);
 }
 
+.classroom-rename-form {
+  align-items: center;
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(12rem, 1fr) auto;
+  width: 100%;
+}
+
+.classroom-rename-form label {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.classroom-rename-form input {
+  width: 100%;
+}
+
+.classroom-rename-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.classroom-rename-error {
+  color: var(--danger);
+  grid-column: 1 / -1;
+}
+
 .classroom-picker-row {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
@@ -5831,6 +5859,10 @@ html:has(.settings-page) {
   .classroom-toggle-row {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .classroom-rename-form {
+    grid-template-columns: 1fr;
   }
 
   .classroom-watch-actions,
