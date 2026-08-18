@@ -215,7 +215,7 @@ function MobileMoreSheet({
                     onClick={onClose}
                   >
                     <span aria-hidden="true">
-                      <QuickLinkIcon iconId={link.iconId} />
+                      <QuickLinkIcon iconId={link.iconId} iconMode={link.iconMode} url={link.url} />
                     </span>
                     <strong>{link.label}</strong>
                     <small aria-hidden="true">↗</small>
@@ -331,7 +331,7 @@ function QuickLinksNav({ collapsed, quickLinksPreferences, openSettings }) {
             aria-label={`${link.label}, external link`}
           >
             <span className="sidebar-quick-link-icon" aria-hidden="true">
-              <QuickLinkIcon iconId={link.iconId} />
+              <QuickLinkIcon iconId={link.iconId} iconMode={link.iconMode} url={link.url} />
             </span>
             <span className="sidebar-quick-link-label">{link.label}</span>
             <span className="sidebar-quick-link-external" aria-hidden="true">

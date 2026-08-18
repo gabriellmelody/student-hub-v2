@@ -553,6 +553,12 @@ function SettingsPage({
   updateMockClassroomCourseSubject,
   quickLinksPreferences,
   setQuickLinksPreferences,
+  quickLinksLoading = false,
+  quickLinksSaving = false,
+  quickLinksSyncError = null,
+  quickLinksMigrationPending = false,
+  onImportLegacyQuickLinks = () => {},
+  onDeclineLegacyQuickLinks = () => {},
   initialView = "hub",
   classroomCallbackStatus = null,
   googleCalendarCallbackStatus = null,
@@ -1395,6 +1401,12 @@ function SettingsPage({
         <QuickLinksSettings
           quickLinksPreferences={quickLinksPreferences}
           setQuickLinksPreferences={setQuickLinksPreferences}
+          loading={quickLinksLoading}
+          saving={quickLinksSaving}
+          syncError={quickLinksSyncError}
+          migrationPending={quickLinksMigrationPending}
+          onImportLegacy={onImportLegacyQuickLinks}
+          onDeclineLegacy={onDeclineLegacyQuickLinks}
         />
       ) : (
         <HelpSettings
@@ -7034,11 +7046,18 @@ function MockClassroomPreview({
 function QuickLinksSettings({
   quickLinksPreferences,
   setQuickLinksPreferences,
+  loading = false,
+  saving = false,
+  syncError = null,
+  migrationPending = false,
+  onImportLegacy,
+  onDeclineLegacy,
 }) {
   const preferences = normalizeQuickLinksPreferences(quickLinksPreferences);
   const [customDraft, setCustomDraft] = useState({
     label: "",
     url: "",
+    iconMode: "site",
     iconId: "globe",
   });
   const [customError, setCustomError] = useState("");
@@ -7063,6 +7082,8 @@ function QuickLinksSettings({
       ? {
           id: "__custom-draft",
           label: customDraft.label || "Custom website",
+          url: customDraft.url,
+          iconMode: customDraft.iconMode,
           iconId: customDraft.iconId || "globe",
           defaultIconId: "globe",
           type: "custom",
@@ -7269,13 +7290,22 @@ function QuickLinksSettings({
 
   function updateLinkIcon(linkId, iconId) {
     if (linkId === "__custom-draft") {
-      setCustomDraft((currentDraft) => ({ ...currentDraft, iconId }));
+      setCustomDraft((currentDraft) => ({ ...currentDraft, iconMode: "daylo", iconId }));
       dismissIconPicker(true);
       return;
     }
 
-    updateLink(linkId, { iconId });
+    updateLink(linkId, { iconMode: "daylo", iconId });
     dismissIconPicker(true);
+  }
+
+  function updateLinkIconMode(linkId, iconMode) {
+    if (linkId === "__custom-draft") {
+      setCustomDraft((currentDraft) => ({ ...currentDraft, iconMode }));
+    } else {
+      updateLink(linkId, { iconMode });
+    }
+    if (iconMode === "site") dismissIconPicker(true);
   }
 
   function pinLink(linkId) {
@@ -7435,6 +7465,7 @@ function QuickLinksSettings({
           id: `custom-${Date.now()}`,
           label,
           url: normalizedUrl.url,
+          iconMode: customDraft.iconMode,
           iconId: customDraft.iconId || "globe",
           defaultIconId: "globe",
           type: "custom",
@@ -7443,7 +7474,7 @@ function QuickLinksSettings({
         },
       ],
     }));
-    setCustomDraft({ label: "", url: "", iconId: "globe" });
+    setCustomDraft({ label: "", url: "", iconMode: "site", iconId: "globe" });
     setCustomError("");
     setMessage("Custom link added.");
   }
@@ -7474,7 +7505,7 @@ function QuickLinksSettings({
             toggleIconPicker(pickerId, link.id, event.currentTarget)
           }
         >
-          <QuickLinkIcon iconId={link.iconId} />
+          <QuickLinkIcon iconId={link.iconId} iconMode={link.iconMode} url={link.url} />
         </button>
       </div>
     );
@@ -7501,6 +7532,11 @@ function QuickLinksSettings({
             }}
             onKeyDown={handleIconPickerKeyDown}
           >
+            <div className="quick-link-icon-modes" role="group" aria-label="Icon source">
+              <button type="button" className={activeIconPickerLink.iconMode === "site" ? "active" : ""} onClick={() => updateLinkIconMode(activeIconPickerLink.id, "site")}>Site logo</button>
+              <button type="button" className={activeIconPickerLink.iconMode === "daylo" ? "active" : ""} onClick={() => updateLinkIconMode(activeIconPickerLink.id, "daylo")}>DayLo icon</button>
+            </div>
+            {activeIconPickerLink.iconMode === "daylo" && (
             <div className="quick-link-icon-grid">
               {quickLinkIconCatalog.map((icon) => (
                 <button
@@ -7522,6 +7558,7 @@ function QuickLinksSettings({
                 </button>
               ))}
             </div>
+            )}
 
             {activeIconPickerLink.type === "preset" && (
               <button
@@ -7559,8 +7596,17 @@ function QuickLinksSettings({
         </div>
 
         {message && <p className="quick-links-message">{message}</p>}
+        {loading && <p className="quick-links-message" aria-busy="true">Loading Quick Links...</p>}
+        {saving && <p className="quick-link-a11y" role="status">Saving Quick Links</p>}
+        {syncError && <p className="quick-links-error" role="alert">Couldn't save this Quick Link.</p>}
+        {migrationPending && (
+          <div className="quick-links-migration" role="status">
+            <span><strong>Quick Links found on this device</strong><small>Move these Quick Links to this DayLo account?</small></span>
+            <div><button type="button" className="small-button" onClick={onImportLegacy}>Import</button><button type="button" className="small-button secondary" onClick={onDeclineLegacy}>Not now</button></div>
+          </div>
+        )}
 
-        <section className="quick-links-section">
+        {presetLinks.length > 0 && <section className="quick-links-section">
           <div className="quick-links-section-heading">
             <h4>Pinned links</h4>
             <p>These appear in the sidebar in this order.</p>
@@ -7615,9 +7661,9 @@ function QuickLinksSettings({
           ) : (
             <p className="quick-links-empty">No quick links pinned yet.</p>
           )}
-        </section>
+        </section>}
 
-        <section className="quick-links-section">
+        {presetLinks.length > 0 && <section className="quick-links-section">
           <div className="quick-links-section-heading">
             <h4>Available links</h4>
             <p>Pick the school tools you use most.</p>
@@ -7678,7 +7724,7 @@ function QuickLinksSettings({
               );
             })}
           </div>
-        </section>
+        </section>}
 
         <section className="quick-links-section">
           <div className="quick-links-section-heading">
@@ -7724,6 +7770,8 @@ function QuickLinksSettings({
                   {
                     id: "__custom-draft",
                     label: customDraft.label || "Custom website",
+                    url: customDraft.url,
+                    iconMode: customDraft.iconMode,
                     iconId: customDraft.iconId || "globe",
                     defaultIconId: "globe",
                     type: "custom",
@@ -7768,9 +7816,9 @@ function QuickLinksSettings({
               {customLinks.map((link) => (
                 <div className="quick-link-row" key={link.id}>
                   {renderIconPicker(link, `custom-${link.id}`)}
-                  <span className="quick-link-custom-copy">
-                    <strong>{link.label}</strong>
-                    <small>{link.url}</small>
+                  <span className="quick-link-custom-copy quick-link-edit-fields">
+                    <input aria-label={`Name for ${link.label}`} defaultValue={link.label} onBlur={(event) => updateLink(link.id, { label: event.target.value })} />
+                    <input aria-label={`URL for ${link.label}`} defaultValue={link.url} onBlur={(event) => { const result = normalizeQuickLinkUrl(event.target.value); if (result.ok) updateLink(link.id, { url: result.url }); else { event.target.value = link.url; setMessage(result.error); } }} />
                   </span>
                   <div className="quick-link-row-actions">
                     <button

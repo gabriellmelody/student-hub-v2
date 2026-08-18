@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { deriveSiteFaviconUrl } from "../lib/cloudQuickLinks.js";
+
 const QUICK_LINK_ICON_PATHS = {
   globe: (
     <>
@@ -121,8 +124,16 @@ const QUICK_LINK_ICON_PATHS = {
   ),
 };
 
-function QuickLinkIcon({ iconId = "globe", className = "" }) {
+function QuickLinkIcon({ iconId = "globe", iconMode = "daylo", url = "", className = "" }) {
   const resolvedIconId = QUICK_LINK_ICON_PATHS[iconId] ? iconId : "globe";
+  const faviconUrl = iconMode === "site" ? deriveSiteFaviconUrl(url) : "";
+  const [faviconFailed, setFaviconFailed] = useState(false);
+
+  useEffect(() => setFaviconFailed(false), [faviconUrl]);
+
+  if (faviconUrl && !faviconFailed) {
+    return <img className={`${className} quick-link-site-icon`.trim()} src={faviconUrl} alt="" onError={() => setFaviconFailed(true)} />;
+  }
 
   return (
     <svg

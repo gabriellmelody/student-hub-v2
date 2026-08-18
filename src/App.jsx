@@ -19,6 +19,7 @@ import useCloudSubjects from "./hooks/useCloudSubjects.js";
 import useCloudTasks from "./hooks/useCloudTasks.js";
 import useCloudAppearancePreferences from "./hooks/useCloudAppearancePreferences.js";
 import useCloudPlanning from "./hooks/useCloudPlanning.js";
+import useCloudQuickLinks from "./hooks/useCloudQuickLinks.js";
 import {
   DEFAULT_APPEARANCE_PREFERENCES,
 } from "./lib/cloudAppearancePreferences.js";
@@ -47,8 +48,7 @@ import {
   cleanPlanSequence,
   recalculatePlanTimes,
   restoreSavedPlanBlocks,
-  loadQuickLinksPreferences,
-  saveQuickLinksPreferences,
+  normalizeQuickLinksPreferences,
   buildEveningPlan,
   timeToMinutes,
   createDemoTasks,
@@ -311,6 +311,16 @@ function App() {
     persistPlan: persistCloudPlan,
     clearPlan: clearCloudPlan,
   } = useCloudPlanning(auth.user);
+  const {
+    links: cloudQuickLinks,
+    loading: quickLinksLoading,
+    saving: quickLinksSaving,
+    error: quickLinksSyncError,
+    migrationPending: quickLinksMigrationPending,
+    setLinks: setCloudQuickLinks,
+    importLegacy: importLegacyQuickLinks,
+    declineLegacy: declineLegacyQuickLinks,
+  } = useCloudQuickLinks(auth.user);
   const appearancePreferences =
     cloudAppearancePreferences || DEFAULT_APPEARANCE_PREFERENCES;
   const theme = appearancePreferences.theme;
@@ -432,8 +442,20 @@ function App() {
   const [lastSeenDayloVersion, setLastSeenDayloVersion] = useState(
     loadAcknowledgedReleaseVersion
   );
-  const [quickLinksPreferences, setQuickLinksPreferences] = useState(
-    loadQuickLinksPreferences
+  const quickLinksPreferences = useMemo(
+    () => ({ version: 2, links: cloudQuickLinks }),
+    [cloudQuickLinks]
+  );
+  const setQuickLinksPreferences = useCallback(
+    (updater) =>
+      setCloudQuickLinks((currentLinks) => {
+        const currentPreferences = { version: 2, links: currentLinks };
+        const nextPreferences = typeof updater === "function"
+          ? updater(currentPreferences)
+          : updater;
+        return normalizeQuickLinksPreferences(nextPreferences).links;
+      }),
+    [setCloudQuickLinks]
   );
 
   const completedTaskHistory = useMemo(
@@ -1434,10 +1456,6 @@ function App() {
     if (event.target !== mobilePagerCurrentRef.current || !mobilePagerRef.current?.settling) return;
     finishMobilePager(mobilePagerRef.current);
   }
-
-  useEffect(() => {
-    saveQuickLinksPreferences(quickLinksPreferences);
-  }, [quickLinksPreferences]);
 
   useLayoutEffect(() => {
     function applyThemePreference() {
@@ -3290,7 +3308,6 @@ function App() {
     setStartTime("16:00");
     setSidebarCollapsed(false);
     setActivePage("home");
-    setQuickLinksPreferences(loadQuickLinksPreferences());
     setLastSeenDayloVersion("");
     setReleaseWelcomeOpen(false);
     setLocalProfileEditorOpen(false);
@@ -3429,6 +3446,12 @@ function App() {
           updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
           quickLinksPreferences={quickLinksPreferences}
           setQuickLinksPreferences={setQuickLinksPreferences}
+          quickLinksLoading={quickLinksLoading}
+          quickLinksSaving={quickLinksSaving}
+          quickLinksSyncError={quickLinksSyncError}
+          quickLinksMigrationPending={quickLinksMigrationPending}
+          onImportLegacyQuickLinks={importLegacyQuickLinks}
+          onDeclineLegacyQuickLinks={declineLegacyQuickLinks}
           initialView={settingsView}
           classroomCallbackStatus={initialNavigation.classroomCallbackStatus}
           googleCalendarCallbackStatus={

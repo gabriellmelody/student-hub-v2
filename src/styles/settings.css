@@ -432,6 +432,38 @@ html:has(.settings-page) {
   height: 17px;
 }
 
+.quick-link-icon-button img,
+.sidebar-quick-link-icon img,
+.mobile-more-quick-links img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.quick-link-icon-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.quick-link-icon-modes button {
+  min-height: 36px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+.quick-link-icon-modes button.active {
+  border-color: var(--accent-primary);
+  background: var(--accent-primary-tint);
+  color: var(--accent-primary-soft);
+}
+
 .quick-link-icon-picker {
   position: fixed;
   z-index: 3400;
@@ -674,6 +706,49 @@ html:has(.settings-page) {
 
 .quick-link-custom-copy {
   min-width: 0;
+}
+
+.quick-link-edit-fields {
+  display: grid;
+  gap: 5px;
+}
+
+.quick-link-edit-fields input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--surface-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.quick-links-migration {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: var(--density-setting-padding) var(--density-panel-padding) 0;
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  padding: 10px;
+  background: var(--accent-tint);
+}
+
+.quick-links-migration span,
+.quick-links-migration div {
+  display: flex;
+  gap: 7px;
+}
+
+.quick-links-migration span {
+  min-width: 0;
+  flex-direction: column;
+}
+
+.quick-links-migration small {
+  color: var(--text-secondary);
 }
 
 .help-settings {
@@ -5172,8 +5247,17 @@ html:has(.settings-page) {
 
   .quick-links-panel-intro,
   .quick-link-row,
-  .quick-links-custom-form {
+  .quick-links-custom-form,
+  .quick-links-migration {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .quick-links-migration {
+    display: grid;
+  }
+
+  .quick-links-migration div {
+    flex-wrap: wrap;
   }
 
   .quick-links-panel-intro {

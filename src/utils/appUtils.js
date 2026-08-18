@@ -296,6 +296,29 @@ export function normalizeQuickLinksPreferences(preferences) {
 
   if (!preferences || typeof preferences !== "object") return defaults;
 
+  if (preferences.version === 2) {
+    const links = (Array.isArray(preferences.links) ? preferences.links : [])
+      .map((link, index) => {
+        const normalizedUrl = normalizeQuickLinkUrl(link?.url);
+        if (!link?.id || !normalizedUrl.ok) return null;
+        return {
+          id: String(link.id),
+          label: normalizeQuickLinkLabel(link.label, "Quick Link"),
+          url: normalizedUrl.url,
+          iconMode: link.iconMode === "daylo" ? "daylo" : "site",
+          iconId: normalizeQuickLinkIconId(link.iconId, "globe"),
+          defaultIconId: "globe",
+          type: "custom",
+          pinned: link.pinned !== false,
+          pinnedOrder: Number.isFinite(Number(link.pinnedOrder)) ? Number(link.pinnedOrder) : index,
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.pinnedOrder - right.pinnedOrder)
+      .map((link, index) => ({ ...link, pinnedOrder: index }));
+    return { version: 2, links };
+  }
+
   const savedLinks = Array.isArray(preferences.links) ? preferences.links : [];
   const savedById = new Map(
     savedLinks
