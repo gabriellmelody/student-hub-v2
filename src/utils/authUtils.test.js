@@ -3,6 +3,9 @@ import test from "node:test";
 import {
   getAuthGateState,
   getFriendlyAuthError,
+  getAuthRedirectUrl,
+  getOAuthReturnError,
+  startGoogleOAuth,
   shouldShowAuthenticatedApp,
   validateEmailPassword,
 } from "./authUtils.js";
@@ -52,4 +55,20 @@ test("sign-in errors use student-friendly copy", () => {
     getFriendlyAuthError({ message: "Email not confirmed" }),
     "Check your email to confirm your DayLo account first."
   );
+});
+
+test("Google OAuth uses the current origin and invokes Supabase once", async () => {
+  const calls = [];
+  const auth = { async signInWithOAuth(options) { calls.push(options); return { data: { url: "https://accounts.google.com" }, error: null }; } };
+  await startGoogleOAuth(auth, { origin: "http://localhost:5173" });
+  assert.deepEqual(calls, [{ provider: "google", options: { redirectTo: "http://localhost:5173/" } }]);
+  assert.equal(getAuthRedirectUrl({ origin: "https://daylo-student.vercel.app" }), "https://daylo-student.vercel.app/");
+});
+
+test("Google OAuth failures are concise and cancelled callbacks are recognized", async () => {
+  await assert.rejects(
+    startGoogleOAuth({ async signInWithOAuth() { return { data: null, error: new Error("provider disabled") }; } }, { origin: "https://daylo-student.vercel.app" })
+  );
+  assert.equal(getFriendlyAuthError(new Error("provider disabled"), { provider: "google" }), "We couldn't sign you in with Google. Try again.");
+  assert.equal(getOAuthReturnError({ search: "?error=access_denied", hash: "" }), "Google sign-in was cancelled.");
 });

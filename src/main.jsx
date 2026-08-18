@@ -13,7 +13,7 @@ function AuthGate() {
   const auth = useAuth();
 
   if (auth.loading) return <AuthLoadingScreen />;
-  if (!auth.user) return <AuthScreen signIn={auth.signIn} signUp={auth.signUp} />;
+  if (!auth.user) return <AuthScreen signIn={auth.signIn} signUp={auth.signUp} signInWithGoogle={auth.signInWithGoogle} />;
   if (auth.profileLoading && !auth.profile) return <AuthLoadingScreen />;
   if (auth.profileError) {
     return (

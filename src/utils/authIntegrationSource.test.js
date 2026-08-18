@@ -32,9 +32,25 @@ test("no service-role key or second Supabase client is introduced", () => {
   assert.deepEqual(createClientCallers.sort(), ["src/lib/supabase.js"]);
 });
 
-test("auth UI keeps Google login disabled for this phase", () => {
+test("auth UI enables Continue with Google without replacing password auth", () => {
   const source = readFileSync(new URL("../components/AuthScreen.jsx", import.meta.url), "utf8");
   assert.match(source, /Continue with Google/);
-  assert.match(source, /disabled/);
-  assert.match(source, /Coming next/);
+  assert.match(source, /onClick=\{handleGoogleSignIn\}/);
+  assert.match(source, /<svg className="auth-google-mark"/);
+  assert.match(source, /#4285F4/);
+  assert.doesNotMatch(source, /auth-google-mark" aria-hidden="true">G</);
+  assert.match(source, /className="auth-form"/);
+  assert.doesNotMatch(source, /Coming next/);
+});
+
+test("Google account auth remains independent from Classroom and Calendar OAuth", () => {
+  const auth = readFileSync(new URL("../hooks/useAuth.jsx", import.meta.url), "utf8");
+  assert.match(auth, /startGoogleOAuth\(supabase\.auth\)/);
+  assert.doesNotMatch(auth, /google-classroom|google-calendar|provider_token|provider_refresh_token/);
+});
+
+test("Google redirect initiation has synchronous repeated-click protection", () => {
+  const source = readFileSync(new URL("../components/AuthScreen.jsx", import.meta.url), "utf8");
+  assert.match(source, /googleSubmittingRef\.current/);
+  assert.match(source, /if \(googleSubmittingRef\.current \|\| submitting\) return/);
 });

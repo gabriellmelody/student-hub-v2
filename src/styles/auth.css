@@ -17,12 +17,12 @@
 }
 
 .auth-panel {
-  width: min(100%, 430px);
+  width: min(100%, 448px);
   display: grid;
-  gap: 18px;
+  gap: 20px;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  padding: 24px;
+  padding: 28px;
   background: var(--surface);
   box-shadow: var(--shadow-modal);
 }
@@ -60,22 +60,45 @@
 }
 
 .auth-google-button {
-  min-height: 46px;
+  min-height: 50px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 10px;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 11px 14px;
   background: var(--surface-raised);
-  color: var(--text-secondary);
+  color: var(--text);
   font: inherit;
+  font-weight: 740;
+  cursor: pointer;
 }
 
-.auth-google-button small {
-  color: var(--text-muted);
-  font-size: var(--font-helper);
+.auth-google-button:hover:not(:disabled) {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+}
+
+.auth-google-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.auth-google-button:disabled {
+  cursor: progress;
+  opacity: 0.68;
+}
+
+.auth-google-mark,
+.auth-google-spacer {
+  width: 20px;
+  flex: 0 0 20px;
+}
+
+.auth-google-mark {
+  height: 20px;
+  display: block;
 }
 
 .auth-divider {
@@ -96,7 +119,7 @@
 
 .auth-form {
   display: grid;
-  gap: 13px;
+  gap: 14px;
 }
 
 .auth-form label {
@@ -108,10 +131,10 @@
 
 .auth-form input {
   width: 100%;
-  min-height: 44px;
+  min-height: 48px;
   border: 1px solid var(--border-strong);
   border-radius: 10px;
-  padding: 10px 12px;
+  padding: 11px 14px;
   background: var(--surface-input);
   color: var(--text);
   font: inherit;
@@ -124,6 +147,7 @@
 
 .auth-submit {
   width: 100%;
+  min-height: 48px;
   justify-content: center;
 }
 
@@ -172,7 +196,8 @@
 
   .auth-panel {
     width: 100%;
-    padding: 18px;
+    gap: 17px;
+    padding: 20px;
   }
 
   .auth-brand {

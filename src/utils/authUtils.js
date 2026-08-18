@@ -1,5 +1,41 @@
 export const AUTH_PASSWORD_MIN_LENGTH = 6;
 
+export function getAuthRedirectUrl(location = globalThis.location) {
+  const origin = String(location?.origin || "").trim();
+  if (!/^https?:\/\/[^/]+$/i.test(origin)) {
+    throw new Error("DayLo could not determine a safe sign-in return URL.");
+  }
+  return `${origin}/`;
+}
+
+export async function startGoogleOAuth(authClient, location = globalThis.location) {
+  const result = await authClient.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo: getAuthRedirectUrl(location) },
+  });
+  if (result.error) throw result.error;
+  return result.data;
+}
+
+export function getOAuthReturnError(location = globalThis.location) {
+  const search = new URLSearchParams(String(location?.search || ""));
+  const hash = new URLSearchParams(String(location?.hash || "").replace(/^#/, ""));
+  const error = search.get("error") || hash.get("error");
+  const description = search.get("error_description") || hash.get("error_description") || "";
+  if (!error && !description) return "";
+  const detail = `${error || ""} ${description}`.toLowerCase();
+  return detail.includes("access_denied") || detail.includes("cancel")
+    ? "Google sign-in was cancelled."
+    : "We couldn't sign you in with Google. Try again.";
+}
+
+export function clearOAuthReturnError(location = globalThis.location, history = globalThis.history) {
+  const url = new URL(location.href);
+  ["error", "error_code", "error_description"].forEach((key) => url.searchParams.delete(key));
+  if (/error(?:_description|_code)?=/.test(url.hash)) url.hash = "";
+  history?.replaceState?.({}, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
 export function validateEmailPassword({ email = "", password = "", confirmPassword = null } = {}) {
   const normalizedEmail = String(email || "").trim();
   const normalizedPassword = String(password || "");
@@ -19,9 +55,18 @@ export function validateEmailPassword({ email = "", password = "", confirmPasswo
   return { ok: true, email: normalizedEmail, password: normalizedPassword };
 }
 
-export function getFriendlyAuthError(error) {
+export function getFriendlyAuthError(error, { provider = "password" } = {}) {
   const message = String(error?.message || error || "").toLowerCase();
 
+  if (provider === "google") {
+    if (message.includes("cancel") || message.includes("access_denied")) {
+      return "Google sign-in was cancelled.";
+    }
+    if (message.includes("network") || message.includes("failed to fetch")) {
+      return "DayLo could not connect. Check your internet and try again.";
+    }
+    return "We couldn't sign you in with Google. Try again.";
+  }
   if (!message) return "Something went wrong. Try again.";
   if (message.includes("invalid login") || message.includes("invalid credentials")) {
     return "That email or password is not right.";

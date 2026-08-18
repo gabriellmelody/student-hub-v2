@@ -7,6 +7,7 @@ import {
   saveUserProfile,
   subscribeToUserProfileChanges,
 } from "../lib/profile.js";
+import { startGoogleOAuth } from "../utils/authUtils.js";
 
 const AuthContext = createContext(null);
 const PROFILE_BOOTSTRAP_RETRY_DELAY_MS = 650;
@@ -185,6 +186,8 @@ export function AuthProvider({ children }) {
     return result.data;
   }, [loadProfile]);
 
+  const signInWithGoogle = useCallback(() => startGoogleOAuth(supabase.auth), []);
+
   const signOut = useCallback(async () => {
     const result = await supabase.auth.signOut();
     if (result.error) throw result.error;
@@ -226,6 +229,7 @@ export function AuthProvider({ children }) {
     profileError,
     signUp,
     signIn,
+    signInWithGoogle,
     signOut,
     retryProfile,
     refreshProfile,
@@ -239,6 +243,7 @@ export function AuthProvider({ children }) {
     profileError,
     signUp,
     signIn,
+    signInWithGoogle,
     signOut,
     retryProfile,
     refreshProfile,
