@@ -23,6 +23,8 @@ function HomePage({
   tasks,
   nextTask,
   openSmartPlanner,
+  loading = false,
+  syncError = null,
   hasPlan,
   planBlocks = [],
   setActivePage,
@@ -148,7 +150,11 @@ function HomePage({
         <div className="home-hero-zone home-plan-zone">
           <div className="home-plan-copy">
             <p className="home-zone-label">Today’s Plan</p>
-            {hasPlan ? (
+            {loading ? (
+              <div className="home-empty-copy" aria-busy="true">
+                <h3>Loading today’s plan...</h3>
+              </div>
+            ) : hasPlan ? (
               nextOpenBlock ? (
                 <div className="home-plan-preview">
                   <span>{formatPlanBlockTime(nextOpenBlock)}</span>
@@ -195,9 +201,11 @@ function HomePage({
               hasPlan ? "" : " home-plan-action--smart"
             }`}
             onClick={hasPlan ? () => setActivePage("plan") : openSmartPlanner}
+            disabled={loading}
           >
-            {hasPlan ? "Continue plan" : "Smart Planner"}
+            {loading ? "Loading plan" : hasPlan ? "Continue plan" : "Smart Planner"}
           </button>
+          {syncError && <span className="settings-inline-error" role="alert">Today’s Plan could not sync.</span>}
         </div>
       </section>
 

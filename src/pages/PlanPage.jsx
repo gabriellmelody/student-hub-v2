@@ -99,6 +99,8 @@ function PlanPage({
   stalePlanDate,
   startFreshPlan,
   openSmartPlanner,
+  loading = false,
+  syncError = null,
 }) {
   const hasLockedBlocks = planBlocks.some((block) => block.locked === true);
   const [editingBlockId, setEditingBlockId] = useState(null);
@@ -120,6 +122,8 @@ function PlanPage({
   const dropSettleTimerRef = useRef(null);
   const openMenuRef = useRef(null);
   const nextPlanBlockKey = getNextPlanBlockKey(planBlocks, nowMinutes);
+
+  const syncMessage = syncError ? "Today’s Plan could not sync. Your latest change may not be saved." : "";
 
   useEffect(() => {
     return () => {
@@ -466,8 +470,13 @@ function PlanPage({
     return adjustedNow >= startMinutes && adjustedNow < adjustedEnd;
   }
 
+  if (loading) {
+    return <section className="plan-page" aria-busy="true"><p>Loading today’s plan...</p></section>;
+  }
+
   return (
     <div className="page plan-page">
+      {syncMessage && <p className="settings-inline-error" role="alert">{syncMessage}</p>}
       <header className="page-header plan-page-header">
         <p className="eyebrow">Today’s Plan</p>
         <h1>Today’s Plan</h1>

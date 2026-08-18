@@ -18,6 +18,7 @@ import DayloMark from "./components/DayloMark.jsx";
 import useCloudSubjects from "./hooks/useCloudSubjects.js";
 import useCloudTasks from "./hooks/useCloudTasks.js";
 import useCloudAppearancePreferences from "./hooks/useCloudAppearancePreferences.js";
+import useCloudPlanning from "./hooks/useCloudPlanning.js";
 import {
   DEFAULT_APPEARANCE_PREFERENCES,
 } from "./lib/cloudAppearancePreferences.js";
@@ -32,7 +33,6 @@ import {
   DEFAULT_THEME_COLORS,
   themeColorPalettes,
   STUDENT_HUB_STORAGE_KEYS,
-  TODAY_PLAN_STORAGE_KEY,
   normalizeThemeColors,
   deriveThemeBackground,
   mixColors,
@@ -46,10 +46,7 @@ import {
   sortTasksForDisplay,
   cleanPlanSequence,
   recalculatePlanTimes,
-  loadSavedPlanSnapshot,
-  isSavedPlanForToday,
   restoreSavedPlanBlocks,
-  saveTodayPlanSnapshot,
   loadQuickLinksPreferences,
   saveQuickLinksPreferences,
   buildEveningPlan,
@@ -75,11 +72,7 @@ import {
   shouldRequestSmartPlannerAi,
   timeStringToMinute,
 } from "./utils/smartPlannerUtils.js";
-import {
-  clearOnboardingDraft,
-  loadOnboardingPlanningPreferences,
-  shouldShowOnboarding,
-} from "./utils/onboardingUtils.js";
+import { clearOnboardingDraft, shouldShowOnboarding } from "./utils/onboardingUtils.js";
 import useGuidedTour from "./hooks/useGuidedTour.js";
 import usePwaInstall from "./hooks/usePwaInstall.js";
 import { useAuth } from "./hooks/useAuth.jsx";
@@ -222,10 +215,8 @@ function formatPlannerMinutes(minutes) {
   return `${hours} hr ${remainingMinutes} min`;
 }
 
-function getPreferredSmartPlannerDraft(options = {}) {
+function getPreferredSmartPlannerDraft(options = {}, preferences = null) {
   const draft = getDefaultSmartPlannerDraft(options);
-  const preferences = loadOnboardingPlanningPreferences();
-
   if (!preferences) return draft;
 
   return {
@@ -311,6 +302,15 @@ function App() {
     setDensity: setLayoutDensity,
     setThemeColors: saveCloudThemeColors,
   } = useCloudAppearancePreferences(auth.user);
+  const {
+    preferences: cloudPlanningPreferences,
+    plan: cloudTodayPlan,
+    loading: planningLoading,
+    error: planningSyncError,
+    updatePreferences: updatePlanningPreferences,
+    persistPlan: persistCloudPlan,
+    clearPlan: clearCloudPlan,
+  } = useCloudPlanning(auth.user);
   const appearancePreferences =
     cloudAppearancePreferences || DEFAULT_APPEARANCE_PREFERENCES;
   const theme = appearancePreferences.theme;
@@ -446,43 +446,21 @@ function App() {
         .sort((left, right) => right.completedAt - left.completedAt),
     [tasks]
   );
-  const [initialSavedPlan] = useState(loadSavedPlanSnapshot);
-  const savedPlanIsForToday = isSavedPlanForToday(initialSavedPlan);
-
-  const [hoursAvailable, setHoursAvailable] = useState(() => {
-    if (savedPlanIsForToday && initialSavedPlan.hoursAvailable != null) {
-      return initialSavedPlan.hoursAvailable;
-    }
-
-    return localStorage.getItem("student-hub-hours") || 2;
-  });
-
-  const [startTime, setStartTime] = useState(() => {
-    if (
-      savedPlanIsForToday &&
-      /^\d{2}:\d{2}$/.test(initialSavedPlan.startTime || "")
-    ) {
-      return initialSavedPlan.startTime;
-    }
-
-    return localStorage.getItem("student-hub-start-time") || "16:00";
-  });
+  const [hoursAvailable, setHoursAvailable] = useState(2);
+  const [startTime, setStartTime] = useState("16:30");
 
   const [showAddTask, setShowAddTask] = useState(false);
   const [planBlocks, setPlanBlocks] = useState([]);
   const [planMetadata, setPlanMetadata] = useState(null);
   const [planStartupReady, setPlanStartupReady] = useState(false);
   const planRestoredForUserRef = useRef("");
-  const [stalePlanDate, setStalePlanDate] = useState(() =>
-    initialSavedPlan && !savedPlanIsForToday
-      ? initialSavedPlan.generatedDate
-      : null
-  );
+  const persistedPlanSignatureRef = useRef("");
+  const [stalePlanDate, setStalePlanDate] = useState(null);
   const [planMoveFeedback, setPlanMoveFeedback] = useState(null);
   const planMoveFeedbackTimerRef = useRef(null);
   const [smartPlannerOpen, setSmartPlannerOpen] = useState(false);
   const [smartPlannerDraft, setSmartPlannerDraft] = useState(() =>
-    getPreferredSmartPlannerDraft()
+      getPreferredSmartPlannerDraft()
   );
   const [smartPlannerError, setSmartPlannerError] = useState("");
   const [smartPlannerPreview, setSmartPlannerPreview] = useState(null);
@@ -512,6 +490,17 @@ function App() {
   const classroomSetupTourStarterRef = useRef(null);
   const pwaInstall = usePwaInstall();
   const pwaUpdate = usePwaUpdate();
+
+  useEffect(() => {
+    planRestoredForUserRef.current = "";
+    persistedPlanSignatureRef.current = "";
+    setPlanStartupReady(false);
+    setPlanBlocks([]);
+    setPlanMetadata(null);
+    setStalePlanDate(null);
+    setHoursAvailable(2);
+    setStartTime("16:30");
+  }, [auth.user?.id]);
   const guidedTour = useGuidedTour({
     onExit: ({ tour, status }) => {
       if (tour?.persistOutcome !== false) {
@@ -692,14 +681,14 @@ function App() {
 
     setEveningPlanSuccess(null);
     setSmartPlannerDraft(
-      getPreferredSmartPlannerDraft({ calendarAvailable })
+      getPreferredSmartPlannerDraft({ calendarAvailable }, cloudPlanningPreferences)
     );
     setSmartPlannerError("");
     setSmartPlannerPreview(null);
     setSmartPlannerNeedsReplace(false);
     setSmartPlannerLoading(false);
     setSmartPlannerOpen(true);
-  }, [calendarBusyTimeIsAvailable]);
+  }, [calendarBusyTimeIsAvailable, cloudPlanningPreferences]);
 
   useEffect(() => {
     if (
@@ -1473,44 +1462,62 @@ function App() {
   }, [layoutDensity]);
 
   useEffect(() => {
-    if (tasksLoading || !auth.user?.id) return;
-    if (planRestoredForUserRef.current === auth.user.id) return;
+    if (tasksLoading || planningLoading || !auth.user?.id || !cloudPlanningPreferences) return;
 
     planRestoredForUserRef.current = auth.user.id;
+    const incomingPlan = cloudTodayPlan;
+    const incomingSignature = incomingPlan
+      ? JSON.stringify({
+          blocks: incomingPlan.blocks,
+          startTime: incomingPlan.startTime,
+          hoursAvailable: incomingPlan.hoursAvailable,
+          metadata: incomingPlan.metadata || null,
+        })
+      : "empty";
+    persistedPlanSignatureRef.current = incomingSignature;
+    setStartTime(incomingPlan?.startTime || cloudPlanningPreferences.startTime);
+    setHoursAvailable(incomingPlan?.hoursAvailable ?? cloudPlanningPreferences.hoursAvailable);
     setPlanBlocks(
-      savedPlanIsForToday
+      incomingPlan
         ? restoreSavedPlanBlocks(
-            initialSavedPlan,
+            incomingPlan,
             tasks.filter((task) => !task.archived),
-            startTime
+            incomingPlan.startTime || cloudPlanningPreferences.startTime
           )
         : []
     );
     setPlanMetadata(
-      savedPlanIsForToday && initialSavedPlan?.metadata
-        ? initialSavedPlan.metadata
-        : null
+      incomingPlan?.metadata || null
     );
+    setStalePlanDate(null);
     setPlanStartupReady(true);
   }, [
     auth.user?.id,
-    initialSavedPlan,
-    savedPlanIsForToday,
-    startTime,
+    cloudPlanningPreferences,
+    cloudTodayPlan,
+    planningLoading,
     tasks,
     tasksLoading,
   ]);
 
   useEffect(() => {
     if (!planStartupReady) return;
-    if (stalePlanDate) return;
-
+    if (stalePlanDate || !auth.user?.id) return;
+    const signature = planBlocks.length === 0 ? "empty" : JSON.stringify({
+      blocks: planBlocks,
+      startTime,
+      hoursAvailable,
+      metadata: planMetadata,
+    });
+    if (signature === persistedPlanSignatureRef.current) return;
+    persistedPlanSignatureRef.current = signature;
     if (planBlocks.length === 0) {
-      localStorage.removeItem(TODAY_PLAN_STORAGE_KEY);
+      void clearCloudPlan();
       return;
     }
-
-    saveTodayPlanSnapshot({
+    void persistCloudPlan({
+      generatedDate: formatLocalDate(),
+      savedAt: new Date().toISOString(),
       blocks: planBlocks,
       startTime,
       hoursAvailable,
@@ -1523,6 +1530,9 @@ function App() {
     stalePlanDate,
     planMetadata,
     planStartupReady,
+    auth.user?.id,
+    clearCloudPlan,
+    persistCloudPlan,
   ]);
 
   useEffect(() => {
@@ -1631,14 +1641,6 @@ function App() {
       colorToRgba(primaryColor, resolvedTheme === "dark" ? 0.16 : 0.12)
     );
   }, [themeColors, resolvedTheme]);
-
-  useEffect(() => {
-    localStorage.setItem("student-hub-hours", hoursAvailable);
-  }, [hoursAvailable]);
-
-  useEffect(() => {
-    localStorage.setItem("student-hub-start-time", startTime);
-  }, [startTime]);
 
   useEffect(() => {
     return () => clearTimeout(planMoveFeedbackTimerRef.current);
@@ -1824,7 +1826,6 @@ function App() {
   }
 
   function startFreshPlan() {
-    localStorage.removeItem(TODAY_PLAN_STORAGE_KEY);
     setStalePlanDate(null);
     setPlanBlocks([]);
     setPlanMetadata(null);
@@ -2992,9 +2993,14 @@ function App() {
 
     setStalePlanDate(null);
     setStartTime(smartPlannerDraft.startTime);
-    setHoursAvailable(
-      Number((((savedFinishMinutes || 0) - (startMinutes || 0)) / 60).toFixed(2))
+    const nextHoursAvailable = Number(
+      (((savedFinishMinutes || 0) - (startMinutes || 0)) / 60).toFixed(2)
     );
+    setHoursAvailable(nextHoursAvailable);
+    void updatePlanningPreferences({
+      startTime: smartPlannerDraft.startTime,
+      hoursAvailable: nextHoursAvailable,
+    });
     setPlanBlocks(smartPlannerPreview.blocks);
     setPlanMetadata({
       source: smartPlannerPreview.source,
@@ -3127,6 +3133,7 @@ function App() {
 
   function updatePlanStartTime(nextStartTime) {
     setStartTime(nextStartTime);
+    void updatePlanningPreferences({ startTime: nextStartTime });
     setPlanBlocks((currentBlocks) =>
       recalculatePlanTimes(currentBlocks, nextStartTime)
     );
@@ -3186,7 +3193,7 @@ function App() {
 
   async function resetTasks() {
     if (!(await clearCloudTasks())) return false;
-    localStorage.removeItem(TODAY_PLAN_STORAGE_KEY);
+    await clearCloudPlan();
     setPlanBlocks([]);
     setPlanMetadata(null);
     setStalePlanDate(null);
@@ -3290,6 +3297,9 @@ function App() {
   }
 
   function renderAppPage(page) {
+    const accountPlanBlocks =
+      planRestoredForUserRef.current === auth.user?.id ? planBlocks : [];
+
     if (page === "home") {
       return (
         <HomePage
@@ -3303,8 +3313,10 @@ function App() {
           progressPercentage={progressPercentage}
           nextTask={nextTask}
           openSmartPlanner={openSmartPlanner}
-          hasPlan={planBlocks.length > 0}
-          planBlocks={planBlocks}
+          loading={planningLoading}
+          syncError={planningSyncError}
+          hasPlan={accountPlanBlocks.length > 0}
+          planBlocks={accountPlanBlocks}
           setActivePage={setActivePage}
         />
       );
@@ -3338,8 +3350,8 @@ function App() {
     if (page === "plan") {
       return (
         <PlanPage
-          planBlocks={planBlocks}
-          planMetadata={planBlocks.length > 0 ? planMetadata : null}
+          planBlocks={accountPlanBlocks}
+          planMetadata={accountPlanBlocks.length > 0 ? planMetadata : null}
           clearPlan={clearPlan}
           addManualPlanBlock={addManualPlanBlock}
           movePlanStudyBlock={movePlanStudyBlock}
@@ -3352,6 +3364,8 @@ function App() {
           stalePlanDate={stalePlanDate}
           startFreshPlan={startFreshPlan}
           openSmartPlanner={openSmartPlanner}
+          loading={planningLoading}
+          syncError={planningSyncError}
         />
       );
     }
@@ -3457,6 +3471,14 @@ function App() {
     );
   }
 
+  if (shouldShowOnboarding(studentProfile) && planningLoading) {
+    return (
+      <main className="auth-page auth-page-loading" aria-busy="true">
+        <div className="auth-loading-card"><DayloMark className="auth-logo" aria-hidden="true" /><p>Loading planning preferences...</p></div>
+      </main>
+    );
+  }
+
   if (shouldShowOnboarding(studentProfile)) {
     return (
       <OnboardingFlow
@@ -3470,6 +3492,9 @@ function App() {
         saveThemeColorPreferences={saveThemeColorPreferences}
         themeColorPalettes={themeColorPalettes}
         logoAppearance={themeColors.logoAppearance}
+        planningPreferences={cloudPlanningPreferences}
+        onUpdatePlanningPreferences={updatePlanningPreferences}
+        planningSyncError={planningSyncError}
         onComplete={completeOnboarding}
       />
     );

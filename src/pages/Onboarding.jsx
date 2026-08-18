@@ -18,12 +18,10 @@ import {
   advanceOnboardingStep,
   isPlanningFinishNextDay,
   loadOnboardingDraft,
-  loadOnboardingPlanningPreferences,
   loadRealClassroomCourseLinks,
   loadRealClassroomCourseSelections,
   mergeIncludedClassroomSubjects,
   saveOnboardingDraft,
-  saveOnboardingPlanningPreferences,
 } from "../utils/onboardingUtils.js";
 import { suggestSubjectDraftColour } from "../utils/subjectColourUtils.js";
 import DayloMark from "../components/DayloMark.jsx";
@@ -64,6 +62,9 @@ function OnboardingFlow({
   themeColorPalettes,
   logoAppearance,
   onComplete,
+  planningPreferences: cloudPlanningPreferences,
+  onUpdatePlanningPreferences,
+  planningSyncError,
 }) {
   const [callbackState] = useState(getCallbackState);
   const [initialDraft] = useState(loadOnboardingDraft);
@@ -109,9 +110,7 @@ function OnboardingFlow({
     error: callbackState.calendar === "error",
   });
   const [planningPreferences, setPlanningPreferences] = useState(
-    () =>
-      loadOnboardingPlanningPreferences() ||
-      DEFAULT_ONBOARDING_PLANNING_PREFERENCES
+    cloudPlanningPreferences || DEFAULT_ONBOARDING_PLANNING_PREFERENCES
   );
   const subjectNameInputRef = useRef(null);
   const classroomCheckStartedRef = useRef(false);
@@ -129,6 +128,10 @@ function OnboardingFlow({
     (course) => courseLinks[getRealClassroomCourseId(course)]?.subjectId
   ).length;
   const finishIsNextDay = isPlanningFinishNextDay(planningPreferences);
+
+  useEffect(() => {
+    if (cloudPlanningPreferences) setPlanningPreferences(cloudPlanningPreferences);
+  }, [cloudPlanningPreferences]);
 
   useEffect(() => {
     saveOnboardingDraft({ step, setupRoute });
@@ -390,11 +393,12 @@ function OnboardingFlow({
   }
 
   function updatePlanningPreference(field, value) {
-    const nextPreferences = saveOnboardingPlanningPreferences({
+    const nextPreferences = {
       ...planningPreferences,
       [field]: value,
-    });
+    };
     setPlanningPreferences(nextPreferences);
+    void onUpdatePlanningPreferences?.(nextPreferences);
   }
 
   function chooseThemePalette(palette) {
@@ -639,6 +643,7 @@ function OnboardingFlow({
                   {finishIsNextDay && <small>Next day</small>}
                 </label>
               </div>
+              {planningSyncError && <p className="settings-inline-error" role="alert">Planning preferences could not sync. Try again.</p>}
               <fieldset className="onboarding-plan-style">
                 <legend>Planning style</legend>
                 <div className="onboarding-segmented-control">
