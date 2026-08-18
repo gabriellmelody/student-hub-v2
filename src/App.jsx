@@ -3470,6 +3470,7 @@ function App() {
           updateControl={updateControl}
           onInstallDayLo={startInstallFlow}
           user={auth.user}
+          onChangePassword={auth.changePassword}
           classroomSyncSettings={classroomSyncSettings}
           setClassroomSyncSettings={setClassroomSyncSettings}
           classroomSyncStatus={classroomSyncStatus}

@@ -2,7 +2,7 @@ import { StrictMode, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.jsx";
-import AuthScreen, { AuthLoadingScreen } from "./components/AuthScreen.jsx";
+import AuthScreen, { AuthLoadingScreen, PasswordRecoveryScreen } from "./components/AuthScreen.jsx";
 import { AuthProvider, useAuth } from "./hooks/useAuth.jsx";
 import DayLoSplash from "./components/DayLoSplash.jsx";
 import { dayloSplashSession } from "./utils/dayloSplashSession.js";
@@ -13,7 +13,8 @@ function AuthGate() {
   const auth = useAuth();
 
   if (auth.loading) return <AuthLoadingScreen />;
-  if (!auth.user) return <AuthScreen signIn={auth.signIn} signUp={auth.signUp} signInWithGoogle={auth.signInWithGoogle} />;
+  if (auth.recoveryMode) return <PasswordRecoveryScreen completePasswordRecovery={auth.completePasswordRecovery} />;
+  if (!auth.user) return <AuthScreen signIn={auth.signIn} signUp={auth.signUp} signInWithGoogle={auth.signInWithGoogle} sendPasswordReset={auth.sendPasswordReset} resendVerification={auth.resendVerification} />;
   if (auth.profileLoading && !auth.profile) return <AuthLoadingScreen />;
   if (auth.profileError) {
     return (

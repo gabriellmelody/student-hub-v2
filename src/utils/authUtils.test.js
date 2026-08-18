@@ -4,10 +4,15 @@ import {
   getAuthGateState,
   getFriendlyAuthError,
   getAuthRedirectUrl,
+  getPasswordStrength,
+  hasPasswordIdentity,
   getOAuthReturnError,
   startGoogleOAuth,
   shouldShowAuthenticatedApp,
   validateEmailPassword,
+  validateNewPassword,
+  requestPasswordReset,
+  resendSignupConfirmation,
 } from "./authUtils.js";
 
 test("unauthenticated state shows auth gate", () => {
@@ -28,10 +33,10 @@ test("auth loading state avoids UI flash", () => {
 test("signup validation requires email and minimum password length", () => {
   assert.equal(validateEmailPassword({ email: "", password: "123456" }).ok, false);
   assert.equal(validateEmailPassword({ email: "student@example.com", password: "123" }).ok, false);
-  assert.deepEqual(validateEmailPassword({ email: " student@example.com ", password: "123456" }), {
+  assert.deepEqual(validateEmailPassword({ email: " student@example.com ", password: "12345678" }), {
     ok: true,
     email: "student@example.com",
-    password: "123456",
+    password: "12345678",
   });
 });
 
@@ -39,11 +44,15 @@ test("password confirmation mismatch is rejected", () => {
   assert.deepEqual(
     validateEmailPassword({
       email: "student@example.com",
-      password: "123456",
-      confirmPassword: "654321",
+      password: "12345678",
+      confirmPassword: "87654321",
     }),
-    { ok: false, message: "Passwords do not match." }
+    { ok: false, message: "Passwords don't match." }
   );
+});
+
+test("sign-in accepts an existing password without applying the new signup minimum", () => {
+  assert.equal(validateEmailPassword({ email: "student@example.com", password: "legacy7", enforcePasswordMinimum: false }).ok, true);
 });
 
 test("sign-in errors use student-friendly copy", () => {
@@ -53,8 +62,35 @@ test("sign-in errors use student-friendly copy", () => {
   );
   assert.equal(
     getFriendlyAuthError({ message: "Email not confirmed" }),
-    "Check your email to confirm your DayLo account first."
+    "Confirm your email first. Check your inbox for the DayLo confirmation email."
   );
+});
+
+test("password policy reports short, valid, and strong values", () => {
+  assert.deepEqual(getPasswordStrength("1234567"), { level: 0, label: "Too short", valid: false });
+  assert.equal(getPasswordStrength("abcdefgh").valid, true);
+  assert.equal(getPasswordStrength("DayLo-Strong-2026!").label, "Strong");
+  assert.equal(validateNewPassword("1234567", "1234567").ok, false);
+  assert.deepEqual(validateNewPassword("12345678", "87654321"), { ok: false, message: "Passwords don't match." });
+});
+
+test("password identities include linked email accounts but exclude Google-only accounts", () => {
+  assert.equal(hasPasswordIdentity({ identities: [{ provider: "google" }] }), false);
+  assert.equal(hasPasswordIdentity({ identities: [{ provider: "email" }, { provider: "google" }] }), true);
+});
+
+test("password reset and verification resend use supported Supabase methods once", async () => {
+  const resetCalls = [];
+  const resendCalls = [];
+  const auth = {
+    async resetPasswordForEmail(...args) { resetCalls.push(args); return { data: {}, error: null }; },
+    async resend(args) { resendCalls.push(args); return { data: {}, error: null }; },
+  };
+  const location = { origin: "https://daylo-student.vercel.app" };
+  await requestPasswordReset(auth, " student@example.com ", location);
+  await resendSignupConfirmation(auth, "student@example.com", location);
+  assert.deepEqual(resetCalls, [["student@example.com", { redirectTo: "https://daylo-student.vercel.app/" }]]);
+  assert.deepEqual(resendCalls, [{ type: "signup", email: "student@example.com", options: { emailRedirectTo: "https://daylo-student.vercel.app/" } }]);
 });
 
 test("Google OAuth uses the current origin and invokes Supabase once", async () => {

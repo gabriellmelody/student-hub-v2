@@ -145,6 +145,27 @@
   outline-offset: 2px;
 }
 
+.auth-inline-action,
+.auth-secondary-action {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent-soft);
+  font: inherit;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.auth-inline-action { justify-self: end; margin-top: -8px; font-size: var(--font-helper); }
+.auth-secondary-action { justify-self: center; }
+
+.password-strength { display: flex; align-items: center; gap: 9px; color: var(--text-secondary); }
+.password-strength-track { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; width: 72px; }
+.password-strength-track i { height: 3px; border-radius: 2px; background: var(--border-strong); }
+.strength-1 .password-strength-track i:first-child,
+.strength-2 .password-strength-track i:nth-child(-n+2),
+.strength-3 .password-strength-track i { background: var(--accent); }
+
 .auth-submit {
   width: 100%;
   min-height: 48px;

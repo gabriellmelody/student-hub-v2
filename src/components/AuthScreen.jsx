@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import DayloMark from "./DayloMark.jsx";
+import PasswordStrength from "./PasswordStrength.jsx";
 import {
+  AUTH_PASSWORD_MIN_LENGTH,
   clearOAuthReturnError,
   getFriendlyAuthError,
   getOAuthReturnError,
+  getRecoveryReturnError,
+  isEmailNotConfirmedError,
   validateEmailPassword,
+  validateNewPassword,
 } from "../utils/authUtils.js";
 import "../styles/auth.css";
 
@@ -17,7 +22,7 @@ function AuthLoadingScreen() {
   );
 }
 
-function AuthScreen({ signIn, signUp, signInWithGoogle }) {
+function AuthScreen({ signIn, signUp, signInWithGoogle, sendPasswordReset, resendVerification }) {
   const authPageRef = useRef(null);
   const googleSubmittingRef = useRef(false);
   const [mode, setMode] = useState("signin");
@@ -29,9 +34,11 @@ function AuthScreen({ signIn, signUp, signInWithGoogle }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const creating = mode === "signup";
+  const recovering = mode === "forgot";
+  const checkingEmail = mode === "check-email";
 
   useEffect(() => {
-    const oauthError = getOAuthReturnError();
+    const oauthError = getRecoveryReturnError() || getOAuthReturnError();
     if (!oauthError) return;
     setError(oauthError);
     clearOAuthReturnError();
@@ -61,10 +68,29 @@ function AuthScreen({ signIn, signUp, signInWithGoogle }) {
     setError("");
     setMessage("");
 
+    if (recovering) {
+      const normalizedEmail = email.trim();
+      if (!/^\S+@\S+\.\S+$/.test(normalizedEmail)) {
+        setError("Enter a valid email address.");
+        return;
+      }
+      setSubmitting(true);
+      try {
+        await sendPasswordReset(normalizedEmail);
+        setMode("reset-sent");
+      } catch (authError) {
+        setError(getFriendlyAuthError(authError));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
     const validation = validateEmailPassword({
       email,
       password,
       confirmPassword: creating ? confirmPassword : null,
+      enforcePasswordMinimum: creating,
     });
 
     if (!validation.ok) {
@@ -80,8 +106,23 @@ function AuthScreen({ signIn, signUp, signInWithGoogle }) {
         : await signIn({ email: validation.email, password: validation.password });
 
       if (creating && result?.user && !result?.session) {
-        setMessage("Check your email. We sent you a link to confirm your DayLo account.");
+        setMode("check-email");
       }
+    } catch (authError) {
+      setError(getFriendlyAuthError(authError));
+      if (isEmailNotConfirmedError(authError)) setMode("unconfirmed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleResend() {
+    if (submitting) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await resendVerification(email);
+      setMessage("Confirmation email sent.");
     } catch (authError) {
       setError(getFriendlyAuthError(authError));
     } finally {
@@ -138,12 +179,12 @@ function AuthScreen({ signIn, signUp, signInWithGoogle }) {
           <DayloMark className="auth-logo" appearance="brand" />
           <div>
             <p className="eyebrow">DayLo account</p>
-            <h1 id="auth-title">Welcome to DayLo</h1>
+            <h1 id="auth-title">{recovering ? "Reset your password" : mode === "reset-sent" || checkingEmail || mode === "unconfirmed" ? "Check your email" : "Welcome to DayLo"}</h1>
           </div>
         </div>
-        <p className="auth-intro">Keep your schoolwork and plans synced across your devices.</p>
+        <p className="auth-intro">{recovering ? "Enter your email and we'll send you a reset link." : mode === "reset-sent" ? "If a DayLo account exists for that email, we've sent a password reset link." : checkingEmail ? `We sent a confirmation link to ${email}.` : mode === "unconfirmed" ? "Confirm your email first. Check your inbox for the DayLo confirmation email." : "Keep your schoolwork and plans synced across your devices."}</p>
 
-        <button type="button" className="auth-google-button" onClick={handleGoogleSignIn} disabled={submitting}>
+        {!recovering && mode !== "reset-sent" && !checkingEmail && mode !== "unconfirmed" && <><button type="button" className="auth-google-button" onClick={handleGoogleSignIn} disabled={submitting}>
           <svg className="auth-google-mark" viewBox="0 0 24 24" aria-hidden="true">
             <path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.87h5.38a4.6 4.6 0 0 1-2 3.02v2.51h3.24c1.89-1.74 2.98-4.31 2.98-7.35Z" />
             <path fill="#34A853" d="M12 22c2.7 0 4.97-.9 6.62-2.42l-3.24-2.51c-.9.6-2.04.96-3.38.96-2.6 0-4.81-1.76-5.6-4.13H3.06v2.59A10 10 0 0 0 12 22Z" />
@@ -154,9 +195,9 @@ function AuthScreen({ signIn, signUp, signInWithGoogle }) {
           <span className="auth-google-spacer" aria-hidden="true" />
         </button>
 
-        <div className="auth-divider"><span>or</span></div>
+        <div className="auth-divider"><span>or</span></div></>}
 
-        <form className="auth-form" onSubmit={handleSubmit}>
+        {(recovering || (!checkingEmail && mode !== "reset-sent" && mode !== "unconfirmed")) && <form className="auth-form" onSubmit={handleSubmit}>
           <label>
             <span>Email</span>
             <input
@@ -167,40 +208,44 @@ function AuthScreen({ signIn, signUp, signInWithGoogle }) {
               onChange={(event) => setEmail(event.target.value)}
             />
           </label>
-          <label>
+          {!recovering && <label>
             <span>Password</span>
             <input
               type="password"
               value={password}
               autoComplete={creating ? "new-password" : "current-password"}
               required
-              minLength={6}
+              minLength={creating ? AUTH_PASSWORD_MIN_LENGTH : undefined}
               onChange={(event) => setPassword(event.target.value)}
             />
-          </label>
+          </label>}
+          {!creating && !recovering && <button type="button" className="auth-inline-action" onClick={() => switchMode("forgot")}>Forgot password?</button>}
           {creating && (
-            <label>
+            <><PasswordStrength password={password} /><label>
               <span>Confirm password</span>
               <input
                 type="password"
                 value={confirmPassword}
                 autoComplete="new-password"
                 required
-                minLength={6}
+                minLength={AUTH_PASSWORD_MIN_LENGTH}
                 onChange={(event) => setConfirmPassword(event.target.value)}
               />
-            </label>
+            </label></>
           )}
 
           {error && <p className="auth-message auth-message-error" role="alert">{error}</p>}
           {message && <p className="auth-message auth-message-success" role="status">{message}</p>}
 
           <button type="submit" className="primary-button auth-submit" disabled={submitting}>
-            {submitting ? "Working…" : creating ? "Create account" : "Sign in"}
+            {submitting ? "Working…" : recovering ? "Send reset link" : creating ? "Create account" : "Sign in"}
           </button>
-        </form>
+        </form>}
 
-        <p className="auth-switch">
+        {(checkingEmail || mode === "unconfirmed") && <button type="button" className="primary-button auth-submit" disabled={submitting} onClick={handleResend}>{submitting ? "Sending…" : "Resend email"}</button>}
+        {(recovering || mode === "reset-sent" || checkingEmail || mode === "unconfirmed") && <button type="button" className="auth-secondary-action" onClick={() => switchMode("signin")}>Back to sign in</button>}
+
+        {!recovering && mode !== "reset-sent" && !checkingEmail && mode !== "unconfirmed" && <p className="auth-switch">
           {creating ? "Already have an account?" : "Don’t have an account?"}{" "}
           <button
             type="button"
@@ -208,11 +253,34 @@ function AuthScreen({ signIn, signUp, signInWithGoogle }) {
           >
             {creating ? "Sign in" : "Create account"}
           </button>
-        </p>
+        </p>}
       </section>
     </main>
   );
 }
 
-export { AuthLoadingScreen };
+function PasswordRecoveryScreen({ completePasswordRecovery }) {
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    const validation = validateNewPassword(password, confirmation);
+    if (!validation.ok) return setError(validation.message);
+    setSubmitting(true);
+    setError("");
+    try {
+      await completePasswordRecovery(validation.password);
+    } catch (authError) {
+      setError(getFriendlyAuthError(authError));
+      setSubmitting(false);
+    }
+  }
+
+  return <main className="auth-page"><section className="auth-panel"><div className="auth-brand"><DayloMark className="auth-logo" appearance="brand" /><div><p className="eyebrow">DayLo account</p><h1>Choose a new password</h1></div></div><form className="auth-form" onSubmit={submit}><label><span>New password</span><input type="password" autoComplete="new-password" minLength={AUTH_PASSWORD_MIN_LENGTH} required value={password} onChange={(event) => setPassword(event.target.value)} /></label><PasswordStrength password={password} /><label><span>Confirm new password</span><input type="password" autoComplete="new-password" minLength={AUTH_PASSWORD_MIN_LENGTH} required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>{error && <p className="auth-message auth-message-error" role="alert">{error}</p>}<button className="primary-button auth-submit" disabled={submitting}>{submitting ? "Updating…" : "Update password"}</button></form></section></main>;
+}
+
+export { AuthLoadingScreen, PasswordRecoveryScreen };
 export default AuthScreen;

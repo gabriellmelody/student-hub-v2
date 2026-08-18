@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import ClassroomSetupIntroModal from "../components/ClassroomSetupIntroModal.jsx";
 import DayloMark from "../components/DayloMark.jsx";
 import QuickLinkIcon from "../components/QuickLinkIcon.jsx";
+import PasswordStrength from "../components/PasswordStrength.jsx";
+import { AUTH_PASSWORD_MIN_LENGTH, getFriendlyAuthError, hasPasswordIdentity, validateNewPassword } from "../utils/authUtils.js";
 import {
   subjectCourseSystems,
   getDefaultSubjectLevel,
@@ -588,6 +590,7 @@ function SettingsPage({
   },
   onInstallDayLo = () => {},
   user = null,
+  onChangePassword = async () => {},
   classroomSyncSettings = [],
   setClassroomSyncSettings = () => {},
   classroomSyncStatus = { syncing: false, status: "idle", message: "", lastSyncedAt: null },
@@ -823,6 +826,11 @@ function SettingsPage({
       title: "App & updates",
       description: "Manage installation and keep DayLo current.",
     },
+    accountSecurity: {
+      eyebrow: "Settings / Account & security",
+      title: "Account & security",
+      description: "Review your sign-in method and password.",
+    },
   };
   const currentViewCopy = viewCopy[settingsView];
 
@@ -956,18 +964,16 @@ function SettingsPage({
             </span>
           </button>
 
-          <button
-            type="button"
-            className="settings-hub-card coming-soon"
-            disabled
-          >
+          <button type="button" className="settings-hub-card" onClick={() => setSettingsView("accountSecurity")}>
             <span>
-              <strong>Account</strong>
-              <small>Profile and sign-in preferences</small>
+              <strong>Account & security</strong>
+              <small>Sign-in method and password</small>
             </span>
-            <span className="settings-coming-soon">Planned later</span>
+            <span className="settings-hub-arrow" aria-hidden="true">→</span>
           </button>
         </div>
+      ) : settingsView === "accountSecurity" ? (
+        <AccountSecuritySettings user={user} onChangePassword={onChangePassword} />
       ) : settingsView === "appUpdates" ? (
         <AppUpdatesSettings
           installControl={installControl}
@@ -1422,6 +1428,41 @@ function SettingsPage({
       </div>
     </div>
   );
+}
+
+function AccountSecuritySettings({ user, onChangePassword }) {
+  const passwordEnabled = hasPasswordIdentity(user);
+  const [editing, setEditing] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function submit(event) {
+    event.preventDefault();
+    const validation = validateNewPassword(password, confirmation);
+    if (!validation.ok) return setError(validation.message);
+    if (!currentPassword) return setError("Enter your current password.");
+    setSubmitting(true);
+    setError("");
+    setMessage("");
+    try {
+      await onChangePassword({ currentPassword, password: validation.password });
+      setMessage("Password updated.");
+      setEditing(false);
+      setCurrentPassword("");
+      setPassword("");
+      setConfirmation("");
+    } catch (authError) {
+      setError(getFriendlyAuthError(authError));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return <div className="panel account-security-panel"><section className="account-security-row"><div><h3>Sign-in method</h3><p>{passwordEnabled ? "Email and password" : "Google"}</p></div></section>{passwordEnabled && <section className="account-security-row"><div><h3>Password</h3><p>Use at least {AUTH_PASSWORD_MIN_LENGTH} characters.</p></div>{!editing && <button type="button" className="secondary-button" onClick={() => { setEditing(true); setMessage(""); }}>Change password</button>}{editing && <form className="account-password-form" onSubmit={submit}><label><span>Current password</span><input type="password" autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label><span>New password</span><input type="password" autoComplete="new-password" minLength={AUTH_PASSWORD_MIN_LENGTH} required value={password} onChange={(event) => setPassword(event.target.value)} /></label><PasswordStrength password={password} /><label><span>Confirm new password</span><input type="password" autoComplete="new-password" minLength={AUTH_PASSWORD_MIN_LENGTH} required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>{error && <p className="auth-message auth-message-error" role="alert">{error}</p>}<div className="account-password-actions"><button type="submit" className="primary-button" disabled={submitting}>{submitting ? "Updating..." : "Update password"}</button><button type="button" className="secondary-button" onClick={() => setEditing(false)} disabled={submitting}>Cancel</button></div></form>}</section>}{message && <p className="auth-message auth-message-success" role="status">{message}</p>}</div>;
 }
 
 function AppUpdatesSettings({ installControl, updateControl, onInstallDayLo }) {

@@ -7,7 +7,7 @@ import {
   saveUserProfile,
   subscribeToUserProfileChanges,
 } from "../lib/profile.js";
-import { startGoogleOAuth } from "../utils/authUtils.js";
+import { requestPasswordReset, resendSignupConfirmation, startGoogleOAuth } from "../utils/authUtils.js";
 
 const AuthContext = createContext(null);
 const PROFILE_BOOTSTRAP_RETRY_DELAY_MS = 650;
@@ -26,6 +26,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
   const [profileError, setProfileError] = useState(null);
+  const [recoveryMode, setRecoveryMode] = useState(false);
   const activeUserIdRef = useRef(null);
   const profileBootstrapRef = useRef({ userId: null, promise: null });
   const profileRefetchTimerRef = useRef(null);
@@ -149,8 +150,10 @@ export function AuthProvider({ children }) {
 
     void initializeSession();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!active) return;
+
+      if (event === "PASSWORD_RECOVERY") setRecoveryMode(true);
 
       setSession(nextSession || null);
       setUser(nextSession?.user || null);
@@ -187,6 +190,26 @@ export function AuthProvider({ children }) {
   }, [loadProfile]);
 
   const signInWithGoogle = useCallback(() => startGoogleOAuth(supabase.auth), []);
+  const sendPasswordReset = useCallback((email) => requestPasswordReset(supabase.auth, email), []);
+  const resendVerification = useCallback((email) => resendSignupConfirmation(supabase.auth, email), []);
+  const completePasswordRecovery = useCallback(async (password) => {
+    const result = await supabase.auth.updateUser({ password });
+    if (result.error) throw result.error;
+    setRecoveryMode(false);
+    const url = new URL(window.location.href);
+    url.hash = "";
+    ["code", "token", "type", "error", "error_code", "error_description"].forEach((key) => url.searchParams.delete(key));
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+    return result.data;
+  }, []);
+  const changePassword = useCallback(async ({ currentPassword, password }) => {
+    const result = await supabase.auth.updateUser({
+      password,
+      current_password: currentPassword,
+    });
+    if (result.error) throw result.error;
+    return result.data;
+  }, []);
 
   const signOut = useCallback(async () => {
     const result = await supabase.auth.signOut();
@@ -198,6 +221,7 @@ export function AuthProvider({ children }) {
     setProfile(null);
     setProfileError(null);
     setProfileLoading(false);
+    setRecoveryMode(false);
   }, []);
 
   const retryProfile = useCallback(() => loadProfile(user, { retry: false }), [loadProfile, user]);
@@ -227,9 +251,14 @@ export function AuthProvider({ children }) {
     loading,
     profileLoading,
     profileError,
+    recoveryMode,
     signUp,
     signIn,
     signInWithGoogle,
+    sendPasswordReset,
+    resendVerification,
+    completePasswordRecovery,
+    changePassword,
     signOut,
     retryProfile,
     refreshProfile,
@@ -241,9 +270,14 @@ export function AuthProvider({ children }) {
     loading,
     profileLoading,
     profileError,
+    recoveryMode,
     signUp,
     signIn,
     signInWithGoogle,
+    sendPasswordReset,
+    resendVerification,
+    completePasswordRecovery,
+    changePassword,
     signOut,
     retryProfile,
     refreshProfile,
