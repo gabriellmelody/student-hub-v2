@@ -10,6 +10,8 @@ const settingsSource = readFileSync(
 const classroomSyncProps = [
   "user",
   "classroomSyncSettings",
+  "classroomSyncSettingsLoading",
+  "classroomSyncSettingsError",
   "setClassroomSyncSettings",
   "classroomSyncStatus",
   "onSyncClassroomNow",

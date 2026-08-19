@@ -24,6 +24,14 @@ test("disconnected Classroom manager shows Connect Classroom", () => {
   assert.match(managerSource, /Connect Google Classroom/);
 });
 
+test("Classroom manager renders neutral resolving and explicit retry states first", () => {
+  assert.match(managerSource, /classroomManagerState === "resolving"/);
+  assert.match(managerSource, /Loading your classes/);
+  assert.match(managerSource, /classroomManagerState === "error"/);
+  assert.match(managerSource, /onReloadSyncSettings/);
+  assert.ok(managerSource.indexOf('classroomManagerState === "resolving"') < managerSource.indexOf('classroomManagerState === "first-time"'));
+});
+
 test("connected unconfigured Classroom manager shows first-time setup", () => {
   assert.match(managerSource, /Choose your classes/);
   assert.match(managerSource, /What should DayLo sync/);
@@ -94,13 +102,14 @@ test("Add classes excludes already configured courses", () => {
 test("Stop syncing keeps existing DayLo data", () => {
   assert.match(managerSource, /Existing DayLo tasks will stay/);
   assert.match(managerSource, /syncEnabled: false/);
+  assert.match(managerSource, /subjectId: null/);
   assert.doesNotMatch(managerSource, /deleteCloudTask|deleteCloudSubject/);
 });
 
 test("normal Sync now runs assignment sync without refreshing the class list", () => {
   assert.match(managerSource, /async function syncNow/);
   const syncNowStart = managerSource.indexOf("async function syncNow");
-  const syncNowEnd = managerSource.indexOf("if (!session?.connected)", syncNowStart);
+  const syncNowEnd = managerSource.indexOf('if (classroomManagerState === "resolving")', syncNowStart);
   const syncNowSource = managerSource.slice(syncNowStart, syncNowEnd);
 
   assert.doesNotMatch(syncNowSource, /onLoadCourses/);
@@ -120,7 +129,7 @@ test("class refresh does not create phantom sync settings", () => {
 test("configured dashboard requires a linked Subject row", () => {
   assert.match(
     managerSource,
-    /setting\.syncEnabled !== false && setting\.subjectId/
+    /configuredSyncSettings = syncSettings\.filter\(\(setting\) => setting\.subjectId\)/
   );
 });
 
@@ -149,6 +158,13 @@ test("managed Classroom switches save optimistically and revert on failure", () 
   assert.match(managerSource, /if \(saved === false\)/);
   assert.match(managerSource, /onSetSyncSettings\(previousSettings\)/);
   assert.match(managerSource, /Could not save that setting/);
+});
+
+test("managed settings update in place and configured cards use Subject order", () => {
+  assert.match(managerSource, /const nextSettings = syncSettings\.map/);
+  assert.match(managerSource, /sortClassroomSettingsBySubject/);
+  assert.match(managerSource, /orderedConfiguredSyncSettings\.map/);
+  assert.match(managerSource, /configuredSyncSettings = syncSettings\.filter/);
 });
 
 test("managed Classroom switches prevent duplicate writes while saving", () => {

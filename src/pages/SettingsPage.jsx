@@ -28,7 +28,6 @@ import {
   quickLinkIconCatalog,
   normalizeQuickLinksPreferences,
   normalizeQuickLinkUrl,
-  quickLinkPresets,
 } from "../utils/appUtils.js";
 import { helpTopics, getHelpTopic } from "../data/helpGuides.js";
 import { getGuidedTourDefinition } from "../data/guidedTours.js";
@@ -99,6 +98,7 @@ import {
   getDefaultClassroomSyncSetting,
   pruneDeletedSubjectLinks,
 } from "../utils/classroomAutoSyncUtils.js";
+import { getClassroomManagerState, sortClassroomSettingsBySubject } from "../utils/classroomManagerUtils.js";
 
 const STUDENT_HUB_SUPPORT_EMAIL = normalizeSupportEmail(
   import.meta.env.VITE_STUDENT_HUB_SUPPORT_EMAIL || ""
@@ -592,6 +592,9 @@ function SettingsPage({
   user = null,
   onChangePassword = async () => {},
   classroomSyncSettings = [],
+  classroomSyncSettingsLoading = false,
+  classroomSyncSettingsError = "",
+  onReloadClassroomSyncSettings = () => {},
   setClassroomSyncSettings = () => {},
   classroomSyncStatus = { syncing: false, status: "idle", message: "", lastSyncedAt: null },
   onSyncClassroomNow = () => {},
@@ -819,7 +822,7 @@ function SettingsPage({
     quickLinks: {
       eyebrow: "Settings / Quick links",
       title: "Quick links",
-      description: "Pin a few school websites in the sidebar.",
+      description: "Pin your most-used links in the sidebar.",
     },
     appUpdates: {
       eyebrow: "Settings / App & updates",
@@ -926,7 +929,7 @@ function SettingsPage({
           >
             <span>
               <strong>Quick links</strong>
-              <small>Pin school websites in the sidebar</small>
+              <small>Pin your most-used links in the sidebar</small>
             </span>
             <span className="settings-hub-arrow" aria-hidden="true">
               →
@@ -1399,6 +1402,9 @@ function SettingsPage({
           navigationRequest={navigationRequest}
           user={user}
           classroomSyncSettings={classroomSyncSettings}
+          classroomSyncSettingsLoading={classroomSyncSettingsLoading}
+          classroomSyncSettingsError={classroomSyncSettingsError}
+          onReloadClassroomSyncSettings={onReloadClassroomSyncSettings}
           setClassroomSyncSettings={setClassroomSyncSettings}
           classroomSyncStatus={classroomSyncStatus}
           onSyncClassroomNow={onSyncClassroomNow}
@@ -1591,6 +1597,9 @@ function IntegrationsSettings({
   navigationRequest = 0,
   user = null,
   classroomSyncSettings = [],
+  classroomSyncSettingsLoading = false,
+  classroomSyncSettingsError = "",
+  onReloadClassroomSyncSettings = () => {},
   setClassroomSyncSettings = () => {},
   classroomSyncStatus = { syncing: false, status: "idle", message: "", lastSyncedAt: null },
   onSyncClassroomNow = () => {},
@@ -1666,6 +1675,7 @@ function IntegrationsSettings({
     tokenSummary: null,
     accountEmail: "",
   });
+  const [classroomStateUserId, setClassroomStateUserId] = useState(user?.id || "");
   const [realClassroomCourses, setRealClassroomCourses] = useState({
     loading: false,
     courses: [],
@@ -2078,9 +2088,49 @@ function IntegrationsSettings({
   }, [navigationRequest]);
 
   useEffect(() => {
-    checkRealClassroomSession();
     checkGoogleCalendarSession();
   }, []);
+
+  useEffect(() => {
+    const userId = user?.id || "";
+    setClassroomStateUserId(userId);
+    setRealClassroomSession({
+      checking: Boolean(userId),
+      connected: false,
+      status: userId ? "checking" : "no_classroom_session",
+      message: userId ? "Checking Classroom session..." : "No Google account connected.",
+      tokenSummary: null,
+      accountEmail: "",
+    });
+    setRealClassroomCourses({
+      loading: false,
+      courses: [],
+      summary: null,
+      lastCheckedAt: "",
+      message: "",
+      error: "",
+    });
+    if (userId) void checkRealClassroomSession();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (
+      !showRealClassroomReview ||
+      realClassroomSession.checking ||
+      !realClassroomSession.connected ||
+      realClassroomCourses.loading ||
+      realClassroomCourses.lastCheckedAt ||
+      realClassroomCourses.error
+    ) return;
+    void loadRealClassroomCourses();
+  }, [
+    showRealClassroomReview,
+    realClassroomSession.checking,
+    realClassroomSession.connected,
+    realClassroomCourses.loading,
+    realClassroomCourses.lastCheckedAt,
+    realClassroomCourses.error,
+  ]);
 
   useEffect(() => {
     if (realClassroomSession.checking || classroomSetupIntroOpen) return;
@@ -3737,6 +3787,10 @@ function IntegrationsSettings({
           }
           onRestoreArchivedClassroomTasks={restoreArchivedRealClassroomTasks}
           syncSettings={classroomSyncSettings}
+          syncSettingsLoading={classroomSyncSettingsLoading}
+          syncSettingsError={classroomSyncSettingsError}
+          onReloadSyncSettings={onReloadClassroomSyncSettings}
+          settingsUserMatches={classroomStateUserId === (user?.id || "")}
           syncStatus={classroomSyncStatus}
           onSetSyncSettings={setClassroomSyncSettings}
           onUpdateSyncSettings={saveClassroomSyncSettings}
@@ -4953,6 +5007,10 @@ function RealClassroomCourseReviewPage({
   onArchiveNoDueDateClassroomTasks,
   onRestoreArchivedClassroomTasks,
   syncSettings = [],
+  syncSettingsLoading = false,
+  syncSettingsError = "",
+  onReloadSyncSettings = () => {},
+  settingsUserMatches = true,
   syncStatus = { syncing: false, status: "idle", message: "", lastSyncedAt: null },
   onSetSyncSettings = () => {},
   onUpdateSyncSettings = () => {},
@@ -5007,16 +5065,17 @@ function RealClassroomCourseReviewPage({
       subjects
     );
     const previousSettings = syncSettings;
-    const nextSettings = [
-      ...syncSettings.filter((setting) => setting.classroomCourseId !== courseId),
-      {
+    const nextSettings = syncSettings.map((setting) =>
+      setting.classroomCourseId === courseId
+        ? {
         ...currentSetting,
         classroomCourseId: courseId,
         classroomCourseName: course.name || currentSetting.classroomCourseName,
         subjectId: reliableSubject?.id || currentSetting.subjectId || null,
         ...updates,
-      },
-    ];
+          }
+        : setting
+    );
 
     if (pendingKey) {
       savingPreferenceKeysRef.current.add(pendingKey);
@@ -5061,11 +5120,16 @@ function RealClassroomCourseReviewPage({
   const coursesById = new Map(
     courses.map((course) => [getRealClassroomCourseId(course), course])
   );
-  const activeSyncSettings = syncSettings.filter(
-    (setting) => setting.syncEnabled !== false && setting.subjectId
+  const configuredSyncSettings = syncSettings.filter((setting) => setting.subjectId);
+  const activeSyncSettings = configuredSyncSettings.filter(
+    (setting) => setting.syncEnabled !== false
+  );
+  const orderedConfiguredSyncSettings = sortClassroomSettingsBySubject(
+    configuredSyncSettings,
+    subjects
   );
   const configuredCourseIds = new Set(
-    activeSyncSettings.map((setting) => setting.classroomCourseId)
+    configuredSyncSettings.map((setting) => setting.classroomCourseId)
   );
   const unconfiguredCourses = courses.filter(
     (course) => !configuredCourseIds.has(getRealClassroomCourseId(course))
@@ -5073,6 +5137,17 @@ function RealClassroomCourseReviewPage({
   const selectedSetupCount = Object.values(selectedSetupCourseIds).filter(Boolean).length;
   const selectedAddCount = Object.values(selectedAddCourseIds).filter(Boolean).length;
   const syncStatusLabel = getClassroomSyncStatusLabel(syncStatus, activeSyncSettings);
+  const classroomManagerState = getClassroomManagerState({
+    sessionChecking: session?.checking,
+    connected: session?.connected,
+    sessionStatus: session?.status,
+    settingsLoading: syncSettingsLoading,
+    settingsError: syncSettingsError,
+    settingsUserMatches,
+    activeSettings: configuredSyncSettings,
+    coursesResolved: Boolean(courseState.lastCheckedAt || courseState.error),
+    coursesError: courseState.error,
+  });
 
   async function ensureSubjectForCourse(course, subjectPool = subjects) {
     const courseId = getRealClassroomCourseId(course);
@@ -5207,7 +5282,7 @@ function RealClassroomCourseReviewPage({
     onUpdateSyncSettings(
       syncSettings.map((currentSetting) =>
         currentSetting.classroomCourseId === setting.classroomCourseId
-          ? { ...currentSetting, syncEnabled: false }
+          ? { ...currentSetting, syncEnabled: false, subjectId: null }
           : currentSetting
       )
     );
@@ -5261,7 +5336,39 @@ function RealClassroomCourseReviewPage({
     await onSyncNow();
   }
 
-  if (!session?.connected) {
+  if (classroomManagerState === "resolving") {
+    return (
+      <section className="settings-provider-subpage real-classroom-manager-page classroom-watch-page">
+        <div className="settings-provider-header">
+          <button type="button" className="settings-back-button settings-provider-back" onClick={onBack}>← Integrations</button>
+          <header className="real-classroom-manager-header"><div><p className="settings-group-label">Settings / Integrations</p><h1>Google Classroom</h1><p>Loading your classes...</p></div></header>
+        </div>
+        <div className="classroom-watch-empty" role="status" aria-live="polite">Loading your classes...</div>
+      </section>
+    );
+  }
+
+  if (classroomManagerState === "error") {
+    return (
+      <section className="settings-provider-subpage real-classroom-manager-page classroom-watch-page">
+        <div className="settings-provider-header">
+          <button type="button" className="settings-back-button settings-provider-back" onClick={onBack}>← Integrations</button>
+          <header className="real-classroom-manager-header">
+            <div>
+              <p className="settings-group-label">Settings / Integrations</p>
+              <h1>Google Classroom</h1>
+              <p>DayLo could not finish loading your Classroom setup.</p>
+            </div>
+          </header>
+        </div>
+        <div className="classroom-watch-empty" role="alert">
+          <button type="button" className="primary-button" onClick={() => { onReloadSyncSettings(); onLoadCourses(); }}>Try again</button>
+        </div>
+      </section>
+    );
+  }
+
+  if (classroomManagerState === "disconnected" || classroomManagerState === "reconnect") {
     return (
       <section className="settings-provider-subpage real-classroom-manager-page classroom-watch-page">
         <div className="settings-provider-header">
@@ -5288,14 +5395,14 @@ function RealClassroomCourseReviewPage({
             <li>Submitted work is marked complete</li>
           </ul>
           <a className="primary-button" href="/api/google-classroom/connect">
-            Connect Google Classroom
+            {classroomManagerState === "reconnect" ? "Reconnect Google Classroom" : "Connect Google Classroom"}
           </a>
         </div>
       </section>
     );
   }
 
-  if (activeSyncSettings.length === 0) {
+  if (classroomManagerState === "first-time") {
     const selectedIds = Object.entries(selectedSetupCourseIds)
       .filter(([, selected]) => selected)
       .map(([courseId]) => courseId);
@@ -5440,7 +5547,7 @@ function RealClassroomCourseReviewPage({
           )}
         </div>
         <div className="classroom-watch-list">
-          {activeSyncSettings.map((setting) => {
+          {orderedConfiguredSyncSettings.map((setting) => {
             const subject = getReliableClassroomSubject(
               setting.classroomCourseId,
               setting,
@@ -7112,12 +7219,9 @@ function QuickLinksSettings({
   const iconPickerTriggerRef = useRef(null);
   const pinnedLinks = preferences.links
     .filter((link) => link.pinned)
-    .sort((left, right) => left.pinnedOrder - right.pinnedOrder);
+    .sort((left, right) => left.sortOrder - right.sortOrder);
   const presetLinks = preferences.links.filter((link) => link.type === "preset");
   const customLinks = preferences.links.filter((link) => link.type === "custom");
-  const aiPresetIds = quickLinkPresets
-    .filter((preset) => preset.aiAssistant)
-    .map((preset) => preset.id);
   const activeIconPickerLink = openIconPicker
     ? openIconPicker.linkId === "__custom-draft"
       ? {
@@ -7362,45 +7466,12 @@ function QuickLinksSettings({
       return;
     }
 
-    updatePreferences((currentPreferences) => {
-      const currentPinned = currentPreferences.links
-        .filter((nextLink) => nextLink.pinned)
-        .sort((left, right) => left.pinnedOrder - right.pinnedOrder);
-
-      return {
-        ...currentPreferences,
-        links: currentPreferences.links.map((nextLink) =>
-          nextLink.id === linkId
-            ? {
-                ...nextLink,
-                pinned: true,
-                pinnedOrder: currentPinned.length,
-              }
-            : nextLink
-        ),
-      };
-    });
+    updateLink(linkId, { pinned: true });
     setMessage("");
   }
 
   function unpinLink(linkId) {
-    updatePreferences((currentPreferences) => {
-      const nextLinks = currentPreferences.links.map((link) =>
-        link.id === linkId ? { ...link, pinned: false, pinnedOrder: null } : link
-      );
-      const pinnedIds = nextLinks
-        .filter((link) => link.pinned)
-        .sort((left, right) => left.pinnedOrder - right.pinnedOrder)
-        .map((link) => link.id);
-
-      return {
-        ...currentPreferences,
-        links: nextLinks.map((link) => {
-          const pinnedOrder = pinnedIds.indexOf(link.id);
-          return pinnedOrder >= 0 ? { ...link, pinnedOrder } : link;
-        }),
-      };
-    });
+    updateLink(linkId, { pinned: false });
     setMessage("");
   }
 
@@ -7412,54 +7483,17 @@ function QuickLinksSettings({
       return;
     }
 
-    const nextPinnedIds = pinnedLinks.map((link) => link.id);
-    const [movedId] = nextPinnedIds.splice(currentIndex, 1);
-    nextPinnedIds.splice(nextIndex, 0, movedId);
+    const currentLink = pinnedLinks[currentIndex];
+    const adjacentLink = pinnedLinks[nextIndex];
 
     updatePreferences((currentPreferences) => ({
       ...currentPreferences,
       links: currentPreferences.links.map((link) => {
-        const pinnedOrder = nextPinnedIds.indexOf(link.id);
-        return pinnedOrder >= 0 ? { ...link, pinnedOrder } : link;
+        if (link.id === currentLink.id) return { ...link, sortOrder: adjacentLink.sortOrder, pinnedOrder: adjacentLink.sortOrder };
+        if (link.id === adjacentLink.id) return { ...link, sortOrder: currentLink.sortOrder, pinnedOrder: currentLink.sortOrder };
+        return link;
       }),
     }));
-  }
-
-  function chooseAiAssistant(nextAssistantId) {
-    const selectedLink = preferences.links.find(
-      (link) => link.id === nextAssistantId
-    );
-    const currentlyPinnedAi = pinnedLinks.find((link) =>
-      aiPresetIds.includes(link.id)
-    );
-    const canPinSelected =
-      selectedLink?.pinned ||
-      Boolean(currentlyPinnedAi) ||
-      pinnedLinks.length < QUICK_LINK_PIN_LIMIT;
-
-    updatePreferences((currentPreferences) => ({
-      ...currentPreferences,
-      aiAssistantPreference: nextAssistantId,
-      links: currentPreferences.links.map((link) => {
-        if (!aiPresetIds.includes(link.id)) return link;
-
-        if (link.id === nextAssistantId && canPinSelected) {
-          return {
-            ...link,
-            pinned: true,
-            pinnedOrder: currentlyPinnedAi?.pinnedOrder ?? pinnedLinks.length,
-          };
-        }
-
-        return { ...link, pinned: false, pinnedOrder: null };
-      }),
-    }));
-
-    setMessage(
-      canPinSelected
-        ? ""
-        : "Saved your AI shortcut preference. Unpin another link to show it in the sidebar."
-    );
   }
 
   function savePowerSchoolUrl() {
@@ -7511,7 +7545,11 @@ function QuickLinksSettings({
           defaultIconId: "globe",
           type: "custom",
           pinned: false,
-          pinnedOrder: null,
+          sortOrder: currentPreferences.links.reduce(
+            (maximum, link) => Math.max(maximum, Number(link.sortOrder) || 0),
+            -1
+          ) + 1,
+          pinnedOrder: currentPreferences.links.length,
         },
       ],
     }));
@@ -7573,6 +7611,10 @@ function QuickLinksSettings({
             }}
             onKeyDown={handleIconPickerKeyDown}
           >
+            <div className="quick-link-icon-preview">
+              <QuickLinkIcon iconId={activeIconPickerLink.iconId} iconMode={activeIconPickerLink.iconMode} url={activeIconPickerLink.url} />
+              <span><strong>Icon</strong><small>{activeIconPickerLink.iconMode === "site" ? "Site logo" : "DayLo icon"}</small></span>
+            </div>
             <div className="quick-link-icon-modes" role="group" aria-label="Icon source">
               <button type="button" className={activeIconPickerLink.iconMode === "site" ? "active" : ""} onClick={() => updateLinkIconMode(activeIconPickerLink.id, "site")}>Site logo</button>
               <button type="button" className={activeIconPickerLink.iconMode === "daylo" ? "active" : ""} onClick={() => updateLinkIconMode(activeIconPickerLink.id, "daylo")}>DayLo icon</button>
@@ -7629,8 +7671,7 @@ function QuickLinksSettings({
           <div>
             <h3>Sidebar shortcuts</h3>
             <p>
-              Pin up to {QUICK_LINK_PIN_LIMIT} school websites. Links open in a
-              new tab.
+              Pin up to {QUICK_LINK_PIN_LIMIT} of your most-used links in the sidebar.
             </p>
           </div>
           <span>{pinnedLinks.length}/{QUICK_LINK_PIN_LIMIT} pinned</span>
@@ -7707,7 +7748,7 @@ function QuickLinksSettings({
         {presetLinks.length > 0 && <section className="quick-links-section">
           <div className="quick-links-section-heading">
             <h4>Available links</h4>
-            <p>Pick the school tools you use most.</p>
+            <p>Pick the links you use most.</p>
           </div>
 
           <div className="quick-links-preset-grid">
@@ -7769,38 +7810,8 @@ function QuickLinksSettings({
 
         <section className="quick-links-section">
           <div className="quick-links-section-heading">
-            <h4>AI shortcut</h4>
-            <p>This opens an external assistant. It is not DayLo AI.</p>
-          </div>
-          <div
-            className="quick-links-ai-choice"
-            role="group"
-            aria-label="AI assistant shortcut"
-          >
-            {quickLinkPresets
-              .filter((preset) => preset.aiAssistant)
-              .map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  className={
-                    preferences.aiAssistantPreference === preset.id
-                      ? "active"
-                      : ""
-                  }
-                  aria-pressed={preferences.aiAssistantPreference === preset.id}
-                  onClick={() => chooseAiAssistant(preset.id)}
-                >
-                  {preset.label}
-                </button>
-              ))}
-          </div>
-        </section>
-
-        <section className="quick-links-section">
-          <div className="quick-links-section-heading">
             <h4>Custom website</h4>
-            <p>Add one school site without turning this into a bookmarks page.</p>
+            <p>Add a website you use often.</p>
           </div>
 
           <form className="quick-links-custom-form" onSubmit={addCustomLink}>

@@ -1150,6 +1150,17 @@
   padding: 16px 18px 18px;
 }
 
+.smart-planner-fallback-notice {
+  border: 1px solid var(--effort-medium-border);
+  border-radius: 8px;
+  padding: 11px 12px;
+  background: var(--effort-medium-bg);
+  color: var(--text);
+}
+
+.smart-planner-fallback-notice strong { display: block; font-size: 0.8rem; }
+.smart-planner-fallback-notice p { margin: 3px 0 0; color: var(--text-secondary); font-size: 0.72rem; }
+
 .smart-planner-setup {
   display: grid;
   gap: 14px;

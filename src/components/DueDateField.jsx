@@ -1,6 +1,9 @@
+import { useRef } from "react";
 import { getDueDateShortcutValue } from "../utils/appUtils.js";
+import { openDatePicker } from "../utils/datePickerUtils.js";
 
 function DueDateField({ value, onChange, label = "Due date" }) {
+  const inputRef = useRef(null);
   function setShortcut(shortcut) {
     onChange(getDueDateShortcutValue(shortcut));
   }
@@ -10,14 +13,20 @@ function DueDateField({ value, onChange, label = "Due date" }) {
       <span>{label}</span>
       <span className="task-date-input-wrap">
         <input
+          ref={inputRef}
           type="date"
           value={value || ""}
           aria-describedby="task-date-picker-hint"
           onChange={(event) => onChange(event.target.value)}
         />
-        <span className="task-date-picker-affordance" aria-hidden="true">
+        <button
+          type="button"
+          className="task-date-picker-affordance"
+          aria-label="Open calendar picker"
+          onClick={() => openDatePicker(inputRef.current)}
+        >
           Calendar picker
-        </span>
+        </button>
       </span>
       <span className="task-date-shortcuts" aria-label="Due date shortcuts">
         <button type="button" onClick={() => setShortcut("today")}>

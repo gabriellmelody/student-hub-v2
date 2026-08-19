@@ -6,6 +6,7 @@ import {
   deriveSiteFaviconUrl,
   fetchCloudQuickLinks,
   getDefaultCloudQuickLinks,
+  getKnownQuickLinkService,
   mapCloudQuickLink,
   mapQuickLinkForWrite,
   reconcileCloudQuickLinks,
@@ -61,6 +62,16 @@ test("site favicon derives from and follows the current URL", () => {
   assert.equal(deriveSiteFaviconUrl("javascript:alert(1)"), "");
 });
 
+test("known services use stable local logo identities", () => {
+  assert.equal(getKnownQuickLinkService("https://classroom.google.com/u/0"), "google-classroom");
+  assert.equal(getKnownQuickLinkService("calendar.google.com"), "google-calendar");
+  assert.equal(getKnownQuickLinkService("https://drive.google.com/drive"), "google-drive");
+  assert.equal(getKnownQuickLinkService("https://chatgpt.com/"), "chatgpt");
+  assert.equal(getKnownQuickLinkService("https://gemini.google.com/app"), "gemini");
+  assert.equal(getKnownQuickLinkService("https://claude.ai/new"), "claude");
+  assert.equal(getKnownQuickLinkService("https://example.com"), "");
+});
+
 test("legacy migration preserves order and deduplicates by normalized URL", () => {
   const cloud = [{ label: "Drive", url: "https://drive.google.com/" }];
   const legacy = [{ label: "Different name", url: "drive.google.com" }, { label: "Calendar", url: "https://calendar.google.com" }];
@@ -77,7 +88,7 @@ test("fresh defaults are ordinary removable links", () => {
 
 test("edit, delete and reorder target the correct user-owned UUID rows", async () => {
   const current = [mapCloudQuickLink(row()), mapCloudQuickLink(row({ id: SECOND_ID, name: "Calendar", url: "https://calendar.google.com/", sort_order: 1 }))];
-  const next = [{ ...current[1], label: "My Calendar", pinnedOrder: 0 }];
+  const next = [{ ...current[1], label: "My Calendar", sortOrder: 0, pinnedOrder: 0 }];
   const client = mockClient([{ data: null, error: null }, { data: null, error: null }, { data: null, error: null }, { data: [row({ id: SECOND_ID, name: "My Calendar", url: "https://calendar.google.com/" })], error: null }]);
   await reconcileCloudQuickLinks(client, USER, current, next);
   const update = client.calls.find((call) => call.action === "update");
@@ -85,6 +96,15 @@ test("edit, delete and reorder target the correct user-owned UUID rows", async (
   assert.deepEqual(update.filters, [["user_id", USER], ["id", SECOND_ID]]);
   assert.equal(update.payload.sort_order, 0);
   assert.deepEqual(deletion.filters, [["user_id", USER], ["id", ID]]);
+});
+
+test("ordinary edits and pin changes preserve explicit sort order", async () => {
+  const current = [mapCloudQuickLink(row({ sort_order: 7 }))];
+  const client = mockClient([{ data: null, error: null }, { data: [row({ name: "Renamed", pinned: false, sort_order: 7 })], error: null }]);
+  await reconcileCloudQuickLinks(client, USER, current, [{ ...current[0], label: "Renamed", pinned: false }]);
+  const update = client.calls.find((call) => call.action === "update");
+  assert.equal(update.payload.sort_order, 7);
+  assert.equal(update.payload.pinned, false);
 });
 
 test("Realtime is filtered to the authenticated user", () => {
@@ -100,6 +120,15 @@ test("site icon failure resets on URL change and falls back", () => {
   assert.match(source, /onError=\{\(\) => setFaviconFailed\(true\)\}/);
   assert.match(source, /setFaviconFailed\(false\).*\[faviconUrl\]/s);
   assert.match(source, /resolvedIconId/);
+  assert.match(source, /if \(knownService\) return <KnownSiteLogo/);
+});
+
+test("Quick Links UI has no special AI shortcut state and exposes both icon sources", () => {
+  const source = readFileSync(new URL("../pages/SettingsPage.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /AI shortcut|chooseAiAssistant|aiAssistantPreference/);
+  assert.match(source, />Site logo</);
+  assert.match(source, />DayLo icon</);
+  assert.match(source, /sortOrder: adjacentLink\.sortOrder/);
 });
 
 test("legacy data is confirmed, claimed once and removed only after cloud success", () => {

@@ -150,7 +150,6 @@ export const quickLinkPresets = [
     url: "https://chatgpt.com/",
     iconId: "sparkles",
     type: "preset",
-    aiAssistant: true,
   },
   {
     id: "gemini",
@@ -158,7 +157,6 @@ export const quickLinkPresets = [
     url: "https://gemini.google.com/",
     iconId: "sparkles",
     type: "preset",
-    aiAssistant: true,
   },
   {
     id: "claude",
@@ -166,7 +164,6 @@ export const quickLinkPresets = [
     url: "https://claude.ai/",
     iconId: "chat",
     type: "preset",
-    aiAssistant: true,
   },
   {
     id: "powerschool",
@@ -214,7 +211,7 @@ export const STUDENT_HUB_STORAGE_KEYS = [
   RELEASE_WELCOME_STORAGE_KEY,
 ];
 
-function normalizeQuickLinkLabel(value, fallback = "School link") {
+function normalizeQuickLinkLabel(value, fallback = "Quick Link") {
   const label = typeof value === "string" ? value.trim() : "";
   return (label || fallback).slice(0, 42);
 }
@@ -278,7 +275,6 @@ function getDefaultQuickLinksPreferences() {
 
   return {
     version: 1,
-    aiAssistantPreference: "chatgpt",
     links: quickLinkPresets.map((preset) =>
       createPresetQuickLink(
         preset,
@@ -310,12 +306,22 @@ export function normalizeQuickLinksPreferences(preferences) {
           defaultIconId: "globe",
           type: "custom",
           pinned: link.pinned !== false,
-          pinnedOrder: Number.isFinite(Number(link.pinnedOrder)) ? Number(link.pinnedOrder) : index,
+          sortOrder:
+            link.sortOrder !== null && Number.isFinite(Number(link.sortOrder))
+              ? Number(link.sortOrder)
+              : link.pinnedOrder !== null && Number.isFinite(Number(link.pinnedOrder))
+                ? Number(link.pinnedOrder)
+                : index,
+          pinnedOrder:
+            link.sortOrder !== null && Number.isFinite(Number(link.sortOrder))
+              ? Number(link.sortOrder)
+              : link.pinnedOrder !== null && Number.isFinite(Number(link.pinnedOrder))
+                ? Number(link.pinnedOrder)
+                : index,
         };
       })
       .filter(Boolean)
-      .sort((left, right) => left.pinnedOrder - right.pinnedOrder)
-      .map((link, index) => ({ ...link, pinnedOrder: index }));
+      .sort((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id));
     return { version: 2, links };
   }
 
@@ -389,19 +395,14 @@ export function normalizeQuickLinksPreferences(preferences) {
 
   return {
     version: 1,
-    aiAssistantPreference:
-      ["chatgpt", "gemini", "claude"].includes(
-        preferences.aiAssistantPreference
-      )
-        ? preferences.aiAssistantPreference
-        : "chatgpt",
-    links: allLinks.map((link) => {
+    links: allLinks.map((link, index) => {
       const pinnedOrder = orderedPinnedIds.indexOf(link.id);
 
       return {
         ...link,
+        sortOrder: index,
         pinned: pinnedOrder >= 0,
-        pinnedOrder: pinnedOrder >= 0 ? pinnedOrder : null,
+        pinnedOrder: index,
       };
     }),
   };
@@ -431,7 +432,7 @@ export function saveQuickLinksPreferences(preferences) {
 export function getPinnedQuickLinks(preferences) {
   return normalizeQuickLinksPreferences(preferences).links
     .filter((link) => link.pinned && link.url)
-    .sort((left, right) => left.pinnedOrder - right.pinnedOrder)
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.id.localeCompare(right.id))
     .slice(0, QUICK_LINK_PIN_LIMIT);
 }
 export const subjectCourseSystems = ["IB", "AP", "GCSE", "A-level", "Other"];

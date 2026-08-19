@@ -284,6 +284,12 @@ export default function SmartPlannerModal({
           </form>
         ) : (
           <div className="smart-planner-preview">
+            {preview.fallback && (
+              <div className="smart-planner-fallback-notice" role="status">
+                <strong>{preview.fallback.title}</strong>
+                <p>{preview.fallback.message}</p>
+              </div>
+            )}
             <div className="smart-planner-preview-intro">
               <span className={`smart-planner-source-badge is-${preview.source}`}>
                 {preview.source === "smart" ? "AI plan" : "Basic plan"}
@@ -335,7 +341,7 @@ export default function SmartPlannerModal({
               </section>
             )}
 
-            {error && (
+            {error && !preview.fallback && (
               <p className="smart-planner-error" role="alert">
                 {error}
               </p>

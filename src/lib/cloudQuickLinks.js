@@ -13,16 +13,31 @@ export function deriveSiteFaviconUrl(value) {
   return `${new URL(normalized.url).origin}/favicon.ico`;
 }
 
+export function getKnownQuickLinkService(value) {
+  const normalized = normalizeQuickLinkUrl(value);
+  if (!normalized.ok) return "";
+  const host = new URL(normalized.url).hostname.toLowerCase().replace(/^www\./, "");
+  if (host === "classroom.google.com") return "google-classroom";
+  if (host === "calendar.google.com") return "google-calendar";
+  if (host === "drive.google.com") return "google-drive";
+  if (host === "chatgpt.com" || host === "chat.openai.com") return "chatgpt";
+  if (host === "gemini.google.com") return "gemini";
+  if (host === "claude.ai") return "claude";
+  return "";
+}
+
 export function mapCloudQuickLink(row = {}) {
   return {
     id: String(row.id || ""), label: cleanName(row.name), url: String(row.url || ""),
     iconMode: row.icon_mode === "daylo" ? "daylo" : "site",
     iconId: cleanIconKey(row.icon_key), defaultIconId: "globe", type: "custom",
-    pinned: row.pinned !== false, pinnedOrder: Number(row.sort_order) || 0,
+    pinned: row.pinned !== false,
+    sortOrder: Number.isFinite(Number(row.sort_order)) ? Number(row.sort_order) : 0,
+    pinnedOrder: Number.isFinite(Number(row.sort_order)) ? Number(row.sort_order) : 0,
   };
 }
 
-export function mapQuickLinkForWrite(link, userId, sortOrder = 0) {
+export function mapQuickLinkForWrite(link, userId, sortOrder = link?.sortOrder ?? 0) {
   const normalized = normalizeQuickLinkUrl(link?.url);
   if (!normalized.ok) throw new Error(normalized.error);
   const iconMode = link?.iconMode === "daylo" ? "daylo" : "site";
@@ -96,7 +111,8 @@ export async function reconcileCloudQuickLinks(client, userId, current, next) {
   const currentIds = new Set(current.map((link) => link.id));
   const nextIds = new Set(next.filter((link) => UUID_PATTERN.test(link.id)).map((link) => link.id));
   for (const [index, link] of next.entries()) {
-    const payload = mapQuickLinkForWrite(link, userId, index);
+    const sortOrder = Number.isFinite(Number(link.sortOrder)) ? Number(link.sortOrder) : index;
+    const payload = mapQuickLinkForWrite(link, userId, sortOrder);
     if (UUID_PATTERN.test(link.id) && currentIds.has(link.id)) {
       const { error } = await client.from("quick_links").update(payload).eq("user_id", userId).eq("id", link.id);
       if (error) throw error;

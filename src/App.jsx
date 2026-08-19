@@ -72,6 +72,7 @@ import {
   shouldRequestSmartPlannerAi,
   timeStringToMinute,
 } from "./utils/smartPlannerUtils.js";
+import { getSmartPlannerFallback, startRequestDeadline } from "./utils/smartPlannerRequestUtils.js";
 import { clearOnboardingDraft, shouldShowOnboarding } from "./utils/onboardingUtils.js";
 import useGuidedTour from "./hooks/useGuidedTour.js";
 import usePwaInstall from "./hooks/usePwaInstall.js";
@@ -358,6 +359,12 @@ function App() {
     clearTasks: clearCloudTasks,
   } = useCloudTasks(auth.user);
   const [classroomSyncSettings, setClassroomSyncSettings] = useState([]);
+  const [classroomSyncSettingsState, setClassroomSyncSettingsState] = useState({
+    userId: auth.user?.id || "",
+    loading: Boolean(auth.user?.id),
+    error: "",
+  });
+  const [classroomSettingsReloadRequest, setClassroomSettingsReloadRequest] = useState(0);
   const [classroomSyncStatus, setClassroomSyncStatus] = useState({
     syncing: false,
     status: "idle",
@@ -381,6 +388,7 @@ function App() {
     classroomLastSyncAttemptRef.current = 0;
     window.clearInterval(classroomSyncTimerRef.current);
     setClassroomSyncSettings([]);
+    setClassroomSyncSettingsState({ userId, loading: Boolean(userId), error: "" });
     setClassroomSyncStatus({
       syncing: false,
       status: "idle",
@@ -395,10 +403,12 @@ function App() {
       .then((settings) => {
         if (!cancelled && classroomSyncUserIdRef.current === userId) {
           setClassroomSyncSettings(settings);
+          setClassroomSyncSettingsState({ userId, loading: false, error: "" });
         }
       })
       .catch(() => {
         if (!cancelled && classroomSyncUserIdRef.current === userId) {
+          setClassroomSyncSettingsState({ userId, loading: false, error: "settings_load_failed" });
           setClassroomSyncStatus((current) => ({
             ...current,
             status: "failed",
@@ -412,7 +422,7 @@ function App() {
       window.clearInterval(classroomSyncTimerRef.current);
       classroomSyncInFlightRef.current = false;
     };
-  }, [auth.user?.id]);
+  }, [auth.user?.id, classroomSettingsReloadRequest]);
   const studentProfile = auth.profile || {
     id: auth.user?.id || "",
     displayName: "Student",
@@ -2651,7 +2661,7 @@ function App() {
     ).slice(0, 40);
   }
 
-  function buildBasicPlannerPreview(busyIntervals = [], fallbackMessage = "") {
+  function buildBasicPlannerPreview(busyIntervals = [], fallback = null) {
     const result = buildEveningPlan({
       tasks: visibleTasks,
       startTime: smartPlannerDraft.startTime,
@@ -2672,18 +2682,19 @@ function App() {
       if (result.reason === "No active tasks to plan yet.") {
         setSmartPlannerPreview({
           source: "basic",
+          fallback,
           status: "no_tasks",
           summary: "Nothing needs planning right now.",
           blocks: [],
           omittedTasks: [],
           warnings: [],
         });
-        setSmartPlannerError(fallbackMessage);
+        setSmartPlannerError(fallback?.message || "");
         return true;
       }
 
       setSmartPlannerError(
-        [fallbackMessage, result.reason].filter(Boolean).join(" ")
+        [fallback?.message, result.reason].filter(Boolean).join(" ")
       );
       setSmartPlannerPreview(null);
       return false;
@@ -2709,6 +2720,7 @@ function App() {
 
     setSmartPlannerPreview({
       source: "basic",
+      fallback,
       status: "ready",
       summary: `${result.scheduledTaskCount} task${
         result.scheduledTaskCount === 1 ? "" : "s"
@@ -2726,7 +2738,7 @@ function App() {
       usableMinutes: result.usableMinutes,
     });
     setSmartPlannerNeedsReplace(false);
-    setSmartPlannerError(fallbackMessage);
+    setSmartPlannerError("");
     return true;
   }
 
@@ -2788,7 +2800,7 @@ function App() {
   }
 
   async function generateSmartPlannerPreview({ basic = false } = {}) {
-    if (smartPlannerLoading) return;
+    if (smartPlannerLoading || smartPlannerRequestRef.current.controller) return;
 
     const context = getSmartPlannerLocalContext(smartPlannerDraft);
     const shouldRequestAi = shouldRequestSmartPlannerAi({
@@ -2865,8 +2877,12 @@ function App() {
       buildBasicPlannerPreview(
         busyIntervals,
         useBasicForQuota
-          ? `AI limit reached. It resets ${resetLabel}. Here’s a Basic plan instead.`
-          : ""
+          ? {
+              reason: "daily_limit_reached",
+              title: "AI limit reached",
+              message: `It resets ${resetLabel}. We made you a Basic plan instead.`,
+            }
+          : null
       );
       setSmartPlannerLoading(false);
       smartPlannerRequestRef.current.controller = null;
@@ -2897,6 +2913,8 @@ function App() {
       eligibleTasks
     );
 
+    const deadline = startRequestDeadline(controller);
+    console.info("Smart Planner request started", { requestId });
     try {
       const response = await fetch("/api/smart-planner/generate", {
         method: "POST",
@@ -2927,10 +2945,11 @@ function App() {
         if (result?.status === "daily_limit_reached") {
           void refreshSmartPlannerStatus({ forceFresh: true });
         }
-        buildBasicPlannerPreview(
-          busyIntervals,
-          `${result?.message || "Smart Planner is unavailable."} Here’s a Basic plan instead.`
-        );
+        console.warn("Smart Planner request failed; using Basic fallback", {
+          requestId,
+          category: result?.status || "invalid_response",
+        });
+        buildBasicPlannerPreview(busyIntervals, getSmartPlannerFallback(result?.status || "invalid_response"));
         return;
       }
 
@@ -2953,20 +2972,26 @@ function App() {
           ),
       });
       setSmartPlannerError("");
+      console.info("Smart Planner request completed", { requestId });
       void refreshSmartPlannerStatus({ forceFresh: true });
     } catch (error) {
-      if (error?.name === "AbortError") return;
+      if (error?.name === "AbortError" && !deadline.didTimeOut()) return;
       if (smartPlannerRequestRef.current.id !== requestId) return;
-      buildBasicPlannerPreview(
-        busyIntervals,
-        "Smart Planner could not be reached. Here’s a Basic plan instead."
-      );
+      const category = deadline.didTimeOut() ? "timeout" : "network_error";
+      console.warn("Smart Planner request failed; using Basic fallback", { requestId, category });
+      buildBasicPlannerPreview(busyIntervals, getSmartPlannerFallback(category));
     } finally {
+      deadline.cancel();
       if (smartPlannerRequestRef.current.id === requestId) {
         setSmartPlannerLoading(false);
         smartPlannerRequestRef.current.controller = null;
       }
     }
+  }
+
+  function updateSmartPlannerDraft(updater) {
+    setSmartPlannerDraft(updater);
+    setSmartPlannerError("");
   }
 
   function editSmartPlannerSettings() {
@@ -3022,6 +3047,7 @@ function App() {
     setPlanBlocks(smartPlannerPreview.blocks);
     setPlanMetadata({
       source: smartPlannerPreview.source,
+      fallbackReason: smartPlannerPreview.fallback?.reason || null,
       generatedDate: formatLocalDate(),
       generatedAt: new Date().toISOString(),
       summary: String(smartPlannerPreview.summary || "").slice(0, 280),
@@ -3472,6 +3498,14 @@ function App() {
           user={auth.user}
           onChangePassword={auth.changePassword}
           classroomSyncSettings={classroomSyncSettings}
+          classroomSyncSettingsLoading={
+            classroomSyncSettingsState.userId !== (auth.user?.id || "") ||
+            classroomSyncSettingsState.loading
+          }
+          classroomSyncSettingsError={classroomSyncSettingsState.error}
+          onReloadClassroomSyncSettings={() =>
+            setClassroomSettingsReloadRequest((request) => request + 1)
+          }
           setClassroomSyncSettings={setClassroomSyncSettings}
           classroomSyncStatus={classroomSyncStatus}
           onSyncClassroomNow={(options = {}) =>
@@ -3679,7 +3713,7 @@ function App() {
       {smartPlannerOpen && (
         <SmartPlannerModal
           draft={smartPlannerDraft}
-          setDraft={setSmartPlannerDraft}
+          setDraft={updateSmartPlannerDraft}
           loading={smartPlannerLoading}
           error={smartPlannerError}
           preview={smartPlannerPreview}

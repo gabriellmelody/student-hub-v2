@@ -1355,11 +1355,19 @@
 
 .task-date-picker-affordance {
   flex-shrink: 0;
+  border: 0;
+  padding: 6px 0;
+  background: transparent;
   color: var(--text-muted);
+  font-family: inherit;
   font-size: 0.66rem;
   font-weight: 720;
   white-space: nowrap;
+  cursor: pointer;
 }
+
+.task-date-picker-affordance:hover { color: var(--accent-soft); }
+.task-date-picker-affordance:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; }
 
 .task-date-shortcuts {
   display: flex;

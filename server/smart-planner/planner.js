@@ -718,7 +718,7 @@ function logProviderFailure(response, responseJson, category) {
 
 export async function requestAnthropicPlan(input) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 22000);
+  const timeout = setTimeout(() => controller.abort(), 26000);
   const model = process.env.ANTHROPIC_SMART_PLANNER_MODEL || "claude-sonnet-5";
   const {
     plannerContext = "",

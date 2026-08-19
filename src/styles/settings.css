@@ -526,6 +526,27 @@ html:has(.settings-page) {
     0 0 0 2px var(--accent-primary-tint);
 }
 
+.quick-link-icon-preview {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 2px 2px 8px;
+}
+
+.quick-link-icon-preview > svg,
+.quick-link-icon-preview > img {
+  width: 20px;
+  height: 20px;
+}
+
+.quick-link-icon-preview strong,
+.quick-link-icon-preview small {
+  display: block;
+}
+
+.quick-link-icon-preview strong { font-size: 0.75rem; }
+.quick-link-icon-preview small { margin-top: 1px; color: var(--text-muted); font-size: 0.64rem; }
+
 .quick-link-icon-default {
   border: 0;
   border-radius: 9px;
@@ -642,34 +663,10 @@ html:has(.settings-page) {
   gap: 7px;
 }
 
-.quick-link-pin-button,
-.quick-links-ai-choice button.active {
+.quick-link-pin-button {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-contrast);
-}
-
-.quick-links-ai-choice {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.quick-links-ai-choice button {
-  border: 1px solid var(--border-strong);
-  border-radius: 999px;
-  padding: 7px 10px;
-  background: var(--surface);
-  color: var(--text-secondary);
-  font-size: 0.74rem;
-  font-weight: 680;
-  cursor: pointer;
-}
-
-.quick-links-ai-choice button:not(.active):hover,
-.quick-links-ai-choice button:not(.active):focus-visible {
-  background: var(--surface-hover);
-  color: var(--text);
 }
 
 .quick-links-custom-form {
