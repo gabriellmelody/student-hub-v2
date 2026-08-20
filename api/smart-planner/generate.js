@@ -97,7 +97,7 @@ function quotaFields(quota) {
 }
 
 function getSmartPlannerStatus({ env, quota }) {
-  if (!env.ANTHROPIC_API_KEY) {
+  if (!String(env.ANTHROPIC_API_KEY || "").trim()) {
     return {
       ok: true,
       configured: false,
@@ -133,20 +133,25 @@ function getSmartPlannerStatus({ env, quota }) {
 }
 
 export function createSmartPlannerHandler({
-  requestPlan = requestAnthropicPlan,
+  requestPlan,
   env = process.env,
   now = () => Date.now(),
   ipBuckets = ipAttemptBuckets,
+  log = console,
 } = {}) {
   return async function handler(request, response) {
+    const startedAt = now();
+    const providerRequest = requestPlan || ((input) => requestAnthropicPlan(input, { env, log }));
+    log.info("smart-planner: request accepted", { action: request.body?.action === "status" ? "status" : "generate" });
     const validation = await validateSmartPlannerRequest(request, {
       allowStatus: true,
     });
 
     if (!validation.ok) {
+      log.warn("smart-planner: input rejected", { status: validation.status, elapsedMs: now() - startedAt });
       return sendJson(response, validation.statusCode, {
         ok: false,
-        configured: Boolean(env.ANTHROPIC_API_KEY),
+        configured: Boolean(String(env.ANTHROPIC_API_KEY || "").trim()),
         status: validation.status,
         message: validation.message,
       });
@@ -166,7 +171,9 @@ export function createSmartPlannerHandler({
       );
     }
 
-    if (!env.ANTHROPIC_API_KEY) {
+    const providerKeyConfigured = Boolean(String(env.ANTHROPIC_API_KEY || "").trim());
+    if (!providerKeyConfigured) {
+      log.warn("smart-planner: configuration missing", { variable: "ANTHROPIC_API_KEY", elapsedMs: now() - startedAt });
       return sendJson(response, 503, {
         ok: false,
         configured: false,
@@ -236,10 +243,13 @@ export function createSmartPlannerHandler({
 
     // Count only requests that are about to reach Anthropic.
     recordIpAttempt(ipSafeguard);
-    const providerResult = await requestPlan(validation.input);
+    log.info("smart-planner: input and usage validated", { elapsedMs: now() - startedAt });
+    const providerResult = await providerRequest(validation.input);
 
     if (!providerResult.ok) {
-      return sendJson(response, 503, {
+      const statusCode = providerResult.status === "provider_timeout" ? 504 : 502;
+      log.warn("smart-planner: provider stage failed", { status: providerResult.status, elapsedMs: now() - startedAt });
+      return sendJson(response, statusCode, {
         ok: false,
         configured: true,
         status: providerResult.status,
@@ -254,6 +264,11 @@ export function createSmartPlannerHandler({
     );
 
     if (!planResult.ok) {
+      log.warn("smart-planner: plan validation rejected", {
+        category: /outside|referenced|overlapping|explain every/.test(planResult.message) ? "safety_validation_rejected" : "schema_invalid",
+        reason: planResult.message,
+        elapsedMs: now() - startedAt,
+      });
       return sendJson(response, 502, {
         ok: false,
         configured: true,
@@ -266,6 +281,8 @@ export function createSmartPlannerHandler({
     if (quotaReservation.setCookie) {
       response.setHeader("Set-Cookie", quotaReservation.setCookie);
     }
+
+    log.info("smart-planner: success", { elapsedMs: now() - startedAt });
 
     return sendJson(response, 200, {
       ok: true,

@@ -372,7 +372,9 @@ test("provider failures preserve the previously confirmed allowance", async () =
       "provider_permission_denied",
       "rate_limited",
       "provider_unavailable",
-      "timeout",
+      "provider_timeout",
+      "provider_error",
+      "parse_error",
     ]) {
       let providerResult = providerPlan();
       const handler = createSmartPlannerHandler({
@@ -396,11 +398,31 @@ test("provider failures preserve the previously confirmed allowance", async () =
       const failedResponse = createResponse();
       await handler(failedRequest, failedResponse);
 
-      assert.equal(failedResponse.statusCode, 503);
+      assert.equal(failedResponse.statusCode, providerStatus === "provider_timeout" ? 504 : 502);
       assert.equal(failedResponse.payload.status, providerStatus);
       assert.equal(failedResponse.payload.remainingGenerations, 2);
       assert.equal(failedResponse.headers.has("set-cookie"), false);
     }
+  });
+});
+
+test("whitespace-only provider configuration fails before provider dispatch", async () => {
+  await withAllowedOrigin(async () => {
+    let providerCalls = 0;
+    const handler = createSmartPlannerHandler({
+      env: { ...ENV, ANTHROPIC_API_KEY: "   " },
+      requestPlan: async () => {
+        providerCalls += 1;
+        return providerPlan();
+      },
+    });
+    const response = createResponse();
+    await handler(validRequest(), response);
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.payload.status, "not_configured");
+    assert.equal(response.payload.configured, false);
+    assert.equal(providerCalls, 0);
+    assert.equal(response.headers.has("set-cookie"), false);
   });
 });
 

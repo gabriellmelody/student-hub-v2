@@ -23,7 +23,7 @@ export function startRequestDeadline(
 }
 
 export function getSmartPlannerFallback(status = "") {
-  if (status === "timeout") {
+  if (status === "timeout" || status === "provider_timeout") {
     return {
       reason: "timeout",
       title: "Smart Planner timed out",

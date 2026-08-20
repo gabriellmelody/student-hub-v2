@@ -28,4 +28,5 @@ test("fallback metadata distinguishes timeout without changing Basic identity", 
     message: "We made you a Basic plan instead.",
   });
   assert.equal(getSmartPlannerFallback("provider_unavailable").title, "Smart Planner was unavailable");
+  assert.equal(getSmartPlannerFallback("provider_timeout").title, "Smart Planner timed out");
 });

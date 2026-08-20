@@ -137,6 +137,14 @@ test("provider schema excludes unsupported constraints while internal schema kee
     0
   );
   assert.equal(SMART_PLANNER_OUTPUT_SCHEMA.properties.blocks.maxItems, 18);
+  assert.match(
+    ANTHROPIC_SMART_PLANNER_OUTPUT_SCHEMA.properties.blocks.items.properties.startMinute.description,
+    /multiple of 5/
+  );
+  assert.match(
+    ANTHROPIC_SMART_PLANNER_OUTPUT_SCHEMA.properties.blocks.items.properties.durationMinutes.description,
+    /Minimum: 5.*Maximum: 75.*multiple of 5/
+  );
 });
 
 test("internal validation enforces string, number, count, and timing limits", () => {
@@ -600,8 +608,8 @@ test("timeout and network failures stay safe and never retry", async () => {
 
   try {
     for (const [error, expectedStatus] of [
-      [Object.assign(new Error("timeout details"), { name: "AbortError" }), "timeout"],
-      [new Error("network details"), "provider_unavailable"],
+      [Object.assign(new Error("timeout details"), { name: "AbortError" }), "provider_timeout"],
+      [new Error("network details"), "provider_error"],
     ]) {
       let calls = 0;
       globalThis.fetch = async () => {
@@ -619,4 +627,43 @@ test("timeout and network failures stay safe and never retry", async () => {
     if (previousKey === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = previousKey;
   }
+});
+
+test("provider success reaches parsing and parse failures stay distinct and secret-free", async () => {
+  const logs = [];
+  const log = {
+    info(label, metadata) { logs.push([label, metadata]); },
+    warn(label, metadata) { logs.push([label, metadata]); },
+  };
+  const secret = "server-test-key-must-not-be-logged";
+  const valid = await requestAnthropicPlan(input, {
+    env: { ANTHROPIC_API_KEY: secret },
+    log,
+    fetchImpl: async (_url, options) => {
+      assert.equal(options.headers["x-api-key"], secret);
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ content: [{ type: "text", text: JSON.stringify(readyPlan()) }] }),
+      };
+    },
+  });
+  assert.equal(valid.ok, true);
+  assert.equal(valid.output.status, "ready");
+  assert.ok(logs.some(([label]) => label.includes("provider response parsed")));
+
+  const invalid = await requestAnthropicPlan(input, {
+    env: { ANTHROPIC_API_KEY: secret },
+    log,
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ content: [{ type: "text", text: "not-json" }] }),
+    }),
+  });
+  assert.equal(invalid.status, "parse_error");
+  assert.equal(JSON.stringify(logs).includes(secret), false);
+  assert.equal(JSON.stringify(invalid).includes(secret), false);
 });

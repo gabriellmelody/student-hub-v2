@@ -66,8 +66,8 @@ export const SMART_PLANNER_OUTPUT_SCHEMA = {
           taskId: { type: ["string", "null"], maxLength: 120 },
           title: { type: "string", minLength: 1, maxLength: 180 },
           subject: { type: ["string", "null"], maxLength: 80 },
-          startMinute: { type: "integer", minimum: 0, maximum: 1439 },
-          durationMinutes: { type: "integer", minimum: 5, maximum: 75 },
+          startMinute: { type: "integer", minimum: 0, maximum: 1439, multipleOf: 5 },
+          durationMinutes: { type: "integer", minimum: 5, maximum: 75, multipleOf: 5 },
           goal: { type: "string", minLength: 1, maxLength: 240 },
           reason: { type: "string", minLength: 1, maxLength: 240 },
         },
@@ -102,11 +102,24 @@ function removeUnsupportedProviderConstraints(value) {
   }
   if (!value || typeof value !== "object") return value;
 
-  return Object.fromEntries(
+  const constraintNotes = [];
+  if (Number.isFinite(value.minimum)) constraintNotes.push(`Minimum: ${value.minimum}.`);
+  if (Number.isFinite(value.maximum)) constraintNotes.push(`Maximum: ${value.maximum}.`);
+  if (Number.isFinite(value.multipleOf)) constraintNotes.push(`Must be a multiple of ${value.multipleOf}.`);
+  if (Number.isFinite(value.minLength)) constraintNotes.push(`Minimum length: ${value.minLength}.`);
+  if (Number.isFinite(value.maxLength)) constraintNotes.push(`Maximum length: ${value.maxLength}.`);
+  if (Number.isFinite(value.minItems)) constraintNotes.push(`Minimum items: ${value.minItems}.`);
+  if (Number.isFinite(value.maxItems)) constraintNotes.push(`Maximum items: ${value.maxItems}.`);
+
+  const transformed = Object.fromEntries(
     Object.entries(value)
       .filter(([key]) => !PROVIDER_SCHEMA_UNSUPPORTED_KEYWORDS.has(key))
       .map(([key, child]) => [key, removeUnsupportedProviderConstraints(child)])
   );
+  if (constraintNotes.length > 0) {
+    transformed.description = [value.description, ...constraintNotes].filter(Boolean).join(" ");
+  }
+  return transformed;
 }
 
 export const ANTHROPIC_SMART_PLANNER_OUTPUT_SCHEMA =
@@ -702,8 +715,8 @@ function getResponseHeader(response, name) {
   }
 }
 
-function logProviderFailure(response, responseJson, category) {
-  console.warn("Smart Planner provider request failed", {
+function logProviderFailure(response, responseJson, category, log = console) {
+  log.warn("smart-planner: provider request failed", {
     category,
     httpStatus: Number.isInteger(response?.status) ? response.status : null,
     errorType: text(responseJson?.error?.type || "", 80) || null,
@@ -716,10 +729,17 @@ function logProviderFailure(response, responseJson, category) {
   });
 }
 
-export async function requestAnthropicPlan(input) {
+export async function requestAnthropicPlan(input, {
+  env = process.env,
+  fetchImpl = fetch,
+  timeoutMs = 26000,
+  log = console,
+  now = () => Date.now(),
+} = {}) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 26000);
-  const model = process.env.ANTHROPIC_SMART_PLANNER_MODEL || "claude-sonnet-5";
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = now();
+  const model = String(env.ANTHROPIC_SMART_PLANNER_MODEL || "").trim() || "claude-sonnet-5";
   const {
     plannerContext = "",
     subjectProfiles = [],
@@ -751,16 +771,22 @@ export async function requestAnthropicPlan(input) {
   };
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    log.info("smart-planner: provider request starting", { model, elapsedMs: now() - startedAt });
+    const response = await fetchImpl("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         Accept: "application/json",
         "Content-Type": "application/json",
         "anthropic-version": "2023-06-01",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "x-api-key": String(env.ANTHROPIC_API_KEY || "").trim(),
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal,
+    });
+    log.info("smart-planner: provider response received", {
+      model,
+      httpStatus: Number.isInteger(response?.status) ? response.status : null,
+      elapsedMs: now() - startedAt,
     });
     const responseJson = await readSafeJson(response);
 
@@ -769,19 +795,21 @@ export async function requestAnthropicPlan(input) {
         ? responseJson.content.find((item) => item?.type === "text")?.text
         : "";
       try {
-        return { ok: true, model, output: JSON.parse(outputText || "{}") };
+        const output = JSON.parse(outputText || "{}");
+        log.info("smart-planner: provider response parsed", { model, elapsedMs: now() - startedAt });
+        return { ok: true, model, output };
       } catch {
-        logProviderFailure(response, responseJson, "ai_invalid");
+        logProviderFailure(response, responseJson, "parse_error", log);
         return {
           ok: false,
-          status: "ai_invalid",
+          status: "parse_error",
           message: "Smart Planner returned an unreadable plan.",
         };
       }
     }
 
     if (response.status === 400) {
-      logProviderFailure(response, responseJson, "provider_request_invalid");
+      logProviderFailure(response, responseJson, "provider_request_invalid", log);
       return {
         ok: false,
         status: "provider_request_invalid",
@@ -789,7 +817,7 @@ export async function requestAnthropicPlan(input) {
       };
     }
     if (response.status === 401) {
-      logProviderFailure(response, responseJson, "provider_auth_failed");
+      logProviderFailure(response, responseJson, "provider_auth_failed", log);
       return {
         ok: false,
         status: "provider_auth_failed",
@@ -797,7 +825,7 @@ export async function requestAnthropicPlan(input) {
       };
     }
     if (response.status === 403) {
-      logProviderFailure(response, responseJson, "provider_permission_denied");
+      logProviderFailure(response, responseJson, "provider_permission_denied", log);
       return {
         ok: false,
         status: "provider_permission_denied",
@@ -805,7 +833,7 @@ export async function requestAnthropicPlan(input) {
       };
     }
     if (response.status === 404) {
-      logProviderFailure(response, responseJson, "model_unavailable");
+      logProviderFailure(response, responseJson, "model_unavailable", log);
       return {
         ok: false,
         status: "model_unavailable",
@@ -813,30 +841,31 @@ export async function requestAnthropicPlan(input) {
       };
     }
     if (response.status === 429) {
-      logProviderFailure(response, responseJson, "rate_limited");
+      logProviderFailure(response, responseJson, "rate_limited", log);
       return {
         ok: false,
         status: "rate_limited",
         message: "Smart Planner is busy. Try again later or use the Basic planner.",
       };
     }
-    logProviderFailure(response, responseJson, "provider_unavailable");
+    logProviderFailure(response, responseJson, "provider_unavailable", log);
     return {
       ok: false,
       status: "provider_unavailable",
       message: "Smart Planner is temporarily unavailable.",
     };
   } catch (error) {
-    const category = error?.name === "AbortError" ? "timeout" : "provider_unavailable";
-    console.warn("Smart Planner provider request failed", {
+    const category = error?.name === "AbortError" ? "provider_timeout" : "provider_error";
+    log.warn("smart-planner: provider request failed", {
       category,
       httpStatus: null,
       errorType: null,
       requestId: null,
+      elapsedMs: now() - startedAt,
     });
-    return category === "timeout"
-      ? { ok: false, status: "timeout", message: "Smart Planner took too long to respond." }
-      : { ok: false, status: "provider_unavailable", message: "Smart Planner could not be reached." };
+    return category === "provider_timeout"
+      ? { ok: false, status: "provider_timeout", message: "Smart Planner took too long to respond." }
+      : { ok: false, status: "provider_error", message: "Smart Planner could not be reached." };
   } finally {
     clearTimeout(timeout);
   }
