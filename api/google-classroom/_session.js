@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
+import { loadGoogleIntegration, requireDayloUser, saveGoogleIntegration } from "../../server/google-integration-vault.js";
 
 export const CLASSROOM_SESSION_COOKIE_NAME = "student_hub_classroom_session";
 
@@ -271,9 +272,24 @@ function classifyClassroomRefreshFailure(response, body) {
 
 export async function getValidClassroomSession(
   request,
-  { fetchImpl = fetch, log = console, forceRefresh = false } = {}
+  { fetchImpl = fetch, log = console, forceRefresh = false, env = process.env } = {}
 ) {
-  const sessionResult = readClassroomSession(request);
+  const auth = await requireDayloUser(request, { env, fetchImpl });
+  if (!auth.ok) return { ok: false, status: auth.status, statusCode: auth.statusCode, connected: false };
+  const vaultRecord = await loadGoogleIntegration(auth.userId, "classroom", { env, fetchImpl });
+  if (!vaultRecord) {
+    return {
+      ok: false,
+      status: "classroom_account_reconnect_required",
+      connected: false,
+      legacyConnectionDetected: Boolean(readClassroomSession(request).session),
+    };
+  }
+  const sessionResult = {
+    ok: Date.parse(vaultRecord.session.expires_at) - Date.now() > ACCESS_TOKEN_REFRESH_BUFFER_MS,
+    status: "classroom_access_token_expired",
+    session: vaultRecord.session,
+  };
 
   if (sessionResult.ok && !forceRefresh) return sessionResult;
 
@@ -344,13 +360,14 @@ export async function getValidClassroomSession(
     sessionResult.session,
     null
   );
+  await saveGoogleIntegration(auth.userId, "classroom", sessionCookie.session, { env, fetchImpl });
 
   log.info("classroom auth: refresh succeeded");
   return {
     ok: true,
     status: "classroom_session_refreshed",
     session: sessionCookie.session,
-    cookie: sessionCookie.cookie,
     expiresAt: sessionCookie.expiresAt,
+    userId: auth.userId,
   };
 }

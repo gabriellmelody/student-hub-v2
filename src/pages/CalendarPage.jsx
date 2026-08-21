@@ -37,6 +37,7 @@ import {
   getWeekDayPresentation,
   shouldHideCompletedClassroomEvent,
 } from "../utils/calendarPresentationUtils.js";
+import { getIntegrationAuthHeaders } from "../utils/integrationAuthUtils.js";
 
 const googleCalendarEventLimit = 2;
 const weekGoogleEventLimit = 2;
@@ -319,6 +320,7 @@ function createCalendarTaskDraft(dueDate) {
 }
 
 function CalendarPage({
+  authAccessToken = "",
   tasks,
   classroomTasks = tasks,
   subjects,
@@ -520,9 +522,9 @@ function CalendarPage({
       try {
         const response = await fetch("/api/google-calendar/session", {
           credentials: "include",
-          headers: {
+          headers: getIntegrationAuthHeaders(authAccessToken, {
             Accept: "application/json",
-          },
+          }),
           signal: controller.signal,
         });
         const result = await response.json().catch(() => null);
@@ -677,10 +679,10 @@ function CalendarPage({
       const response = await fetch("/api/google-calendar/events", {
         method: "POST",
         credentials: "include",
-        headers: {
+        headers: getIntegrationAuthHeaders(authAccessToken, {
           Accept: "application/json",
           "Content-Type": "application/json",
-        },
+        }),
         signal: controller.signal,
         body: JSON.stringify({
           accountId: googleCalendarAccount.accountId,

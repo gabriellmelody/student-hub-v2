@@ -1,5 +1,6 @@
 import { getGoogleCalendarOAuthConfigStatus } from "./_config.js";
 import {
+  clearCalendarSessionCookie,
   createCalendarSessionCookie,
   createCalendarSessionCookieFromTokenResponse,
   readCalendarSession,
@@ -9,6 +10,7 @@ import {
   getGoogleAccountIdentity,
   validatePopupCodeExchangeRequest,
 } from "../google-oauth-popup.js";
+import { loadGoogleIntegration, requireDayloUser, saveGoogleIntegration, verifyGoogleOAuthState } from "../../server/google-integration-vault.js";
 
 function getCallbackParam(request, name) {
   if (request.query && typeof request.query[name] === "string") {
@@ -72,6 +74,12 @@ async function handlePopupCodeExchange(request, response, config) {
     });
     return;
   }
+  const auth = await requireDayloUser(request);
+  const state = verifyGoogleOAuthState(validation.oauthState, "calendar");
+  if (!auth.ok || !state || state.userId !== auth.userId) {
+    response.status(401).json({ ok: false, status: "oauth_state_invalid", provider: "google-calendar", connected: false });
+    return;
+  }
 
   try {
     const tokenResult = await exchangeGoogleAuthorizationCode({
@@ -120,28 +128,28 @@ async function handlePopupCodeExchange(request, response, config) {
       return;
     }
 
-    const existingSessionResult = readCalendarSession(request);
+    const existingVault = await loadGoogleIntegration(auth.userId, "calendar");
     const sessionCookie = createCalendarSessionCookieFromTokenResponse(
       tokenResult.json,
-      existingSessionResult.session || null,
+      existingVault?.session || null,
       accountIdentity
     );
-
-    response.setHeader("Set-Cookie", sessionCookie.cookie);
+    await saveGoogleIntegration(auth.userId, "calendar", sessionCookie.session);
+    response.setHeader("Set-Cookie", clearCalendarSessionCookie());
     response.status(200).json({
       ok: true,
       status: "calendar_popup_session_created",
       provider: "google-calendar",
       configured: true,
       connected: true,
-      message: "Google Calendar connected for this browser.",
+      message: "Google Calendar connected to your DayLo account.",
       accountChanged: sessionCookie.accountChanged,
       account: {
         id: sessionCookie.accountId,
         email: sessionCookie.accountEmail,
       },
       session: {
-        storedIn: "encrypted_http_only_cookie",
+        storedIn: "server_account_vault",
         expiresAt: sessionCookie.expiresAt,
         sessionExpiresAt: sessionCookie.sessionExpiresAt,
         hasRefreshToken: sessionCookie.hasRefreshToken,
@@ -200,6 +208,12 @@ export default async function handler(request, response) {
   }
 
   const authorizationCode = getCallbackParam(request, "code");
+  const state = verifyGoogleOAuthState(getCallbackParam(request, "state"), "calendar");
+
+  if (!state) {
+    sendCallbackResult(request, response, 400, { ok: false, status: "oauth_state_invalid", configured: true, message: "Google Calendar connection state expired or was invalid." });
+    return;
+  }
 
   if (!authorizationCode) {
     sendCallbackResult(request, response, 400, {
@@ -264,14 +278,14 @@ export default async function handler(request, response) {
       return;
     }
 
-    const existingSessionResult = readCalendarSession(request);
+    const existingVault = await loadGoogleIntegration(state.userId, "calendar");
     const sessionCookie = createCalendarSessionCookie(
       tokenJson,
-      existingSessionResult.session || null,
+      existingVault?.session || null,
       accountIdentity
     );
-
-    response.setHeader("Set-Cookie", sessionCookie.cookie);
+    await saveGoogleIntegration(state.userId, "calendar", sessionCookie.session);
+    response.setHeader("Set-Cookie", clearCalendarSessionCookie());
 
     sendCallbackResult(request, response, 200, {
       ok: true,
@@ -284,7 +298,7 @@ export default async function handler(request, response) {
         email: sessionCookie.accountEmail,
       },
       session: {
-        storedIn: "encrypted_http_only_cookie",
+        storedIn: "server_account_vault",
         expiresAt: sessionCookie.expiresAt,
         hasRefreshToken: sessionCookie.hasRefreshToken,
         reconnectMayBeRequired: !sessionCookie.hasRefreshToken,

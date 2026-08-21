@@ -99,6 +99,7 @@ import {
   pruneDeletedSubjectLinks,
 } from "../utils/classroomAutoSyncUtils.js";
 import { getClassroomManagerState, sortClassroomSettingsBySubject } from "../utils/classroomManagerUtils.js";
+import { getIntegrationAuthHeaders } from "../utils/integrationAuthUtils.js";
 
 const STUDENT_HUB_SUPPORT_EMAIL = normalizeSupportEmail(
   import.meta.env.VITE_STUDENT_HUB_SUPPORT_EMAIL || ""
@@ -523,6 +524,7 @@ function getClassroomAssignmentSyncStatus({
 }
 
 function SettingsPage({
+  authAccessToken = "",
   tasks,
   subjects,
   setSubjects,
@@ -1400,6 +1402,7 @@ function SettingsPage({
           classroomSetupTourRequest={classroomSetupTourRequest}
           onStartClassroomSetupTour={onStartClassroomSetupTour}
           navigationRequest={navigationRequest}
+          authAccessToken={authAccessToken}
           user={user}
           classroomSyncSettings={classroomSyncSettings}
           classroomSyncSettingsLoading={classroomSyncSettingsLoading}
@@ -1576,6 +1579,7 @@ function AppUpdatesSettings({ installControl, updateControl, onInstallDayLo }) {
 }
 
 function IntegrationsSettings({
+  authAccessToken = "",
   tasks,
   subjects,
   setSubjects,
@@ -2504,15 +2508,22 @@ function IntegrationsSettings({
 
   async function exchangeGooglePopupCode(provider, code) {
     const config = getGooglePopupConfig(provider);
+    const stateResponse = await fetch(`${config.fallbackHref}?mode=popup`, {
+      headers: getIntegrationAuthHeaders(authAccessToken, { Accept: "application/json" }),
+    });
+    const stateResult = await stateResponse.json().catch(() => null);
+    if (!stateResponse.ok || !stateResult?.state) {
+      throw new Error("DayLo could not securely start Google connection.");
+    }
     const response = await fetch(config.endpoint, {
       method: "POST",
       credentials: "include",
-      headers: {
+      headers: getIntegrationAuthHeaders(authAccessToken, {
         Accept: "application/json",
         "Content-Type": "application/json",
         "X-Requested-With": "XmlHttpRequest",
-      },
-      body: JSON.stringify({ code }),
+      }),
+      body: JSON.stringify({ code, oauthState: stateResult.state }),
     });
     const result = await response.json().catch(() => null);
 
@@ -2654,6 +2665,15 @@ function IntegrationsSettings({
     }
   }
 
+  async function startGoogleRedirectConnection(provider) {
+    const config = getGooglePopupConfig(provider);
+    const response = await fetch(`${config.fallbackHref}?mode=redirect`, {
+      headers: getIntegrationAuthHeaders(authAccessToken, { Accept: "application/json" }),
+    });
+    const result = await response.json().catch(() => null);
+    if (response.ok && result?.authorizationUrl) window.location.assign(result.authorizationUrl);
+  }
+
   async function checkRealClassroomSetup() {
     setRealClassroomSetup({
       checking: true,
@@ -2663,9 +2683,9 @@ function IntegrationsSettings({
 
     try {
       const response = await fetch("/api/google-classroom/connect?mode=readiness", {
-        headers: {
+        headers: getIntegrationAuthHeaders(authAccessToken, {
           Accept: "application/json",
-        },
+        }),
       });
       const result = await response.json();
 
@@ -2692,9 +2712,9 @@ function IntegrationsSettings({
     try {
       const response = await fetch("/api/google-classroom/session", {
         credentials: "include",
-        headers: {
+        headers: getIntegrationAuthHeaders(authAccessToken, {
           Accept: "application/json",
-        },
+        }),
       });
       const result = await response.json();
 
@@ -2730,9 +2750,9 @@ function IntegrationsSettings({
     try {
       const response = await fetch("/api/google-classroom/courses", {
         credentials: "include",
-        headers: {
+        headers: getIntegrationAuthHeaders(authAccessToken, {
           Accept: "application/json",
-        },
+        }),
       });
       const result = await response.json();
 
@@ -2848,9 +2868,9 @@ function IntegrationsSettings({
     try {
       const response = await fetch("/api/google-calendar/session", {
         credentials: "include",
-        headers: {
+        headers: getIntegrationAuthHeaders(authAccessToken, {
           Accept: "application/json",
-        },
+        }),
       });
       const result = await response.json();
       const accountId = result.connected === true
@@ -2906,7 +2926,11 @@ function IntegrationsSettings({
     const endpoint = provider === "classroom"
       ? "/api/google-classroom/disconnect"
       : "/api/google-calendar/disconnect";
-    const response = await fetch(endpoint, { method: "POST", credentials: "include" });
+    const response = await fetch(endpoint, {
+      method: "POST",
+      credentials: "include",
+      headers: getIntegrationAuthHeaders(authAccessToken),
+    });
     if (!response.ok) return;
 
     if (provider === "classroom") {
@@ -2974,9 +2998,9 @@ function IntegrationsSettings({
     try {
       const response = await fetch("/api/google-calendar/calendars", {
         credentials: "include",
-        headers: {
+        headers: getIntegrationAuthHeaders(authAccessToken, {
           Accept: "application/json",
-        },
+        }),
       });
       const result = await response.json();
 
@@ -3549,10 +3573,10 @@ function IntegrationsSettings({
       const response = await fetch("/api/google-classroom/coursework-preview", {
         method: "POST",
         credentials: "include",
-        headers: {
+        headers: getIntegrationAuthHeaders(authAccessToken, {
           Accept: "application/json",
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify({ courses: includedCourses }),
       });
       const result = await response.json();
@@ -3818,6 +3842,7 @@ function IntegrationsSettings({
           onSetSyncSettings={setClassroomSyncSettings}
           onUpdateSyncSettings={saveClassroomSyncSettings}
           onSyncNow={onSyncClassroomNow}
+          onConnect={() => startGooglePopupConnection("classroom")}
           onBack={() => setRealClassroomManagerPageOpen(false)}
         />
 
@@ -3929,6 +3954,7 @@ function IntegrationsSettings({
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
               onConnectGooglePopup={startGooglePopupConnection}
+              onGoogleRedirect={startGoogleRedirectConnection}
               onDisconnectGoogle={disconnectGoogleIntegration}
               onClassroomRedirect={() => {
                 if (activeGuidedTourId === CLASSROOM_SETUP_TOUR_ID) {
@@ -4079,6 +4105,7 @@ function IntegrationCard({
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
   onConnectGooglePopup,
+  onGoogleRedirect,
   onDisconnectGoogle,
   onClassroomRedirect,
   realClassroomConnectButtonRef,
@@ -4349,13 +4376,13 @@ function IntegrationCard({
                 <button type="button" className="integration-setup-button secondary" onClick={() => onDisconnectGoogle("classroom")}>Disconnect</button>
               )}
               {showRedirectFallback && (
-                <a
+                <button
+                  type="button"
                   className="integration-setup-button secondary"
-                  href="/api/google-classroom/connect"
-                  onClick={onClassroomRedirect}
+                  onClick={() => { onClassroomRedirect(); onGoogleRedirect("classroom"); }}
                 >
                   Use redirect instead
-                </a>
+                </button>
               )}
               <button
                 type="button"
@@ -4408,12 +4435,13 @@ function IntegrationCard({
                 <button type="button" className="integration-setup-button secondary" onClick={() => onDisconnectGoogle("calendar")}>Disconnect</button>
               )}
               {showRedirectFallback && (
-                <a
+                <button
+                  type="button"
                   className="integration-setup-button secondary"
-                  href="/api/google-calendar/connect"
+                  onClick={() => onGoogleRedirect("calendar")}
                 >
                   Use redirect instead
-                </a>
+                </button>
               )}
             </>
           ) : isSmartPlanner ? (
@@ -5046,6 +5074,7 @@ function RealClassroomCourseReviewPage({
   onSetSyncSettings = () => {},
   onUpdateSyncSettings = () => {},
   onSyncNow = () => {},
+  onConnect = () => {},
   onBack,
 }) {
   const courses = courseState.courses;
@@ -5425,9 +5454,9 @@ function RealClassroomCourseReviewPage({
             <li>Due-date changes stay updated</li>
             <li>Submitted work is marked complete</li>
           </ul>
-          <a className="primary-button" href="/api/google-classroom/connect">
+          <button type="button" className="primary-button" onClick={onConnect}>
             {classroomManagerState === "reconnect" ? "Reconnect Google Classroom" : "Connect Google Classroom"}
-          </a>
+          </button>
         </div>
       </section>
     );

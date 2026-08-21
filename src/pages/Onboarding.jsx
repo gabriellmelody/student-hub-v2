@@ -25,6 +25,7 @@ import {
 } from "../utils/onboardingUtils.js";
 import { suggestSubjectDraftColour } from "../utils/subjectColourUtils.js";
 import DayloMark from "../components/DayloMark.jsx";
+import { getIntegrationAuthHeaders } from "../utils/integrationAuthUtils.js";
 
 const onboardingSteps = [
   "Welcome",
@@ -51,6 +52,7 @@ function getCallbackState() {
 }
 
 function OnboardingFlow({
+  authAccessToken = "",
   studentProfile,
   setStudentProfile,
   subjects,
@@ -186,7 +188,7 @@ function OnboardingFlow({
     try {
       const response = await fetch("/api/google-classroom/session", {
         credentials: "include",
-        headers: { Accept: "application/json" },
+        headers: getIntegrationAuthHeaders(authAccessToken, { Accept: "application/json" }),
       });
       const result = await response.json();
       const connected = response.ok && result.connected === true;
@@ -221,7 +223,7 @@ function OnboardingFlow({
     try {
       const response = await fetch("/api/google-classroom/courses", {
         credentials: "include",
-        headers: { Accept: "application/json" },
+        headers: getIntegrationAuthHeaders(authAccessToken, { Accept: "application/json" }),
       });
       const result = await response.json();
 
@@ -255,7 +257,7 @@ function OnboardingFlow({
     try {
       const response = await fetch("/api/google-calendar/session", {
         credentials: "include",
-        headers: { Accept: "application/json" },
+        headers: getIntegrationAuthHeaders(authAccessToken, { Accept: "application/json" }),
       });
       const result = await response.json();
       const connected = response.ok && result.connected === true;
@@ -278,12 +280,35 @@ function OnboardingFlow({
     }
   }
 
-  function beginGoogleConnection(provider) {
+  async function beginGoogleConnection(provider) {
     saveOnboardingDraft({
       step: provider === "classroom" ? 1 : 2,
       setupRoute: provider === "classroom" ? "classroom" : setupRoute,
     });
-    window.location.assign(`/api/google-${provider}/connect`);
+
+    try {
+      const response = await fetch(`/api/google-${provider}/connect?mode=redirect`, {
+        credentials: "include",
+        headers: getIntegrationAuthHeaders(authAccessToken, { Accept: "application/json" }),
+      });
+      const result = await response.json();
+
+      if (!response.ok || typeof result.authorizationUrl !== "string") {
+        throw new Error("connection_unavailable");
+      }
+
+      window.location.assign(result.authorizationUrl);
+    } catch {
+      const setConnectionState =
+        provider === "classroom" ? setClassroomState : setCalendarState;
+      setConnectionState((current) => ({
+        ...current,
+        checking: false,
+        loading: false,
+        message: "Google connection could not start. Try again.",
+        error: true,
+      }));
+    }
   }
 
   function chooseSetupRoute(route) {

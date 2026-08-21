@@ -14,11 +14,16 @@ export default async function handler(request, response) {
   }
 
   if (!sessionResult.ok) {
-    response.status(401).json({
+    response.status(sessionResult.statusCode || (sessionResult.connected ? 503 : 401)).json({
       ok: false,
       status: sessionResult.status || "classroom_session_invalid_or_expired",
       connected: sessionResult.connected === true,
-      message: sessionResult.connected ? "Google Classroom is temporarily unavailable." : "Reconnect Google Classroom.",
+      message: sessionResult.legacyConnectionDetected
+        ? "Reconnect once to sync this Classroom connection across your devices."
+        : sessionResult.connected
+          ? "Google Classroom is temporarily unavailable."
+          : "Reconnect Google Classroom.",
+      migrationRequired: sessionResult.legacyConnectionDetected === true,
       account: { email: sessionResult.session?.account_email || "" },
     });
     return;

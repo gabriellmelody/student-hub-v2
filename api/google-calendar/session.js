@@ -14,13 +14,18 @@ export default async function handler(request, response) {
   }
 
   if (!sessionResult.ok) {
-    response.status(401).json({
+    response.status(sessionResult.statusCode || (sessionResult.connected ? 503 : 401)).json({
       ok: false,
       status: sessionResult.status || "calendar_session_invalid_or_expired",
-      connected: false,
+      connected: sessionResult.connected === true,
       message:
         sessionResult.message ||
-        (sessionResult.connected ? "Google Calendar is temporarily unavailable." : "Google Calendar session is invalid or expired. Connect again."),
+        (sessionResult.legacyConnectionDetected
+          ? "Reconnect once to sync this Calendar connection across your devices."
+          : sessionResult.connected
+            ? "Google Calendar is temporarily unavailable."
+            : "Google Calendar session is invalid or expired. Connect again."),
+      migrationRequired: sessionResult.legacyConnectionDetected === true,
       account: {
         id: sessionResult.session?.account_id || "",
         email: sessionResult.session?.account_email || "",

@@ -1,5 +1,6 @@
 import { getGoogleClassroomOAuthConfigStatus } from "./_config.js";
 import {
+  clearClassroomSessionCookie,
   createClassroomSessionCookie,
   createClassroomSessionCookieFromTokenResponse,
   readClassroomSession,
@@ -9,6 +10,7 @@ import {
   getGoogleAccountIdentity,
   validatePopupCodeExchangeRequest,
 } from "../google-oauth-popup.js";
+import { loadGoogleIntegration, requireDayloUser, saveGoogleIntegration, verifyGoogleOAuthState } from "../../server/google-integration-vault.js";
 
 function getCallbackParam(request, name) {
   if (request.query && typeof request.query[name] === "string") {
@@ -92,6 +94,12 @@ async function handlePopupCodeExchange(request, response, config) {
     });
     return;
   }
+  const auth = await requireDayloUser(request);
+  const state = verifyGoogleOAuthState(validation.oauthState, "classroom");
+  if (!auth.ok || !state || state.userId !== auth.userId) {
+    response.status(401).json({ ok: false, status: "oauth_state_invalid", provider: "google-classroom", connected: false });
+    return;
+  }
 
   try {
     const tokenResult = await exchangeGoogleAuthorizationCode({
@@ -140,27 +148,27 @@ async function handlePopupCodeExchange(request, response, config) {
       return;
     }
 
-    const existingSessionResult = readClassroomSession(request);
+    const existingVault = await loadGoogleIntegration(auth.userId, "classroom");
     const sessionCookie = createClassroomSessionCookieFromTokenResponse(
       tokenResult.json,
-      existingSessionResult.session || null,
+      existingVault?.session || null,
       accountIdentity
     );
-
-    response.setHeader("Set-Cookie", sessionCookie.cookie);
+    await saveGoogleIntegration(auth.userId, "classroom", sessionCookie.session);
+    response.setHeader("Set-Cookie", clearClassroomSessionCookie());
     response.status(200).json({
       ok: true,
       status: "classroom_popup_session_created",
       provider: "google-classroom",
       configured: true,
       connected: true,
-      message: "Google Classroom connected for this browser.",
+      message: "Google Classroom connected to your DayLo account.",
       accountChanged: sessionCookie.accountChanged,
       account: {
         email: sessionCookie.accountEmail,
       },
       session: {
-        storedIn: "encrypted_http_only_cookie",
+        storedIn: "server_account_vault",
         expiresAt: sessionCookie.expiresAt,
         hasRefreshToken: sessionCookie.hasRefreshToken,
         reconnectMayBeRequired: !sessionCookie.hasRefreshToken,
@@ -223,6 +231,12 @@ export default async function handler(request, response) {
   }
 
   const authorizationCode = getCallbackParam(request, "code");
+  const state = verifyGoogleOAuthState(getCallbackParam(request, "state"), "classroom");
+
+  if (!state) {
+    sendCallbackResult(request, response, 400, { ok: false, status: "oauth_state_invalid", configured: true, message: "Google Classroom connection state expired or was invalid." });
+    return;
+  }
 
   if (authorizationCode) {
     let requestStage = "token_exchange";
@@ -287,14 +301,14 @@ export default async function handler(request, response) {
         return;
       }
 
-      const existingSessionResult = readClassroomSession(request);
+      const existingVault = await loadGoogleIntegration(state.userId, "classroom");
       const sessionCookie = createClassroomSessionCookie(
         tokenJson,
-        existingSessionResult.session || null,
+        existingVault?.session || null,
         accountIdentity
       );
-
-      response.setHeader("Set-Cookie", sessionCookie.cookie);
+      await saveGoogleIntegration(state.userId, "classroom", sessionCookie.session);
+      response.setHeader("Set-Cookie", clearClassroomSessionCookie());
 
       requestStage = "courses_fetch";
 
@@ -343,7 +357,7 @@ export default async function handler(request, response) {
           email: sessionCookie.accountEmail,
         },
         session: {
-          storedIn: "encrypted_http_only_cookie",
+          storedIn: "server_account_vault",
           expiresAt: sessionCookie.expiresAt,
           hasRefreshToken: sessionCookie.hasRefreshToken,
           reconnectMayBeRequired: !sessionCookie.hasRefreshToken,

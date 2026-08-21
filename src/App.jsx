@@ -73,6 +73,7 @@ import {
   timeStringToMinute,
 } from "./utils/smartPlannerUtils.js";
 import { getSmartPlannerFallback, startRequestDeadline } from "./utils/smartPlannerRequestUtils.js";
+import { getIntegrationAuthHeaders } from "./utils/integrationAuthUtils.js";
 import { clearOnboardingDraft, shouldShowOnboarding } from "./utils/onboardingUtils.js";
 import useGuidedTour from "./hooks/useGuidedTour.js";
 import usePwaInstall from "./hooks/usePwaInstall.js";
@@ -2234,10 +2235,10 @@ function App() {
         const response = await fetch("/api/google-classroom/coursework-preview", {
           method: "POST",
           credentials: "include",
-          headers: {
+          headers: getIntegrationAuthHeaders(auth.session?.access_token, {
             Accept: "application/json",
             "Content-Type": "application/json",
-          },
+          }),
           body: JSON.stringify({
             courses: enabledSettings.map((setting) => {
               const subject = subjectSnapshot.find(
@@ -2630,10 +2631,10 @@ function App() {
       method: "POST",
       credentials: "include",
       signal,
-      headers: {
+      headers: getIntegrationAuthHeaders(auth.session?.access_token, {
         Accept: "application/json",
         "Content-Type": "application/json",
-      },
+      }),
       body: JSON.stringify({
         accountId: googleCalendarAccount.accountId,
         selectedCalendarIds: busyCalendarIds,
@@ -3416,6 +3417,7 @@ function App() {
     if (page === "calendar") {
       return (
         <CalendarPage
+          authAccessToken={auth.session?.access_token || ""}
           tasks={visibleTasks}
           classroomTasks={tasks}
           subjects={subjects}
@@ -3440,6 +3442,7 @@ function App() {
     if (page === "settings") {
       return (
         <SettingsPage
+          authAccessToken={auth.session?.access_token || ""}
           tasks={tasks}
           subjects={subjects}
           setSubjects={setSubjects}
@@ -3540,6 +3543,7 @@ function App() {
   if (shouldShowOnboarding(studentProfile)) {
     return (
       <OnboardingFlow
+        authAccessToken={auth.session?.access_token || ""}
         studentProfile={studentProfile}
         setStudentProfile={setStudentProfile}
         subjects={subjects}

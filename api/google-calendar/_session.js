@@ -1,4 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
+import { loadGoogleIntegration, requireDayloUser, saveGoogleIntegration } from "../../server/google-integration-vault.js";
 
 export const CALENDAR_SESSION_COOKIE_NAME = "student_hub_calendar_session";
 
@@ -350,8 +351,6 @@ export async function refreshCalendarSession(
       session
     );
 
-    response.setHeader("Set-Cookie", sessionCookie.cookie);
-
     log.info("calendar auth: refresh succeeded");
     return {
       ok: true,
@@ -376,11 +375,20 @@ export async function refreshCalendarSession(
 export async function getValidCalendarSession(
   request,
   response,
-  { forceRefresh = false, fetchImpl = fetch, log = console } = {}
+  { forceRefresh = false, fetchImpl = fetch, log = console, env = process.env } = {}
 ) {
-  const sessionResult = readCalendarSession(request);
-
-  if (!sessionResult.ok) return sessionResult;
+  const auth = await requireDayloUser(request, { env, fetchImpl });
+  if (!auth.ok) return { ok: false, status: auth.status, statusCode: auth.statusCode, connected: false };
+  const vaultRecord = await loadGoogleIntegration(auth.userId, "calendar", { env, fetchImpl });
+  if (!vaultRecord) {
+    return {
+      ok: false,
+      status: "calendar_account_reconnect_required",
+      connected: false,
+      legacyConnectionDetected: Boolean(readCalendarSession(request).session),
+    };
+  }
+  const sessionResult = { ok: true, status: "calendar_session_available", session: vaultRecord.session };
 
   if (!isAccessTokenExpiring(sessionResult.session, forceRefresh)) {
     return {
@@ -390,5 +398,9 @@ export async function getValidCalendarSession(
     };
   }
 
-  return refreshCalendarSession(sessionResult.session, response, { fetchImpl, log });
+  const refreshed = await refreshCalendarSession(sessionResult.session, response, { fetchImpl, log });
+  if (refreshed.ok) {
+    await saveGoogleIntegration(auth.userId, "calendar", refreshed.session, { env, fetchImpl });
+  }
+  return { ...refreshed, userId: auth.userId };
 }

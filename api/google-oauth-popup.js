@@ -161,6 +161,7 @@ export async function validatePopupCodeExchangeRequest(
   }
 
   const authorizationCode = body?.code;
+  const oauthState = typeof body?.oauthState === "string" ? body.oauthState : "";
 
   if (
     typeof authorizationCode !== "string" ||
@@ -181,6 +182,7 @@ export async function validatePopupCodeExchangeRequest(
   return {
     ok: true,
     code: authorizationCode,
+    oauthState,
     redirectUri: requestOrigin,
   };
 }

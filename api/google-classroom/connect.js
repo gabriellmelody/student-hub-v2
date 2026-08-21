@@ -1,4 +1,5 @@
 import { getGoogleClassroomOAuthConfigStatus } from "./_config.js";
+import { createGoogleOAuthState, requireDayloUser } from "../../server/google-integration-vault.js";
 
 const GOOGLE_CLASSROOM_READONLY_SCOPES = [
   "openid",
@@ -14,7 +15,7 @@ function isReadinessCheck(request) {
   return requestUrl.searchParams.get("mode") === "readiness";
 }
 
-export default function handler(request, response) {
+export default async function handler(request, response) {
   // Safe OAuth step only: build the permission-screen URL, but do not store tokens.
   const config = getGoogleClassroomOAuthConfigStatus();
 
@@ -29,6 +30,11 @@ export default function handler(request, response) {
       nextStep:
         "Add the required environment variables in Vercel before implementing the authorization redirect.",
     });
+    return;
+  }
+  const auth = await requireDayloUser(request);
+  if (!auth.ok) {
+    response.status(auth.statusCode).json({ ok: false, status: auth.status, configured: true });
     return;
   }
 
@@ -51,6 +57,11 @@ export default function handler(request, response) {
     "https://accounts.google.com/o/oauth2/v2/auth"
   );
 
+  const state = createGoogleOAuthState(auth.userId, "classroom");
+  if (new URL(request.url || "", "https://student-hub.local").searchParams.get("mode") === "popup") {
+    response.status(200).json({ ok: true, state });
+    return;
+  }
   authorizationUrl.search = new URLSearchParams({
     client_id: process.env.GOOGLE_CLASSROOM_CLIENT_ID,
     redirect_uri: process.env.GOOGLE_CLASSROOM_REDIRECT_URI,
@@ -58,8 +69,12 @@ export default function handler(request, response) {
     access_type: "offline",
     prompt: "consent",
     scope: GOOGLE_CLASSROOM_READONLY_SCOPES.join(" "),
-    state: "student-hub-google-classroom-prototype",
+    state,
   });
+  if (new URL(request.url || "", "https://student-hub.local").searchParams.get("mode") === "redirect") {
+    response.status(200).json({ ok: true, authorizationUrl: authorizationUrl.toString() });
+    return;
+  }
 
   response.writeHead(302, {
     Location: authorizationUrl.toString(),
