@@ -6,28 +6,13 @@ export const currentDayloRelease = {
   version: CURRENT_DAYLO_VERSION,
   sections: [
     {
-      id: "new",
-      title: "New",
+      id: "highlights",
+      title: "Highlights",
       items: [
-        "Install DayLo on your phone or computer and open it like an app.",
-        "Check your installation and update status from App & updates.",
-      ],
-    },
-    {
-      id: "improved",
-      title: "Improved",
-      items: [
-        "Swipe between the main DayLo pages on mobile.",
-        "Improved layouts and spacing on smaller phones.",
-        "DayLo can check for new versions and update without requiring a reinstall.",
-      ],
-    },
-    {
-      id: "fixed",
-      title: "Fixed",
-      items: [
-        "Reduced mobile layout overlaps in Home and More.",
-        "Improved handling of stale installed versions after a new DayLo release.",
+        "Smarter AI planning — DayLo now understands assessments, formative work, grades, study preparation and academic priorities more intelligently.",
+        "Better study recommendations — Smart Planner can suggest light revision, optional study or even a free evening when extra work is not actually needed.",
+        "Improved Google connections — Classroom and Calendar connections are more reliable and can stay linked to your DayLo account across devices.",
+        "More reliable Smart Planner — improved AI response handling reduces failed generations and Basic Planner fallbacks.",
       ],
     },
   ],

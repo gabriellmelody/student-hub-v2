@@ -6,6 +6,7 @@ const settingsPage = readFileSync(new URL("../pages/SettingsPage.jsx", import.me
 const app = readFileSync(new URL("../App.jsx", import.meta.url), "utf8");
 const settingsCss = readFileSync(new URL("../styles/settings.css", import.meta.url), "utf8");
 const viteConfig = readFileSync(new URL("../../vite.config.js", import.meta.url), "utf8");
+const releaseNotes = readFileSync(new URL("../data/releaseNotes.js", import.meta.url), "utf8");
 const packageJson = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
 
 test("Settings has an App & updates section with current version rows", () => {
@@ -25,10 +26,19 @@ test("Settings update actions reuse the shared App update control", () => {
 });
 
 test("version metadata is generated from package version", () => {
-  assert.equal(packageJson.version, "0.9.2");
+  assert.equal(packageJson.version, "9.3.0");
   assert.match(viteConfig, /readFileSync\(new URL\("\.\/package\.json"/);
   assert.match(viteConfig, /fileName: "version\.json"/);
   assert.match(viteConfig, /__DAYLO_VERSION__/);
+  assert.match(releaseNotes, /version: CURRENT_DAYLO_VERSION/);
+});
+
+test("the current release contains the v9.3.0 student-facing highlights", () => {
+  assert.match(releaseNotes, /Smarter AI planning/);
+  assert.match(releaseNotes, /Better study recommendations/);
+  assert.match(releaseNotes, /Improved Google connections/);
+  assert.match(releaseNotes, /More reliable Smart Planner/);
+  assert.doesNotMatch(releaseNotes, /service-role|AES encryption|Vercel function limits|JSON schemas/);
 });
 
 test("Settings App & updates has narrow mobile layout protection", () => {

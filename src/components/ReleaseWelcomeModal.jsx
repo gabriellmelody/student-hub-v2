@@ -98,7 +98,7 @@ export default function ReleaseWelcomeModal({ release, onDismiss }) {
               What’s new in DayLo {release.version}
             </h2>
             <p id="release-welcome-intro">
-              A few improvements to make everyday planning quicker and easier.
+              Smarter planning, stronger syncing
             </p>
           </div>
 

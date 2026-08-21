@@ -19,7 +19,7 @@ function createStorage() {
 
 function createEligibleState(overrides = {}) {
   return {
-    currentVersion: "0.9.2",
+    currentVersion: "9.3.0",
     lastSeenVersion: "",
     activePage: "home",
     onboardingCompleted: true,
@@ -35,15 +35,17 @@ test("an unseen release is eligible on Home", () => {
   assert.equal(shouldShowReleaseWelcome(createEligibleState()), true);
 });
 
-test("an acknowledged release does not show again", () => {
+test("dismissing v9.3.0 records it as seen and it does not show again", () => {
   const storage = createStorage();
+  storage.setItem("daylo-unrelated-setting", "preserved");
 
-  assert.equal(acknowledgeReleaseVersion("0.9.2", storage), true);
-  assert.equal(storage.getItem(RELEASE_WELCOME_STORAGE_KEY), "0.9.2");
-  assert.equal(loadAcknowledgedReleaseVersion(storage), "0.9.2");
+  assert.equal(acknowledgeReleaseVersion("9.3.0", storage), true);
+  assert.equal(storage.getItem(RELEASE_WELCOME_STORAGE_KEY), "9.3.0");
+  assert.equal(loadAcknowledgedReleaseVersion(storage), "9.3.0");
+  assert.equal(storage.getItem("daylo-unrelated-setting"), "preserved");
   assert.equal(
     shouldShowReleaseWelcome(
-      createEligibleState({ lastSeenVersion: "0.9.2" })
+      createEligibleState({ lastSeenVersion: "9.3.0" })
     ),
     false
   );
@@ -52,14 +54,20 @@ test("an acknowledged release does not show again", () => {
 test("the welcome action keeps the existing version acknowledgement", () => {
   const storage = createStorage();
 
-  acknowledgeReleaseVersion("0.9.2", storage);
-  assert.equal(loadAcknowledgedReleaseVersion(storage), "0.9.2");
+  acknowledgeReleaseVersion("9.3.0", storage);
+  assert.equal(loadAcknowledgedReleaseVersion(storage), "9.3.0");
 });
 
-test("0.9.1 users see the 0.9.2 release once", () => {
+test("0.9.2 users see the 9.3.0 release once", () => {
   assert.equal(
     shouldShowReleaseWelcome(
-      createEligibleState({ lastSeenVersion: "0.9.1" })
+      createEligibleState({ lastSeenVersion: "0.9.2" })
+    ),
+    true
+  );
+  assert.equal(
+    shouldShowReleaseWelcome(
+      createEligibleState({ lastSeenVersion: "9.2.0" })
     ),
     true
   );
@@ -117,7 +125,7 @@ test("skipping the initial tour returns Home before checking the release", () =>
 test("replaying a tour after acknowledgement does not reopen the release", () => {
   assert.equal(
     shouldShowReleaseWelcome(
-      createEligibleState({ lastSeenVersion: "0.9.2" })
+      createEligibleState({ lastSeenVersion: "9.3.0" })
     ),
     false
   );
@@ -127,8 +135,8 @@ test("a future release becomes eligible after the current release was seen", () 
   assert.equal(
     shouldShowReleaseWelcome(
       createEligibleState({
-        currentVersion: "0.10.0",
-        lastSeenVersion: "0.9.2",
+        currentVersion: "9.4.0",
+        lastSeenVersion: "9.3.0",
       })
     ),
     true
