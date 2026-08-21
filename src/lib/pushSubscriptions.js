@@ -7,6 +7,13 @@ import {
 
 export const PUSH_OWNER_STORAGE_KEY = "daylo-push-owner-user-id";
 export const PUSH_ENDPOINT_STORAGE_KEY = "daylo-push-endpoint";
+let subscriptionLifecycle = Promise.resolve();
+
+function serializeLifecycle(operation) {
+  const result = subscriptionLifecycle.then(operation, operation);
+  subscriptionLifecycle = result.catch(() => undefined);
+  return result;
+}
 
 function readLocal(storage, key) {
   try {
@@ -64,7 +71,14 @@ async function callSubscriptionApi(action, accessToken, body, fetchImpl = fetch)
   return result;
 }
 
-export async function enableNotifications({
+async function retireEndpoints(endpoints, accessToken, fetchImpl) {
+  if (!accessToken) return;
+  for (const endpoint of new Set(endpoints.filter(Boolean))) {
+    await callSubscriptionApi("unsubscribe", accessToken, { endpoint }, fetchImpl);
+  }
+}
+
+async function enableNotificationsUnlocked({
   userId,
   accessToken,
   vapidPublicKey = import.meta.env.VITE_DAYLO_VAPID_PUBLIC_KEY,
@@ -110,6 +124,10 @@ export async function enableNotifications({
       applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
     }));
     const serialized = serializePushSubscription(subscription);
+    const storedEndpoint = readLocal(storage, PUSH_ENDPOINT_STORAGE_KEY);
+    if (storedOwner === userId && storedEndpoint && storedEndpoint !== serialized.endpoint) {
+      await retireEndpoints([storedEndpoint], accessToken, fetchImpl);
+    }
     await callSubscriptionApi("subscribe", accessToken, {
       subscription: serialized,
       platform: String(navigatorObject.platform || "").slice(0, 40),
@@ -131,7 +149,11 @@ export async function enableNotifications({
   }
 }
 
-export async function cleanupNotificationSubscription({
+export function enableNotifications(options = {}) {
+  return serializeLifecycle(() => enableNotificationsUnlocked(options));
+}
+
+async function cleanupNotificationSubscriptionUnlocked({
   accessToken,
   navigatorObject = globalThis.navigator,
   storage = globalThis.localStorage,
@@ -145,24 +167,30 @@ export async function cleanupNotificationSubscription({
   } catch {
     // Fall back to the locally remembered endpoint.
   }
-  const endpoint = subscription?.endpoint || storedEndpoint;
+  const storedOwner = readLocal(storage, PUSH_OWNER_STORAGE_KEY);
+  const endpoints = [subscription?.endpoint];
+  if (storedOwner && storedEndpoint) endpoints.push(storedEndpoint);
+  if (accessToken && endpoints.some(Boolean)) {
+    try {
+      await retireEndpoints(endpoints, accessToken, fetchImpl);
+    } catch {
+      // The invalid browser endpoint can also be retired after a permanent push failure.
+    }
+  }
   try {
     await subscription?.unsubscribe?.();
   } catch {
     // Cleanup is best effort and must not trap the user in their account.
   }
-  if (accessToken && endpoint) {
-    try {
-      await callSubscriptionApi("unsubscribe", accessToken, { endpoint }, fetchImpl);
-    } catch {
-      // The invalid browser endpoint can also be retired after a permanent push failure.
-    }
-  }
   clearOwnership(storage);
   return { state: NOTIFICATION_CAPABILITY_STATES.PERMISSION_GRANTED_UNSUBSCRIBED };
 }
 
-export async function reconcileNotificationSubscription({
+export function cleanupNotificationSubscription(options = {}) {
+  return serializeLifecycle(() => cleanupNotificationSubscriptionUnlocked(options));
+}
+
+async function reconcileNotificationSubscriptionUnlocked({
   userId,
   accessToken,
   navigatorObject = globalThis.navigator,
@@ -223,4 +251,8 @@ export async function reconcileNotificationSubscription({
   } catch (error) {
     return { state: NOTIFICATION_CAPABILITY_STATES.ERROR, error };
   }
+}
+
+export function reconcileNotificationSubscription(options = {}) {
+  return serializeLifecycle(() => reconcileNotificationSubscriptionUnlocked(options));
 }

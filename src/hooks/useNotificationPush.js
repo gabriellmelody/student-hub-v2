@@ -14,6 +14,7 @@ export default function useNotificationPush({ userId = "", accessToken = "" } = 
   const [capability, setCapability] = useState({
     state: NOTIFICATION_CAPABILITY_STATES.UNSUPPORTED,
   });
+  const [actionPending, setActionPending] = useState(false);
 
   const refresh = useCallback(async () => {
     const next = userId && accessToken
@@ -34,9 +35,14 @@ export default function useNotificationPush({ userId = "", accessToken = "" } = 
   }, [accessToken, refresh, userId]);
 
   const enable = useCallback(async () => {
-    const next = await enableNotifications({ userId, accessToken });
-    setCapability(next);
-    return next;
+    setActionPending(true);
+    try {
+      const next = await enableNotifications({ userId, accessToken });
+      setCapability(next);
+      return next;
+    } finally {
+      setActionPending(false);
+    }
   }, [accessToken, userId]);
 
   const cleanupForLogout = useCallback(async () => {
@@ -46,9 +52,14 @@ export default function useNotificationPush({ userId = "", accessToken = "" } = 
   }, [accessToken]);
 
   const disableThisDevice = useCallback(async () => {
-    const next = await cleanupNotificationSubscription({ accessToken });
-    setCapability(next);
-    return next;
+    setActionPending(true);
+    try {
+      const next = await cleanupNotificationSubscription({ accessToken });
+      setCapability(next);
+      return next;
+    } finally {
+      setActionPending(false);
+    }
   }, [accessToken]);
 
   return {
@@ -57,5 +68,6 @@ export default function useNotificationPush({ userId = "", accessToken = "" } = 
     reconcile: refresh,
     cleanupForLogout,
     disableThisDevice,
+    actionPending,
   };
 }

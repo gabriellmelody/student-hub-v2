@@ -88,6 +88,44 @@ test("an existing endpoint is updated only under its authenticated owner", async
   assert.equal(reply.statusCode, 200);
 });
 
+test("a simultaneous insert conflict for the same owner is recovered idempotently", async () => {
+  const requests = [];
+  let subscriptionReads = 0;
+  const reply = response();
+  const fetchImpl = async (url, options = {}) => {
+    requests.push({ url: String(url), options });
+    if (String(url).includes("/auth/v1/user")) return jsonResponse({ id: "user-a" });
+    if (!options.method && String(url).includes("push_subscriptions")) {
+      subscriptionReads += 1;
+      return jsonResponse(subscriptionReads === 1 ? [] : [{ id: "winner", user_id: "user-a" }]);
+    }
+    if (options.method === "POST") return jsonResponse({ code: "23505" }, false, 409);
+    if (options.method === "PATCH") return jsonResponse(null);
+    return jsonResponse(null);
+  };
+  await handleSubscribe(request({ subscription: validSubscription() }), reply, { env, fetchImpl });
+  assert.equal(reply.statusCode, 200);
+  assert.equal(requests.filter((item) => item.options.method === "POST").length, 1);
+  assert.equal(requests.filter((item) => item.options.method === "PATCH").length, 1);
+});
+
+test("insert-conflict recovery cannot transfer another user's endpoint", async () => {
+  let subscriptionReads = 0;
+  const reply = response();
+  const fetchImpl = async (url, options = {}) => {
+    if (String(url).includes("/auth/v1/user")) return jsonResponse({ id: "user-b" });
+    if (!options.method && String(url).includes("push_subscriptions")) {
+      subscriptionReads += 1;
+      return jsonResponse(subscriptionReads === 1 ? [] : [{ id: "winner", user_id: "user-a" }]);
+    }
+    if (options.method === "POST") return jsonResponse({ code: "23505" }, false, 409);
+    throw new Error("another user's endpoint must not be patched");
+  };
+  await handleSubscribe(request({ subscription: validSubscription() }), reply, { env, fetchImpl });
+  assert.equal(reply.statusCode, 409);
+  assert.equal(reply.payload.status, "subscription_owner_conflict");
+});
+
 test("unsubscribe is scoped to the authenticated user and matching endpoint", async () => {
   const requests = [];
   const reply = response();

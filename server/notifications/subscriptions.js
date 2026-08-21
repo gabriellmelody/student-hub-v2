@@ -114,7 +114,25 @@ export async function handleSubscribe(request, response, options = {}) {
       }),
       body: JSON.stringify(payload),
     });
-    if (!writeResponse.ok) throw new Error("subscription_write_failed");
+    if (!writeResponse.ok) {
+      if (!existing && writeResponse.status === 409) {
+        const winner = await findEndpoint(subscription.endpoint, { env, fetchImpl });
+        if (winner?.user_id !== auth.userId) {
+          return response.status(409).json({ ok: false, status: "subscription_owner_conflict" });
+        }
+        const retryResponse = await fetchImpl(
+          subscriptionsUrl(env, `?user_id=eq.${encodeURIComponent(auth.userId)}&endpoint=eq.${encodeURIComponent(subscription.endpoint)}`),
+          {
+            method: "PATCH",
+            headers: getSupabaseServiceHeaders(env, { "Content-Type": "application/json", Prefer: "return=minimal" }),
+            body: JSON.stringify(payload),
+          }
+        );
+        if (!retryResponse.ok) throw new Error("subscription_write_failed");
+      } else {
+        throw new Error("subscription_write_failed");
+      }
+    }
     return response.status(200).json({ ok: true, status: "subscribed" });
   } catch {
     return response.status(503).json({ ok: false, status: "subscription_service_unavailable" });

@@ -1562,7 +1562,7 @@ function NotificationsSettings({ push, preferences, loading, saving, error, onUp
     <section className="settings-section-card notification-card">
       <div className="settings-section-heading"><h2>Device status</h2><p>Push permission and subscriptions are managed separately on every device.</p></div>
       <div className="notification-device-status"><span className={`notification-status-dot ${subscribed ? "enabled" : ""}`} aria-hidden="true" /><div><strong>{status[0]}</strong><p>{status[1]}</p></div></div>
-      <div className="notification-actions">{subscribed ? <button type="button" className="secondary-button" onClick={() => void push.disableThisDevice?.()}>Disable on this device</button> : <button type="button" className="primary-button" disabled={!canEnable} onClick={() => void push.enableNotifications?.()}>{state === NOTIFICATION_CAPABILITY_STATES.ERROR ? "Try again" : "Enable notifications"}</button>}</div>
+      <div className="notification-actions">{subscribed ? <button type="button" className="secondary-button" disabled={push.actionPending} onClick={() => void push.disableThisDevice?.()}>{push.actionPending ? "Disabling..." : "Disable on this device"}</button> : <button type="button" className="primary-button" disabled={!canEnable || push.actionPending} onClick={() => void push.enableNotifications?.()}>{push.actionPending ? "Enabling..." : state === NOTIFICATION_CAPABILITY_STATES.ERROR ? "Try again" : "Enable notifications"}</button>}</div>
     </section>
     <section className="settings-section-card notification-card">
       <div className="settings-section-heading"><h2>Account preferences</h2><p>These choices sync across devices. Delivery begins only after notifications are enabled on a device.</p></div>
