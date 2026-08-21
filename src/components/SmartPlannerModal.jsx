@@ -31,9 +31,10 @@ function PreviewBlock({ block, index }) {
         <div className="smart-planner-preview-block-heading">
           <strong>{block.title || (block.type === "break" ? "Break" : "Study block")}</strong>
           {block.type === "study" && block.subject && <span>{block.subject}</span>}
+          {block.type === "suggested_study" && <span>Suggested study</span>}
         </div>
         {block.tip &&
-          (block.type === "study" ? (
+          (block.type !== "break" ? (
             <p>
               <span className="smart-planner-preview-detail-label">Goal</span>
               {block.tip}
@@ -41,7 +42,7 @@ function PreviewBlock({ block, index }) {
           ) : (
             <p>{block.tip}</p>
           ))}
-        {block.reason && block.type === "study" && (
+        {block.reason && block.type !== "break" && (
           <small>
             <span className="smart-planner-preview-detail-label">
               Why this is in your plan
@@ -309,9 +310,9 @@ export default function SmartPlannerModal({
               </ol>
             ) : (
               <p className="smart-planner-message">
-                {preview.status === "no_tasks"
-                  ? "Nothing needs planning right now."
-                  : "There isn’t enough time left to build today’s plan."}
+                {preview.status === "no_time"
+                  ? "There isn’t enough time left to build today’s plan."
+                  : "You do not need to use the whole study window tonight."}
               </p>
             )}
 
@@ -375,10 +376,14 @@ export default function SmartPlannerModal({
               <button
                 type="button"
                 className="primary-button"
-                onClick={onUsePlan}
-                disabled={loading || preview.blocks.length === 0 || hasLockedBlocks}
+                onClick={preview.blocks.length === 0 ? onClose : onUsePlan}
+                disabled={loading || hasLockedBlocks}
               >
-                {needsReplace ? "Replace current plan" : "Use this plan"}
+                {preview.blocks.length === 0
+                  ? "Done"
+                  : needsReplace
+                    ? "Replace current plan"
+                    : "Use this plan"}
               </button>
             </footer>
           </div>

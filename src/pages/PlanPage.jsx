@@ -96,6 +96,7 @@ function PlanPage({
   reorderPlanBlock,
   planMoveFeedback,
   completeTaskFromPlan,
+  completeSuggestedPlanBlock,
   stalePlanDate,
   startFreshPlan,
   openSmartPlanner,
@@ -784,6 +785,12 @@ function PlanPage({
                           ))}
                         </div>
                       )}
+                    {block.type === "suggested_study" && (
+                      <div className="plan-study-meta">
+                        {block.subject && <p className="plan-subject">{block.subject}</p>}
+                        <span className="task-signal-badge task-signal-type">Suggested study</span>
+                      </div>
+                    )}
                   </div>
 
                 <div className="plan-block-header-actions">
@@ -945,6 +952,21 @@ function PlanPage({
                   </button>
                 </div>
               )}
+              {block.type === "suggested_study" &&
+                !block.completed &&
+                editingBlockId !== block.id && (
+                  <div className="plan-block-controls">
+                    <button
+                      type="button"
+                      className="complete-plan-button"
+                      disabled={block.locked}
+                      onClick={() => completeSuggestedPlanBlock(block.id)}
+                    >
+                      <span aria-hidden="true">✓</span>
+                      <span>Mark done</span>
+                    </button>
+                  </div>
+                )}
               </article>
             </RevealOnScroll>
           );

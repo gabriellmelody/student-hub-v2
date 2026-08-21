@@ -3,9 +3,11 @@ import test from "node:test";
 import {
   buildSmartPlannerTaskPayload,
   buildSmartPlannerSubjectProfiles,
+  detectTomorrowClasses,
   formatSmartPlannerResetTime,
   getDefaultSmartPlannerDraft,
-  getNextHalfHourStart,
+  getSmartPlannerLocalContext,
+  getNextQuarterHourStart,
   normalizeSmartPlannerContext,
   shouldRequestSmartPlannerAi,
 } from "./smartPlannerUtils.js";
@@ -15,40 +17,70 @@ function localTime(hours, minutes) {
   return date;
 }
 
-test("rounds a fresh Smart Planner start to the next half-hour", () => {
-  assert.deepEqual(getNextHalfHourStart(localTime(14, 5)), {
+test("rounds a fresh Smart Planner start up to the next quarter-hour", () => {
+  assert.deepEqual(getNextQuarterHourStart(localTime(18, 29)), {
     available: true,
-    minute: 14 * 60 + 30,
-    time: "14:30",
+    minute: 18 * 60 + 30,
+    time: "18:30",
   });
-  assert.deepEqual(getNextHalfHourStart(localTime(14, 29)), {
+  assert.deepEqual(getNextQuarterHourStart(localTime(18, 30)), {
     available: true,
-    minute: 14 * 60 + 30,
-    time: "14:30",
+    minute: 18 * 60 + 30,
+    time: "18:30",
   });
-  assert.deepEqual(getNextHalfHourStart(localTime(14, 30)), {
+  assert.deepEqual(getNextQuarterHourStart(localTime(18, 34)), {
     available: true,
-    minute: 14 * 60 + 30,
-    time: "14:30",
+    minute: 18 * 60 + 45,
+    time: "18:45",
   });
-  assert.deepEqual(getNextHalfHourStart(localTime(14, 31)), {
+  assert.deepEqual(getNextQuarterHourStart(localTime(19, 38)), {
     available: true,
-    minute: 15 * 60,
-    time: "15:00",
-  });
-  assert.deepEqual(getNextHalfHourStart(localTime(14, 45)), {
-    available: true,
-    minute: 15 * 60,
-    time: "15:00",
+    minute: 19 * 60 + 45,
+    time: "19:45",
   });
 });
 
 test("does not roll a current-day plan into tomorrow", () => {
-  assert.deepEqual(getNextHalfHourStart(localTime(23, 45)), {
+  assert.deepEqual(getNextQuarterHourStart(localTime(23, 53)), {
     available: false,
     minute: null,
     time: "",
   });
+});
+
+test("uses the saved normal study duration for the default finish", () => {
+  assert.deepEqual(
+    getDefaultSmartPlannerDraft({ now: localTime(18, 34), hoursAvailable: 2 }),
+    {
+      startTime: "18:45",
+      endTime: "20:45",
+      planStyle: "balanced",
+      useCalendar: false,
+      plannerContext: "",
+      noTimeLeftToday: false,
+    }
+  );
+});
+
+test("preserves overnight windows with logical next-day minutes", () => {
+  const context = getSmartPlannerLocalContext(
+    { startTime: "23:45", endTime: "01:45", planStyle: "balanced" },
+    localTime(23, 30)
+  );
+  assert.equal(context.startMinute, 1425);
+  assert.equal(context.finishMinute, 1545);
+});
+
+test("detects tomorrow classes only from conservative Subject aliases", () => {
+  const classes = detectTomorrowClasses(
+    [
+      { title: "Spanish HL", start: { dateTime: "2026-07-31T09:00:00+07:00" } },
+      { title: "Football training", start: { dateTime: "2026-07-31T16:00:00+07:00" } },
+    ],
+    [{ name: "Spanish" }, { name: "Maths" }],
+    "2026-07-31"
+  );
+  assert.deepEqual(classes, ["Spanish"]);
 });
 
 test("formats Smart Planner reset times in the browser's local day", () => {
@@ -102,6 +134,27 @@ test("preselects the 20 most relevant active tasks", () => {
     "urgent-overdue",
     "due-today",
   ]);
+});
+
+test("sends effective assessment, description, and personal/admin context", () => {
+  const payload = buildSmartPlannerTaskPayload([
+    {
+      id: "cfa",
+      title: "Study for CFA",
+      description: "Use the teacher review sheet.",
+      subject: "Maths",
+      linkedSubjectId: "maths-id",
+    },
+    { id: "order", title: "make SHEIN order", importance: "normal" },
+  ], "2026-07-30");
+
+  const cfa = payload.find((task) => task.id === "cfa");
+  assert.equal(cfa.assessmentClassification, "formative");
+  assert.equal(cfa.assessmentPreparation, true);
+  assert.equal(cfa.taskType, "revision");
+  assert.equal(cfa.description, "Use the teacher review sheet.");
+  assert.equal(cfa.subjectId, "maths-id");
+  assert.equal(payload.find((task) => task.id === "order").personalAdmin, true);
 });
 
 test("builds grade profiles only for Subjects represented by eligible tasks", () => {

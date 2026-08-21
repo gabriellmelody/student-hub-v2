@@ -233,7 +233,7 @@ test("Selected Day keeps Tasks due before the complete Schedule section", () => 
 
 test("Calendar API remains read-only and exposes recurrence metadata", () => {
   const source = readFileSync(
-    new URL("../../api/google-calendar/events.js", import.meta.url),
+    new URL("../../server/google-calendar/events.js", import.meta.url),
     "utf8"
   );
   assert.match(source, /recurringEventId/);

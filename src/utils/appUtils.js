@@ -545,6 +545,9 @@ const assessmentKeywordDefinitions = [
   ["ia", "IA"],
   ["paper", "Paper"],
 ];
+
+const CFA_PATTERN = /\bC\s*[.-]?\s*F\s*[.-]?\s*A\b|\bcommon\s+formative\s+assessment\b/i;
+const ASSESSMENT_PREP_PATTERN = /\b(study|studying|revise|revision|review|prepare|preparation|practice|practise)\b/i;
 export const accentColorPresets = [
   { label: "Sky Blue", value: DEFAULT_ACCENT_COLOR },
   { label: "Purple", value: "#7c3aed" },
@@ -1032,16 +1035,59 @@ export function normalizeTask(task, fallbackSource = "manual") {
 }
 
 export function detectTaskImportance(title = "") {
+  const searchable = String(title);
+  const cfa = CFA_PATTERN.test(searchable);
+  const assessmentPreparation =
+    ASSESSMENT_PREP_PATTERN.test(searchable) &&
+    (cfa || /\b(formative|summative|assessment|exam|quiz|test)\b/i.test(searchable));
   const detectedTags = assessmentKeywordDefinitions
     .filter(([keyword]) =>
-      new RegExp(`\\b${keyword}\\b`, "i").test(String(title))
+      new RegExp(`\\b${keyword}\\b`, "i").test(searchable)
     )
     .map(([, label]) => label);
 
+  if (cfa && !detectedTags.includes("Formative")) detectedTags.unshift("Formative");
+  if (cfa && !detectedTags.includes("Assessment")) detectedTags.push("Assessment");
+
+  const assessmentEvent = detectedTags.length > 0 && !assessmentPreparation;
+
   return {
     detectedTags,
-    taskType: detectedTags.length > 0 ? "assessment" : "homework",
-    importance: detectedTags.length > 0 ? "high" : "normal",
+    taskType: assessmentEvent ? "assessment" : assessmentPreparation ? "revision" : "homework",
+    importance: assessmentEvent ? "high" : "normal",
+    assessmentClassification: detectedTags.includes("Summative")
+      ? "summative"
+      : detectedTags.includes("Formative")
+        ? "formative"
+        : assessmentEvent
+          ? "assessment"
+          : "",
+    assessmentPreparation,
+  };
+}
+
+export function getEffectiveTaskClassification(task) {
+  const inferred = detectTaskImportance(
+    [task?.title, task?.description].filter(Boolean).join(" ")
+  );
+  const explicit = task?.importanceSource === "manual";
+  const persistedTags = Array.isArray(task?.detectedTags) ? task.detectedTags : [];
+  const tags = explicit && persistedTags.length > 0 ? persistedTags : inferred.detectedTags;
+  const normalizedTags = tags.map((tag) => String(tag).toLocaleLowerCase());
+
+  return {
+    taskType: explicit ? task.taskType : inferred.taskType,
+    detectedTags: tags,
+    assessmentClassification: normalizedTags.includes("summative")
+      ? "summative"
+      : normalizedTags.includes("formative")
+        ? "formative"
+        : explicit && task.taskType === "assessment"
+          ? "assessment"
+          : inferred.assessmentClassification,
+    assessmentPreparation: explicit && task.taskType === "assessment"
+      ? false
+      : inferred.assessmentPreparation,
   };
 }
 

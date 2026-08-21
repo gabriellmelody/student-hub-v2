@@ -65,6 +65,7 @@ import {
 import {
   buildSmartPlannerTaskPayload,
   buildSmartPlannerSubjectProfiles,
+  detectTomorrowClasses,
   formatLocalDate,
   formatPlannerPreviewTime,
   getDefaultSmartPlannerDraft,
@@ -218,15 +219,15 @@ function formatPlannerMinutes(minutes) {
 }
 
 function getPreferredSmartPlannerDraft(options = {}, preferences = null) {
-  const draft = getDefaultSmartPlannerDraft(options);
+  const draft = getDefaultSmartPlannerDraft({
+    ...options,
+    hoursAvailable: preferences?.hoursAvailable,
+  });
   if (!preferences) return draft;
 
   return {
     ...draft,
-    startTime: preferences.startTime,
-    endTime: preferences.endTime,
     planStyle: preferences.planStyle,
-    noTimeLeftToday: false,
   };
 }
 
@@ -1801,6 +1802,16 @@ function App() {
     return true;
   }
 
+  function completeSuggestedPlanBlock(blockId) {
+    setPlanBlocks((currentBlocks) =>
+      currentBlocks.map((block) =>
+        block.id === blockId && block.type === "suggested_study"
+          ? { ...block, completed: true }
+          : block
+      )
+    );
+  }
+
   async function deleteTask(taskId) {
     if (!(await deleteCloudTask(taskId))) return false;
     setPlanBlocks((currentBlocks) =>
@@ -2616,17 +2627,23 @@ function App() {
     const googleCalendarAccount = loadGoogleCalendarAccountMeta();
 
     if (busyCalendarIds.length === 0 || !googleCalendarAccount?.accountId) {
-      return [];
+      return { busyIntervals: [], tomorrowClasses: [] };
     }
 
     const startMinutes = timeToMinutes(draft.startTime);
     const endMinutes = timeToMinutes(draft.endTime);
 
-    if (startMinutes === null || endMinutes === null || endMinutes <= startMinutes) {
-      return [];
+    if (startMinutes === null || endMinutes === null) {
+      return { busyIntervals: [], tomorrowClasses: [] };
     }
 
+    const logicalEndMinutes = endMinutes <= startMinutes ? endMinutes + 24 * 60 : endMinutes;
+
     const planningDate = getPlanningDate();
+    const tomorrow = new Date(planningDate);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowEnd = new Date(tomorrow);
+    tomorrowEnd.setHours(23, 59, 59, 999);
     const response = await fetch("/api/google-calendar/events", {
       method: "POST",
       credentials: "include",
@@ -2639,7 +2656,7 @@ function App() {
         accountId: googleCalendarAccount.accountId,
         selectedCalendarIds: busyCalendarIds,
         timeMin: getPlanningDateTime(planningDate, startMinutes).toISOString(),
-        timeMax: getPlanningDateTime(planningDate, endMinutes).toISOString(),
+        timeMax: tomorrowEnd.toISOString(),
       }),
     });
     const result = await response.json();
@@ -2654,12 +2671,19 @@ function App() {
       );
     }
 
-    return getEventBusyIntervals(
-      result.events,
-      planningDate,
-      startMinutes,
-      endMinutes
-    ).slice(0, 40);
+    return {
+      busyIntervals: getEventBusyIntervals(
+        result.events,
+        planningDate,
+        startMinutes,
+        logicalEndMinutes
+      ).slice(0, 40),
+      tomorrowClasses: detectTomorrowClasses(
+        result.events,
+        subjects,
+        formatLocalDate(tomorrow)
+      ),
+    };
   }
 
   function buildBasicPlannerPreview(busyIntervals = [], fallback = null) {
@@ -2768,6 +2792,29 @@ function App() {
         };
       }
 
+      if (block.type === "suggested_study") {
+        return {
+          id: `smart-suggested-${block.startMinute}-${index}`,
+          type: "suggested_study",
+          source: "generated",
+          plannerSource: "smart",
+          edited: false,
+          locked: false,
+          completed: false,
+          taskId: null,
+          calendarEventId: null,
+          subject: block.subject || "",
+          title: block.title,
+          start: formatPlannerPreviewTime(block.startMinute),
+          end: formatPlannerPreviewTime(block.endMinute),
+          startMinute: block.startMinute,
+          endMinute: block.endMinute,
+          duration: block.durationMinutes,
+          tip: block.goal,
+          reason: block.reason,
+        };
+      }
+
       const task = taskMap.get(String(block.taskId));
       return {
         id: `smart-${block.taskId}-${block.startMinute}-${index}`,
@@ -2849,12 +2896,15 @@ function App() {
     setSmartPlannerNeedsReplace(false);
 
     let busyIntervals = [];
+    let tomorrowClasses = [];
     if (smartPlannerDraft.useCalendar && calendarBusyTimeIsAvailable()) {
       try {
-        busyIntervals = await fetchPlanningBusyIntervals(
+        const calendarContext = await fetchPlanningBusyIntervals(
           smartPlannerDraft,
           controller.signal
         );
+        busyIntervals = calendarContext.busyIntervals;
+        tomorrowClasses = calendarContext.tomorrowClasses;
       } catch (error) {
         if (error?.name === "AbortError") return;
         if (smartPlannerRequestRef.current.id !== requestId) return;
@@ -2895,20 +2945,6 @@ function App() {
       context.localDate
     );
 
-    if (eligibleTasks.length === 0) {
-      setSmartPlannerLoading(false);
-      setSmartPlannerPreview({
-        source: "smart",
-        status: "no_tasks",
-        summary: "Nothing needs planning right now.",
-        blocks: [],
-        omittedTasks: [],
-        warnings: [],
-      });
-      smartPlannerRequestRef.current.controller = null;
-      return;
-    }
-
     const subjectProfiles = buildSmartPlannerSubjectProfiles(
       subjects,
       eligibleTasks
@@ -2930,6 +2966,7 @@ function App() {
           ...context,
           tasks: eligibleTasks,
           subjectProfiles,
+          tomorrowClasses,
           busyIntervals: busyIntervals.map((interval) => ({
             startMinute: interval.startMinutes,
             endMinute: interval.endMinutes,
@@ -3405,6 +3442,7 @@ function App() {
           reorderPlanBlock={reorderPlanBlock}
           planMoveFeedback={planMoveFeedback}
           completeTaskFromPlan={completeTaskFromPlan}
+          completeSuggestedPlanBlock={completeSuggestedPlanBlock}
           stalePlanDate={stalePlanDate}
           startFreshPlan={startFreshPlan}
           openSmartPlanner={openSmartPlanner}

@@ -80,6 +80,51 @@ test("accepts a bounded plan and derives block end times", () => {
   assert.equal(result.plan.blocks[0].endMinute, 945);
 });
 
+test("accepts suggested study without fabricating a Task UUID", () => {
+  const result = validateSmartPlannerOutput(
+    readyPlan({
+      blocks: [{
+        type: "suggested_study",
+        taskId: null,
+        title: "Spanish review",
+        subject: "Spanish",
+        startMinute: 900,
+        durationMinutes: 20,
+        goal: "Do a short vocabulary or listening review.",
+        reason: "A little spaced practice is useful on a light evening.",
+      }],
+      omittedTasks: input.tasks.map((task) => ({
+        taskId: task.id,
+        title: task.title,
+        reason: "It is not urgent tonight.",
+        suggestedNextStep: "Review it at the next useful opportunity.",
+      })),
+    }),
+    input
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.plan.blocks[0].type, "suggested_study");
+  assert.equal(result.plan.blocks[0].taskId, null);
+});
+
+test("accepts a successful no-study recommendation", () => {
+  const result = validateSmartPlannerOutput(
+    readyPlan({
+      summary: "You are in good shape tonight; the next assessment is still distant.",
+      blocks: [],
+      omittedTasks: input.tasks.map((task) => ({
+        taskId: task.id,
+        title: task.title,
+        reason: "It does not need attention tonight.",
+        suggestedNextStep: "Reassess it closer to the deadline.",
+      })),
+    }),
+    input
+  );
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.plan.blocks, []);
+});
+
 test("rejects hallucinated task IDs", () => {
   const result = validateSmartPlannerOutput(
     readyPlan({

@@ -3,9 +3,38 @@ import test from "node:test";
 
 import {
   createQuickTaskDraft,
+  getEffectiveTaskClassification,
+  getTaskSignalBadges,
   normalizeTask,
   updateTaskTitleWithDetection,
 } from "./appUtils.js";
+
+test("CFA variants are Formative assessments and visibly labelled", () => {
+  for (const title of ["CFA", "cFa", "C.F.A.", "Common Formative Assessment", "Maths CFA Friday"]) {
+    const task = normalizeTask({ ...createQuickTaskDraft(title), title });
+    const effective = getEffectiveTaskClassification(task);
+    assert.equal(effective.taskType, "assessment");
+    assert.equal(effective.assessmentClassification, "formative");
+    assert.equal(getTaskSignalBadges(task)[0]?.label, "Formative");
+  }
+});
+
+test("CFA preparation is preparation, not the assessment event", () => {
+  const effective = getEffectiveTaskClassification(createQuickTaskDraft("Study for CFA"));
+  assert.equal(effective.taskType, "revision");
+  assert.equal(effective.assessmentClassification, "formative");
+  assert.equal(effective.assessmentPreparation, true);
+});
+
+test("explicit Summative metadata wins over weaker title inference", () => {
+  const effective = getEffectiveTaskClassification({
+    title: "Weekly work",
+    taskType: "assessment",
+    detectedTags: ["Summative"],
+    importanceSource: "manual",
+  });
+  assert.equal(effective.assessmentClassification, "summative");
+});
 
 function addTaskToArray(tasks, taskInput, id = Date.now()) {
   if (!taskInput.title.trim()) return tasks;

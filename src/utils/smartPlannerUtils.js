@@ -33,9 +33,9 @@ export function formatMinuteOfDay(minutes) {
   return `${padTimePart(Math.floor(safeMinutes / 60))}:${padTimePart(safeMinutes % 60)}`;
 }
 
-export function getNextHalfHourStart(now = new Date()) {
+export function getNextQuarterHourStart(now = new Date()) {
   const currentMinute = now.getHours() * 60 + now.getMinutes();
-  const roundedMinute = Math.ceil(currentMinute / 30) * 30;
+  const roundedMinute = Math.ceil(currentMinute / 15) * 15;
 
   if (roundedMinute >= 24 * 60) {
     return {
@@ -55,8 +55,9 @@ export function getNextHalfHourStart(now = new Date()) {
 export function getDefaultSmartPlannerDraft({
   now = new Date(),
   calendarAvailable = false,
+  hoursAvailable = 2,
 } = {}) {
-  const start = getNextHalfHourStart(now);
+  const start = getNextQuarterHourStart(now);
 
   if (!start.available) {
     return {
@@ -69,17 +70,20 @@ export function getDefaultSmartPlannerDraft({
     };
   }
 
-  const finishMinute = Math.min(23 * 60 + 55, start.minute + 4 * 60);
+  const durationMinutes = Math.max(15, Math.round((Number(hoursAvailable) || 2) * 60));
+  const finishMinute = start.minute + durationMinutes;
 
   return {
     startTime: start.time,
-    endTime: formatMinuteOfDay(finishMinute),
+    endTime: formatMinuteOfDay(finishMinute % (24 * 60)),
     planStyle: "balanced",
     useCalendar: calendarAvailable,
     plannerContext: "",
-    noTimeLeftToday: finishMinute - start.minute < 15,
+    noTimeLeftToday: false,
   };
 }
+
+export const getNextHalfHourStart = getNextQuarterHourStart;
 
 export function formatLocalDate(date = new Date()) {
   return `${date.getFullYear()}-${padTimePart(date.getMonth() + 1)}-${padTimePart(
@@ -235,14 +239,28 @@ export function buildSmartPlannerTaskPayload(tasks, localDate) {
     .map((task, index) => ({ task, index }))
     .sort((left, right) => compareTaskRelevance(left, right, localDate))
     .slice(0, SMART_PLANNER_MAX_TASKS)
-    .map(({ task }) => ({
+    .map(({ task }) => {
+      const classification = getEffectiveTaskClassification(task);
+      const personalAdmin =
+        !task.subject &&
+        /\b(order|shopping|buy|appointment|errand|admin|email|call)\b/i.test(
+          `${task.title || ""} ${task.description || ""}`
+        );
+
+      return ({
       id: truncate(task.id, 120),
       title: truncate(task.title, 180),
+      description: truncate(task.description, 500),
+      subjectId: truncate(task.linkedSubjectId || task.subjectId, 120),
       subject: truncate(task.subject, 80),
       dueDate: truncate(task.dueDate, 40),
+      dueTime: truncate(task.dueTime, 12),
       overdue: isOverdue(task.dueDate, localDate),
-      taskType: truncate(task.taskType, 60),
-      assessmentType: truncate(task.detectedTags?.[0] || "", 60),
+      taskType: truncate(classification.taskType, 60),
+      detectedTags: classification.detectedTags.map((tag) => truncate(tag, 60)).slice(0, 6),
+      assessmentClassification: truncate(classification.assessmentClassification, 32),
+      assessmentPreparation: classification.assessmentPreparation,
+      personalAdmin,
       importance: truncate(task.importance, 32),
       effort: Math.min(5, Math.max(1, Math.round(Number(task.effort) || 2))),
       source: truncate(task.source || "manual", 40),
@@ -254,7 +272,7 @@ export function buildSmartPlannerTaskPayload(tasks, localDate) {
         ? Math.min(100, Math.max(0, Math.round(Number(task.progress))))
         : null,
       completed: false,
-    }))
+    }); })
     .filter((task) => task.id && task.title);
 }
 
@@ -283,7 +301,7 @@ export function buildSmartPlannerSubjectProfiles(subjects, eligibleTasks) {
     if (!subjectName || includedProfileKeys.has(profileKey)) continue;
 
     const gradeSystem = truncate(subject.courseSystem, 16);
-    profiles.push({
+    const profile = {
       subjectId,
       subject: subjectName,
       currentGrade: truncate(subject.currentGrade, 16),
@@ -291,23 +309,81 @@ export function buildSmartPlannerSubjectProfiles(subjects, eligibleTasks) {
       gradeSystem: SMART_PLANNER_GRADE_SYSTEMS.has(gradeSystem)
         ? gradeSystem
         : "Other",
-    });
+    };
+    const level = truncate(subject.level, 40);
+    if (level) profile.level = level;
+    profiles.push(profile);
     includedProfileKeys.add(profileKey);
 
     if (profiles.length >= SMART_PLANNER_MAX_SUBJECT_PROFILES) break;
   }
 
+  for (const subject of (Array.isArray(eligibleTasks) && eligibleTasks.length > 0)
+    ? []
+    : (Array.isArray(subjects) ? subjects : [])) {
+    if (profiles.length >= SMART_PLANNER_MAX_SUBJECT_PROFILES) break;
+    const subjectId = truncate(subject?.id, 120) || null;
+    const subjectName = truncate(subject?.name, 80);
+    const profileKey = subjectId ? `id:${subjectId}` : `name:${normalizeSubjectKey(subjectName)}`;
+    if (!subjectName || includedProfileKeys.has(profileKey)) continue;
+    const gradeSystem = truncate(subject.courseSystem, 16);
+    const profile = {
+      subjectId,
+      subject: subjectName,
+      currentGrade: truncate(subject.currentGrade, 16),
+      targetGrade: truncate(subject.targetGrade, 16),
+      gradeSystem: SMART_PLANNER_GRADE_SYSTEMS.has(gradeSystem) ? gradeSystem : "Other",
+    };
+    const level = truncate(subject.level, 40);
+    if (level) profile.level = level;
+    profiles.push(profile);
+    includedProfileKeys.add(profileKey);
+  }
+
   return profiles;
+}
+
+function normalizeClassName(value) {
+  return truncate(value, 120).toLocaleLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+export function detectTomorrowClasses(events, subjects, tomorrowDate) {
+  const aliases = (Array.isArray(subjects) ? subjects : []).flatMap((subject) => {
+    const values = [subject?.name, subject?.classroomCourseName, subject?.linkedCourseName]
+      .map(normalizeClassName)
+      .filter((value) => value.length >= 3);
+    return values.map((alias) => ({ alias, subject: truncate(subject?.name, 80) }));
+  });
+  const found = new Set();
+  (Array.isArray(events) ? events : []).forEach((event) => {
+    const eventDate = String(
+      event?.start?.dateTime || event?.start?.date || event?.start || ""
+    ).slice(0, 10);
+    const title = normalizeClassName(event?.title || event?.summary);
+    if (eventDate !== tomorrowDate || !title) return;
+    aliases.forEach(({ alias, subject }) => {
+      if (title === alias || title.startsWith(`${alias} `) || title.endsWith(` ${alias}`)) {
+        if (subject) found.add(subject);
+      }
+    });
+  });
+  return [...found].slice(0, 12);
 }
 
 export function getSmartPlannerLocalContext(draft, now = new Date()) {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "Etc/UTC";
+  const startMinute = timeStringToMinute(draft.startTime);
+  const rawFinishMinute = timeStringToMinute(draft.endTime);
+  const finishMinute =
+    startMinute !== null && rawFinishMinute !== null && rawFinishMinute <= startMinute
+      ? rawFinishMinute + 24 * 60
+      : rawFinishMinute;
 
   return {
     localDate: formatLocalDate(now),
     currentMinute: now.getHours() * 60 + now.getMinutes(),
-    startMinute: timeStringToMinute(draft.startTime),
-    finishMinute: timeStringToMinute(draft.endTime),
+    startMinute,
+    finishMinute,
     timeZone: truncate(timeZone, 80),
     utcOffsetMinutes: -now.getTimezoneOffset(),
     planningStyle: draft.planStyle,
@@ -329,3 +405,4 @@ export function formatPlannerPreviewTime(minutes) {
   date.setHours(0, Number(minutes) || 0, 0, 0);
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
+import { getEffectiveTaskClassification } from "./appUtils.js";
