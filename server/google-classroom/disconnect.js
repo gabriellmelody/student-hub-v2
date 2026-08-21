@@ -1,5 +1,5 @@
-import { clearCalendarSessionCookie } from "./_session.js";
-import { deleteGoogleIntegration, requireDayloUser } from "../../server/google-integration-vault.js";
+import { clearClassroomSessionCookie } from "./_session.js";
+import { deleteGoogleIntegration, requireDayloUser } from "../google-integration-vault.js";
 
 export default async function handler(request, response) {
   if (request.method !== "POST") {
@@ -13,8 +13,8 @@ export default async function handler(request, response) {
     response.status(auth.statusCode).json({ ok: false, status: auth.status });
     return;
   }
-  await deleteGoogleIntegration(auth.userId, "calendar");
+  await deleteGoogleIntegration(auth.userId, "classroom");
 
-  response.setHeader("Set-Cookie", clearCalendarSessionCookie());
-  response.status(200).json({ ok: true, status: "calendar_disconnected", connected: false });
+  response.setHeader("Set-Cookie", clearClassroomSessionCookie());
+  response.status(200).json({ ok: true, status: "classroom_disconnected", connected: false });
 }

@@ -1,11 +1,12 @@
-import { getGoogleCalendarOAuthConfigStatus } from "./_config.js";
-import { createGoogleOAuthState, requireDayloUser } from "../../server/google-integration-vault.js";
+import { getGoogleClassroomOAuthConfigStatus } from "./_config.js";
+import { createGoogleOAuthState, requireDayloUser } from "../google-integration-vault.js";
 
-const GOOGLE_CALENDAR_READONLY_SCOPES = [
+const GOOGLE_CLASSROOM_READONLY_SCOPES = [
   "openid",
   "email",
-  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
-  "https://www.googleapis.com/auth/calendar.events.readonly",
+  "https://www.googleapis.com/auth/classroom.courses.readonly",
+  "https://www.googleapis.com/auth/classroom.coursework.me.readonly",
+  "https://www.googleapis.com/auth/classroom.student-submissions.me.readonly",
 ];
 
 function isReadinessCheck(request) {
@@ -15,7 +16,8 @@ function isReadinessCheck(request) {
 }
 
 export default async function handler(request, response) {
-  const config = getGoogleCalendarOAuthConfigStatus();
+  // Safe OAuth step only: build the permission-screen URL, but do not store tokens.
+  const config = getGoogleClassroomOAuthConfigStatus();
 
   if (!config.configured) {
     response.status(501).json({
@@ -24,9 +26,9 @@ export default async function handler(request, response) {
       configured: false,
       missingEnv: config.missingEnv,
       requiredEnv: config.requiredEnv,
-      message: "Google Calendar OAuth is not configured yet.",
+      message: "Google Classroom OAuth is not configured yet.",
       nextStep:
-        "Add the required environment variables in Vercel before using Google Calendar.",
+        "Add the required environment variables in Vercel before implementing the authorization redirect.",
     });
     return;
   }
@@ -37,13 +39,16 @@ export default async function handler(request, response) {
   }
 
   if (isReadinessCheck(request)) {
-    response.status(200).json({
-      ok: true,
-      status: "configured",
+    response.status(501).json({
+      ok: false,
+      status: "configured_not_implemented",
       configured: true,
       missingEnv: [],
       requiredEnv: config.requiredEnv,
-      message: "Google Calendar OAuth configuration is present.",
+      message:
+        "Google Classroom OAuth configuration is present, but the authorization redirect is a prototype step.",
+      nextStep:
+        "Use the prototype permission-screen action to test the redirect. Token exchange is still not implemented.",
     });
     return;
   }
@@ -52,18 +57,18 @@ export default async function handler(request, response) {
     "https://accounts.google.com/o/oauth2/v2/auth"
   );
 
-  const state = createGoogleOAuthState(auth.userId, "calendar");
+  const state = createGoogleOAuthState(auth.userId, "classroom");
   if (new URL(request.url || "", "https://student-hub.local").searchParams.get("mode") === "popup") {
     response.status(200).json({ ok: true, state });
     return;
   }
   authorizationUrl.search = new URLSearchParams({
     client_id: process.env.GOOGLE_CLASSROOM_CLIENT_ID,
-    redirect_uri: process.env.GOOGLE_CALENDAR_REDIRECT_URI,
+    redirect_uri: process.env.GOOGLE_CLASSROOM_REDIRECT_URI,
     response_type: "code",
     access_type: "offline",
     prompt: "consent",
-    scope: GOOGLE_CALENDAR_READONLY_SCOPES.join(" "),
+    scope: GOOGLE_CLASSROOM_READONLY_SCOPES.join(" "),
     state,
   });
   if (new URL(request.url || "", "https://student-hub.local").searchParams.get("mode") === "redirect") {

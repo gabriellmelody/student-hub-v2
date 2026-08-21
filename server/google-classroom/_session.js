@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
-import { loadGoogleIntegration, requireDayloUser, saveGoogleIntegration } from "../../server/google-integration-vault.js";
+import { loadGoogleIntegration, requireDayloUser, saveGoogleIntegration } from "../google-integration-vault.js";
 
 export const CLASSROOM_SESSION_COOKIE_NAME = "student_hub_classroom_session";
 

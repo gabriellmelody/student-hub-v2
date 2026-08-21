@@ -9,8 +9,8 @@ import {
   exchangeGoogleAuthorizationCode,
   getGoogleAccountIdentity,
   validatePopupCodeExchangeRequest,
-} from "../google-oauth-popup.js";
-import { loadGoogleIntegration, requireDayloUser, saveGoogleIntegration, verifyGoogleOAuthState } from "../../server/google-integration-vault.js";
+} from "../google-integrations/oauth-popup.js";
+import { loadGoogleIntegration, requireDayloUser, saveGoogleIntegration, verifyGoogleOAuthState } from "../google-integration-vault.js";
 
 function getCallbackParam(request, name) {
   if (request.query && typeof request.query[name] === "string") {

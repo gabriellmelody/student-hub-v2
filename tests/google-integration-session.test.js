@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { createClassroomSessionCookie, getValidClassroomSession } from "../api/google-classroom/_session.js";
-import { createCalendarSessionCookie, getValidCalendarSession } from "../api/google-calendar/_session.js";
-import disconnectClassroom from "../api/google-classroom/disconnect.js";
-import disconnectCalendar from "../api/google-calendar/disconnect.js";
+import { createClassroomSessionCookie, getValidClassroomSession } from "../server/google-classroom/_session.js";
+import { createCalendarSessionCookie, getValidCalendarSession } from "../server/google-calendar/_session.js";
+import disconnectClassroom from "../server/google-classroom/disconnect.js";
+import disconnectCalendar from "../server/google-calendar/disconnect.js";
 import {
   createGoogleOAuthState,
   loadGoogleIntegration,
