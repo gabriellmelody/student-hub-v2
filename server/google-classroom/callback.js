@@ -10,7 +10,7 @@ import {
   getGoogleAccountIdentity,
   validatePopupCodeExchangeRequest,
 } from "../google-integrations/oauth-popup.js";
-import { loadGoogleIntegration, requireDayloUser, saveGoogleIntegration, verifyGoogleOAuthState } from "../google-integration-vault.js";
+import { isGoogleIntegrationVaultError, loadGoogleIntegration, requireDayloUser, saveGoogleIntegration, verifyGoogleOAuthState } from "../google-integration-vault.js";
 
 function getCallbackParam(request, name) {
   if (request.query && typeof request.query[name] === "string") {
@@ -175,6 +175,17 @@ async function handlePopupCodeExchange(request, response, config) {
       },
     });
   } catch (error) {
+    if (isGoogleIntegrationVaultError(error)) {
+      response.status(502).json({
+        ok: false,
+        status: error.code,
+        provider: "google-classroom",
+        configured: true,
+        connected: false,
+        message: "Google OAuth worked, but DayLo could not store the Classroom connection.",
+      });
+      return;
+    }
     response.status(error?.message === "missing_session_secret" ? 501 : 502).json({
       ok: false,
       status:
@@ -370,8 +381,16 @@ export default async function handler(request, response) {
         nextStep:
           "Store connection securely before showing courses inside the app.",
       });
-    } catch {
-      if (requestStage === "token_exchange") {
+    } catch (error) {
+      if (isGoogleIntegrationVaultError(error)) {
+        sendCallbackResult(request, response, 502, {
+          ok: false,
+          status: error.code,
+          configured: true,
+          message: "Google OAuth worked, but DayLo could not store the Classroom connection.",
+          nextStep: "Check the server vault configuration, then reconnect.",
+        });
+      } else if (requestStage === "token_exchange") {
         sendCallbackResult(request, response, 502, {
           ok: false,
           status: "token_exchange_failed",

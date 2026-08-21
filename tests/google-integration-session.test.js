@@ -1,16 +1,20 @@
 import assert from "node:assert/strict";
+import { createCipheriv, createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createClassroomSessionCookie, getValidClassroomSession } from "../server/google-classroom/_session.js";
 import { createCalendarSessionCookie, getValidCalendarSession } from "../server/google-calendar/_session.js";
 import disconnectClassroom from "../server/google-classroom/disconnect.js";
 import disconnectCalendar from "../server/google-calendar/disconnect.js";
+import classroomCallback from "../server/google-classroom/callback.js";
 import {
   createGoogleOAuthState,
   loadGoogleIntegration,
   saveGoogleIntegration,
   verifyGoogleOAuthState,
 } from "../server/google-integration-vault.js";
+
+const SILENT_LOG = { info() {}, error() {}, warn() {} };
 
 const ENV = {
   SUPABASE_URL: "https://supabase.example",
@@ -81,6 +85,84 @@ function session(integration, overrides = {}) {
     ? createClassroomSessionCookie(tokens, null, account).session
     : createCalendarSessionCookie(tokens, null, account).session;
 }
+
+function encryptRawVaultPayload(value, secret = ENV.GOOGLE_INTEGRATION_VAULT_SECRET) {
+  const iv = randomBytes(12);
+  const key = createHash("sha256").update(`token-vault:${secret}`).digest();
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return [iv, cipher.getAuthTag(), encrypted]
+    .map((part) => part.toString("base64url"))
+    .join(".");
+}
+
+test("no vault row is a clean disconnected state for both providers", async () => {
+  const backend = createBackend();
+  assert.equal(await loadGoogleIntegration("user-a", "classroom", { env: ENV, fetchImpl: backend.fetchImpl, log: SILENT_LOG }), null);
+  const classroom = await getValidClassroomSession(request("user-a"), { env: ENV, fetchImpl: backend.fetchImpl });
+  const calendar = await getValidCalendarSession(request("user-a"), responseRecorder(), { env: ENV, fetchImpl: backend.fetchImpl });
+  assert.equal(classroom.status, "classroom_account_reconnect_required");
+  assert.equal(calendar.status, "calendar_account_reconnect_required");
+});
+
+test("opaque Supabase secret keys use apikey without an invalid Bearer header", async () => {
+  let headers;
+  const env = { ...ENV, SUPABASE_SERVICE_ROLE_KEY: "sb_secret_test-server-key" };
+  await loadGoogleIntegration("user-a", "classroom", {
+    env,
+    log: SILENT_LOG,
+    fetchImpl: async (_url, options) => {
+      headers = options.headers;
+      return { ok: true, status: 200, json: async () => [] };
+    },
+  });
+  assert.equal(headers.apikey, env.SUPABASE_SERVICE_ROLE_KEY);
+  assert.equal(headers.Authorization, undefined);
+});
+
+test("vault query and configuration failures are classified separately", async () => {
+  await assert.rejects(
+    loadGoogleIntegration("user-a", "classroom", {
+      env: ENV,
+      log: SILENT_LOG,
+      fetchImpl: async () => ({ ok: false, status: 401, json: async () => ({ message: "Invalid JWT" }) }),
+    }),
+    (error) => error.code === "vault_query_failed" && error.category === "credential_rejected"
+  );
+  await assert.rejects(
+    loadGoogleIntegration("user-a", "classroom", {
+      env: { ...ENV, SUPABASE_SERVICE_ROLE_KEY: "   " },
+      log: SILENT_LOG,
+      fetchImpl: async () => assert.fail("fetch should not run"),
+    }),
+    (error) => error.code === "vault_configuration_failed"
+  );
+});
+
+test("vault decryption and stored payload failures remain distinct", async () => {
+  const backend = createBackend();
+  await saveGoogleIntegration("user-a", "classroom", session("classroom"), { env: ENV, fetchImpl: backend.fetchImpl, log: SILENT_LOG });
+  await assert.rejects(
+    loadGoogleIntegration("user-a", "classroom", {
+      env: { ...ENV, GOOGLE_INTEGRATION_VAULT_SECRET: "a-different-secret-that-is-still-at-least-thirty-two-characters" },
+      fetchImpl: backend.fetchImpl,
+      log: SILENT_LOG,
+    }),
+    (error) => error.code === "vault_decrypt_failed"
+  );
+
+  const row = backend.rows.get("user-a:classroom");
+  row.encrypted_payload = encryptRawVaultPayload("not-json");
+  await assert.rejects(
+    loadGoogleIntegration("user-a", "classroom", { env: ENV, fetchImpl: backend.fetchImpl, log: SILENT_LOG }),
+    (error) => error.code === "vault_payload_invalid" && error.category === "json_invalid"
+  );
+  row.encrypted_payload = encryptRawVaultPayload(JSON.stringify({ account_email: "missing-token@example.com" }));
+  await assert.rejects(
+    loadGoogleIntegration("user-a", "classroom", { env: ENV, fetchImpl: backend.fetchImpl, log: SILENT_LOG }),
+    (error) => error.code === "vault_payload_invalid" && error.category === "session_invalid"
+  );
+});
 
 test("vault ownership isolates users while the same user works across devices", async () => {
   const backend = createBackend();
@@ -164,6 +246,68 @@ test("legacy cookies are detected but never assigned to the signed-in account", 
   assert.equal(result.status, "classroom_account_reconnect_required");
   assert.equal(result.legacyConnectionDetected, true);
   assert.equal(backend.rows.size, 0);
+});
+
+test("Classroom callback distinguishes vault writes from token exchange", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalEnv = process.env;
+  process.env = {
+    ...process.env,
+    ...ENV,
+    GOOGLE_CLASSROOM_REDIRECT_URI: "http://localhost:5173",
+    GOOGLE_OAUTH_ALLOWED_ORIGINS: "http://localhost:5173",
+  };
+
+  async function runCallback(writeOk) {
+    globalThis.fetch = async (url, options = {}) => {
+      const value = String(url);
+      if (value.endsWith("/auth/v1/user")) {
+        return { ok: true, status: 200, json: async () => ({ id: "user-a" }) };
+      }
+      if (value === "https://oauth2.googleapis.com/token") {
+        return { ok: true, status: 200, json: async () => ({ access_token: "google-access", refresh_token: "google-refresh", expires_in: 3600 }) };
+      }
+      if (value === "https://openidconnect.googleapis.com/v1/userinfo") {
+        return { ok: true, status: 200, json: async () => ({ sub: "google-user", email: "student@school.edu" }) };
+      }
+      if (value.includes("/rest/v1/google_integration_tokens")) {
+        if (options.method === "POST") {
+          return { ok: writeOk, status: writeOk ? 201 : 503, json: async () => writeOk ? [JSON.parse(options.body)] : { code: "PGRST000" } };
+        }
+        return { ok: true, status: 200, json: async () => [] };
+      }
+      throw new Error(`Unexpected callback URL: ${value}`);
+    };
+
+    const oauthState = createGoogleOAuthState("user-a", "classroom", { env: process.env });
+    const response = responseRecorder();
+    await classroomCallback({
+      method: "POST",
+      url: "/api/google-classroom/callback",
+      headers: {
+        authorization: "Bearer daylo-user-a",
+        "content-type": "application/json",
+        "x-requested-with": "XmlHttpRequest",
+        origin: "http://localhost:5173",
+      },
+      body: { code: "valid-google-code", oauthState },
+    }, response);
+    return response;
+  }
+
+  try {
+    const success = await runCallback(true);
+    assert.equal(success.statusCode, 200);
+    assert.equal(success.payload.status, "classroom_popup_session_created");
+
+    const failure = await runCallback(false);
+    assert.equal(failure.statusCode, 502);
+    assert.equal(failure.payload.status, "vault_write_failed");
+    assert.notEqual(failure.payload.status, "token_exchange_failed");
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env = originalEnv;
+  }
 });
 
 test("vault table and client boundary expose no token material", () => {

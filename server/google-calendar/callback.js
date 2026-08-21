@@ -10,7 +10,7 @@ import {
   getGoogleAccountIdentity,
   validatePopupCodeExchangeRequest,
 } from "../google-integrations/oauth-popup.js";
-import { loadGoogleIntegration, requireDayloUser, saveGoogleIntegration, verifyGoogleOAuthState } from "../google-integration-vault.js";
+import { isGoogleIntegrationVaultError, loadGoogleIntegration, requireDayloUser, saveGoogleIntegration, verifyGoogleOAuthState } from "../google-integration-vault.js";
 
 function getCallbackParam(request, name) {
   if (request.query && typeof request.query[name] === "string") {
@@ -157,6 +157,17 @@ async function handlePopupCodeExchange(request, response, config) {
       },
     });
   } catch (error) {
+    if (isGoogleIntegrationVaultError(error)) {
+      response.status(502).json({
+        ok: false,
+        status: error.code,
+        provider: "google-calendar",
+        configured: true,
+        connected: false,
+        message: "Google OAuth worked, but DayLo could not store the Calendar connection.",
+      });
+      return;
+    }
     response.status(error?.message === "missing_session_secret" ? 501 : 502).json({
       ok: false,
       status:
@@ -305,6 +316,15 @@ export default async function handler(request, response) {
       },
     });
   } catch (error) {
+    if (isGoogleIntegrationVaultError(error)) {
+      sendCallbackResult(request, response, 502, {
+        ok: false,
+        status: error.code,
+        configured: true,
+        message: "Google OAuth worked, but DayLo could not store the Calendar connection.",
+      });
+      return;
+    }
     sendCallbackResult(request, response, 502, {
       ok: false,
       status:
