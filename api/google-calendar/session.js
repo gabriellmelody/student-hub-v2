@@ -4,10 +4,10 @@ export default async function handler(request, response) {
   const sessionResult = await getValidCalendarSession(request, response);
 
   if (sessionResult.status === "no_calendar_session") {
-    response.status(401).json({
+    response.status(sessionResult.connected ? 503 : 401).json({
       ok: false,
       status: "no_calendar_session",
-      connected: false,
+      connected: sessionResult.connected === true,
       message: "No Google Calendar session is available yet.",
     });
     return;
@@ -20,7 +20,11 @@ export default async function handler(request, response) {
       connected: false,
       message:
         sessionResult.message ||
-        "Google Calendar session is invalid or expired. Connect again.",
+        (sessionResult.connected ? "Google Calendar is temporarily unavailable." : "Google Calendar session is invalid or expired. Connect again."),
+      account: {
+        id: sessionResult.session?.account_id || "",
+        email: sessionResult.session?.account_email || "",
+      },
     });
     return;
   }

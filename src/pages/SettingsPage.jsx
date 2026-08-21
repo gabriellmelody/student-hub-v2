@@ -2710,14 +2710,12 @@ function IntegrationsSettings({
         accountEmail: result.account?.email || "",
       });
     } catch {
-      setRealClassroomSession({
+      setRealClassroomSession((currentState) => ({
+        ...currentState,
         checking: false,
-        connected: false,
         status: "session_check_failed",
         message: "Could not check Classroom connection status.",
-        tokenSummary: null,
-        accountEmail: "",
-      });
+      }));
     }
   }
 
@@ -2855,10 +2853,9 @@ function IntegrationsSettings({
         },
       });
       const result = await response.json();
-      const accountId =
-        response.ok && result.connected === true
-          ? getGoogleCalendarAccountId(result)
-          : "";
+      const accountId = result.connected === true
+        ? getGoogleCalendarAccountId(result)
+        : "";
 
       if (!accountId) {
         clearGoogleCalendarProviderState({
@@ -2896,16 +2893,42 @@ function IntegrationsSettings({
         accountId,
       });
     } catch {
-      clearGoogleCalendarProviderState({
+      setGoogleCalendarSession((currentState) => ({
+        ...currentState,
+        checking: false,
+        status: "session_check_failed",
         message: "Could not check Google Calendar status.",
+      }));
+    }
+  }
+
+  async function disconnectGoogleIntegration(provider) {
+    const endpoint = provider === "classroom"
+      ? "/api/google-classroom/disconnect"
+      : "/api/google-calendar/disconnect";
+    const response = await fetch(endpoint, { method: "POST", credentials: "include" });
+    if (!response.ok) return;
+
+    if (provider === "classroom") {
+      setRealClassroomSession({
+        checking: false,
+        connected: false,
+        status: "no_classroom_session",
+        message: "No Google account connected.",
+        tokenSummary: null,
+        accountEmail: "",
       });
+      setRealClassroomCourses((currentState) => ({ ...currentState, courses: [], lastCheckedAt: "" }));
+    } else {
       setGoogleCalendarSession({
         checking: false,
         connected: false,
-        status: "session_check_failed",
-        message: "Could not check Google Calendar status.",
+        status: "no_calendar_session",
+        message: "No Google Calendar connected.",
         tokenSummary: null,
+        accountId: "",
       });
+      clearGoogleCalendarProviderState({ accountId: "", message: "No Google Calendar connected." });
     }
   }
 
@@ -3906,6 +3929,7 @@ function IntegrationsSettings({
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
               onConnectGooglePopup={startGooglePopupConnection}
+              onDisconnectGoogle={disconnectGoogleIntegration}
               onClassroomRedirect={() => {
                 if (activeGuidedTourId === CLASSROOM_SETUP_TOUR_ID) {
                   saveClassroomSetupResume("load-classes");
@@ -4055,6 +4079,7 @@ function IntegrationCard({
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
   onConnectGooglePopup,
+  onDisconnectGoogle,
   onClassroomRedirect,
   realClassroomConnectButtonRef,
   onManageRealClassroom,
@@ -4317,9 +4342,12 @@ function IntegrationCard({
                 {isPopupConnecting
                   ? "Connecting..."
                   : realClassroomSession.connected
-                  ? "Reconnect"
+                  ? "Change account"
                   : "Connect Google Classroom"}
               </button>
+              {realClassroomSession.connected && (
+                <button type="button" className="integration-setup-button secondary" onClick={() => onDisconnectGoogle("classroom")}>Disconnect</button>
+              )}
               {showRedirectFallback && (
                 <a
                   className="integration-setup-button secondary"
@@ -4373,9 +4401,12 @@ function IntegrationCard({
                 {isPopupConnecting
                   ? "Connecting..."
                   : googleCalendarSession.connected
-                  ? "Reconnect"
+                  ? "Change account"
                   : "Connect Google Calendar"}
               </button>
+              {googleCalendarSession.connected && (
+                <button type="button" className="integration-setup-button secondary" onClick={() => onDisconnectGoogle("calendar")}>Disconnect</button>
+              )}
               {showRedirectFallback && (
                 <a
                   className="integration-setup-button secondary"

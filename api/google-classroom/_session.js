@@ -4,6 +4,7 @@ export const CLASSROOM_SESSION_COOKIE_NAME = "student_hub_classroom_session";
 
 const ACCESS_TOKEN_SESSION_MAX_AGE_SECONDS = 60 * 60;
 const REFRESH_TOKEN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const ACCESS_TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
 
 function base64UrlEncode(buffer) {
   return Buffer.from(buffer).toString("base64url");
@@ -108,6 +109,10 @@ function serializeCookie(value, maxAgeSeconds) {
   return cookieParts.join("; ");
 }
 
+export function clearClassroomSessionCookie() {
+  return serializeCookie("", 0);
+}
+
 export function createClassroomSessionCookie(
   tokenResponse,
   existingSession = null,
@@ -161,11 +166,18 @@ export function createClassroomSessionCookieFromTokenResponse(
       ? existingSession.created_at
       : new Date(now).toISOString();
   const expiresAt = new Date(now + expiresInSeconds * 1000).toISOString();
-  const refreshToken =
+  const returnedRefreshToken =
     typeof tokenResponse.refresh_token === "string"
-      ? tokenResponse.refresh_token
-      : sameAccount && typeof existingSession?.refresh_token === "string"
-        ? existingSession.refresh_token
+      ? tokenResponse.refresh_token.trim()
+      : "";
+  const existingRefreshToken =
+    typeof existingSession?.refresh_token === "string"
+      ? existingSession.refresh_token.trim()
+      : "";
+  const refreshToken = returnedRefreshToken
+    ? returnedRefreshToken
+    : sameAccount && existingRefreshToken
+        ? existingRefreshToken
         : null;
   const payload = {
     access_token: tokenResponse.access_token,
@@ -197,9 +209,9 @@ export function createClassroomSessionCookieFromTokenResponse(
     expiresAt,
     hasRefreshToken: typeof refreshToken === "string",
     refreshTokenPreserved:
-      typeof tokenResponse.refresh_token !== "string" &&
+      !returnedRefreshToken &&
       sameAccount &&
-      typeof existingSession?.refresh_token === "string",
+      Boolean(existingRefreshToken),
     accountChanged,
     accountId: newAccountId,
     accountEmail,
@@ -229,7 +241,7 @@ export function readClassroomSession(request) {
       };
     }
 
-    const expired = expiresAt <= Date.now();
+    const expired = expiresAt - Date.now() <= ACCESS_TOKEN_REFRESH_BUFFER_MS;
 
     return {
       ok: !expired,
@@ -246,31 +258,64 @@ export function readClassroomSession(request) {
   }
 }
 
-export async function getValidClassroomSession(request) {
+function classifyClassroomRefreshFailure(response, body) {
+  const googleError = typeof body?.error === "string" ? body.error : "";
+  if (response?.status === 400 && googleError === "invalid_grant") {
+    return { status: "classroom_reauthorization_required", connected: false };
+  }
+  if (response?.status === 401 || googleError === "invalid_client") {
+    return { status: "classroom_refresh_configuration_error", connected: true };
+  }
+  return { status: "classroom_refresh_temporarily_unavailable", connected: true };
+}
+
+export async function getValidClassroomSession(
+  request,
+  { fetchImpl = fetch, log = console, forceRefresh = false } = {}
+) {
   const sessionResult = readClassroomSession(request);
 
-  if (sessionResult.ok) return sessionResult;
+  if (sessionResult.ok && !forceRefresh) return sessionResult;
 
-  if (
-    sessionResult.status !== "classroom_access_token_expired" ||
-    typeof sessionResult.session?.refresh_token !== "string"
-  ) {
+  if (!forceRefresh && sessionResult.status !== "classroom_access_token_expired") {
     return sessionResult;
   }
+  if (
+    typeof sessionResult.session?.refresh_token !== "string" ||
+    !sessionResult.session.refresh_token.trim()
+  ) {
+    return {
+      ok: false,
+      status: "classroom_reauthorization_required",
+      connected: false,
+    };
+  }
 
-  const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body: new URLSearchParams({
-      client_id: process.env.GOOGLE_CLASSROOM_CLIENT_ID,
-      client_secret: process.env.GOOGLE_CLASSROOM_CLIENT_SECRET,
-      refresh_token: sessionResult.session.refresh_token,
-      grant_type: "refresh_token",
-    }),
-  });
+  log.info("classroom auth: access token expired; refresh attempted");
+  let tokenResponse;
+  try {
+    tokenResponse = await fetchImpl("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "application/json",
+      },
+      body: new URLSearchParams({
+        client_id: process.env.GOOGLE_CLASSROOM_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLASSROOM_CLIENT_SECRET,
+        refresh_token: sessionResult.session.refresh_token,
+        grant_type: "refresh_token",
+      }),
+    });
+  } catch {
+    log.warn("classroom auth: transient refresh failure", { category: "network" });
+    return {
+      ok: false,
+      status: "classroom_refresh_temporarily_unavailable",
+      connected: true,
+      session: sessionResult.session,
+    };
+  }
 
   let tokenJson = null;
   try {
@@ -280,9 +325,17 @@ export async function getValidClassroomSession(request) {
   }
 
   if (!tokenResponse.ok || typeof tokenJson?.access_token !== "string") {
+    const failure = classifyClassroomRefreshFailure(tokenResponse, tokenJson);
+    log.warn(
+      failure.connected
+        ? "classroom auth: transient refresh failure"
+        : "classroom auth: refresh token rejected; reconnect required",
+      { category: failure.status, httpStatus: tokenResponse.status }
+    );
     return {
       ok: false,
-      status: "classroom_reauthorization_required",
+      ...failure,
+      session: failure.connected ? sessionResult.session : undefined,
     };
   }
 
@@ -292,6 +345,7 @@ export async function getValidClassroomSession(request) {
     null
   );
 
+  log.info("classroom auth: refresh succeeded");
   return {
     ok: true,
     status: "classroom_session_refreshed",

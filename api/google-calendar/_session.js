@@ -108,6 +108,10 @@ function serializeCookie(value, maxAgeSeconds) {
   return cookieParts.join("; ");
 }
 
+export function clearCalendarSessionCookie() {
+  return serializeCookie("", 0);
+}
+
 export function createCalendarSessionCookie(
   tokenResponse,
   existingSession = null,
@@ -166,11 +170,18 @@ export function createCalendarSessionCookieFromTokenResponse(
     typeof existingSession?.created_at === "string"
       ? existingSession.created_at
       : new Date(now).toISOString();
-  const refreshToken =
+  const returnedRefreshToken =
     typeof tokenResponse.refresh_token === "string"
-      ? tokenResponse.refresh_token
-      : sameAccount && typeof existingSession?.refresh_token === "string"
-        ? existingSession.refresh_token
+      ? tokenResponse.refresh_token.trim()
+      : "";
+  const existingRefreshToken =
+    typeof existingSession?.refresh_token === "string"
+      ? existingSession.refresh_token.trim()
+      : "";
+  const refreshToken = returnedRefreshToken
+    ? returnedRefreshToken
+    : sameAccount && existingRefreshToken
+        ? existingRefreshToken
         : null;
   const payload = {
     access_token: tokenResponse.access_token,
@@ -206,9 +217,9 @@ export function createCalendarSessionCookieFromTokenResponse(
     sessionExpiresAt,
     hasRefreshToken: typeof refreshToken === "string",
     refreshTokenPreserved:
-      typeof tokenResponse.refresh_token !== "string" &&
+      !returnedRefreshToken &&
       sameAccount &&
-      typeof existingSession?.refresh_token === "string",
+      Boolean(existingRefreshToken),
     accountChanged,
     accountId: newAccountId,
     accountEmail,
@@ -274,21 +285,23 @@ async function readSafeJson(fetchResponse) {
   }
 }
 
-function getSafeGoogleError(googleResponse, fallbackMessage) {
-  if (!googleResponse || typeof googleResponse !== "object") {
-    return fallbackMessage;
+function classifyCalendarRefreshFailure(response, body) {
+  const googleError = typeof body?.error === "string" ? body.error : "";
+  if (response?.status === 400 && googleError === "invalid_grant") {
+    return { status: "calendar_session_reconnect_required", connected: false };
   }
-
-  return (
-    googleResponse.error_description ||
-    googleResponse.error?.message ||
-    (typeof googleResponse.error === "string" ? googleResponse.error : "") ||
-    fallbackMessage
-  );
+  if (response?.status === 401 || googleError === "invalid_client") {
+    return { status: "calendar_refresh_configuration_error", connected: true };
+  }
+  return { status: "calendar_refresh_temporarily_unavailable", connected: true };
 }
 
-export async function refreshCalendarSession(session, response) {
-  if (typeof session?.refresh_token !== "string") {
+export async function refreshCalendarSession(
+  session,
+  response,
+  { fetchImpl = fetch, log = console } = {}
+) {
+  if (typeof session?.refresh_token !== "string" || !session.refresh_token.trim()) {
     return {
       ok: false,
       status: "calendar_session_reconnect_required",
@@ -297,8 +310,9 @@ export async function refreshCalendarSession(session, response) {
     };
   }
 
+  log.info("calendar auth: access token expired; refresh attempted");
   try {
-    const refreshResponse = await fetch("https://oauth2.googleapis.com/token", {
+    const refreshResponse = await fetchImpl("https://oauth2.googleapis.com/token", {
       method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -314,15 +328,20 @@ export async function refreshCalendarSession(session, response) {
     const refreshJson = await readSafeJson(refreshResponse);
 
     if (!refreshResponse.ok || typeof refreshJson?.access_token !== "string") {
+      const failure = classifyCalendarRefreshFailure(refreshResponse, refreshJson);
+      log.warn(
+        failure.connected
+          ? "calendar auth: transient refresh failure"
+          : "calendar auth: refresh token rejected; reconnect required",
+        { category: failure.status, httpStatus: refreshResponse.status }
+      );
       return {
         ok: false,
-        status: "calendar_session_refresh_failed",
-        connected: false,
-        message: "Google Calendar session could not be refreshed.",
-        googleError: getSafeGoogleError(
-          refreshJson,
-          "Google token endpoint could not refresh the session."
-        ),
+        ...failure,
+        session: failure.connected ? session : undefined,
+        message: failure.connected
+          ? "Google Calendar is temporarily unavailable."
+          : "Reconnect Google Calendar to continue.",
       };
     }
 
@@ -333,6 +352,7 @@ export async function refreshCalendarSession(session, response) {
 
     response.setHeader("Set-Cookie", sessionCookie.cookie);
 
+    log.info("calendar auth: refresh succeeded");
     return {
       ok: true,
       status: "calendar_session_refreshed",
@@ -342,12 +362,13 @@ export async function refreshCalendarSession(session, response) {
       sessionCookie,
     };
   } catch {
+    log.warn("calendar auth: transient refresh failure", { category: "network" });
     return {
       ok: false,
-      status: "calendar_session_refresh_failed",
-      connected: false,
-      message: "Google Calendar session could not be refreshed.",
-      googleError: "Google token refresh request failed.",
+      status: "calendar_refresh_temporarily_unavailable",
+      connected: true,
+      session,
+      message: "Google Calendar is temporarily unavailable.",
     };
   }
 }
@@ -355,7 +376,7 @@ export async function refreshCalendarSession(session, response) {
 export async function getValidCalendarSession(
   request,
   response,
-  { forceRefresh = false } = {}
+  { forceRefresh = false, fetchImpl = fetch, log = console } = {}
 ) {
   const sessionResult = readCalendarSession(request);
 
@@ -369,5 +390,5 @@ export async function getValidCalendarSession(
     };
   }
 
-  return refreshCalendarSession(sessionResult.session, response);
+  return refreshCalendarSession(sessionResult.session, response, { fetchImpl, log });
 }

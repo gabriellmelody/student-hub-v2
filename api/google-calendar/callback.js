@@ -123,7 +123,7 @@ async function handlePopupCodeExchange(request, response, config) {
     const existingSessionResult = readCalendarSession(request);
     const sessionCookie = createCalendarSessionCookieFromTokenResponse(
       tokenResult.json,
-      existingSessionResult.ok ? existingSessionResult.session : null,
+      existingSessionResult.session || null,
       accountIdentity
     );
 
@@ -267,7 +267,7 @@ export default async function handler(request, response) {
     const existingSessionResult = readCalendarSession(request);
     const sessionCookie = createCalendarSessionCookie(
       tokenJson,
-      existingSessionResult.ok ? existingSessionResult.session : null,
+      existingSessionResult.session || null,
       accountIdentity
     );
 

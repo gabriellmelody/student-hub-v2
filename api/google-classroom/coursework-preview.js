@@ -275,7 +275,7 @@ export default async function handler(request, response) {
   const sessionResult = await getValidClassroomSession(request);
 
   if (sessionResult.status === "no_classroom_session") {
-    response.status(401).json({
+    response.status(sessionResult.connected ? 503 : 401).json({
       ok: false,
       status: "no_classroom_session",
       connected: false,
@@ -288,8 +288,8 @@ export default async function handler(request, response) {
     response.status(401).json({
       ok: false,
       status: sessionResult.status || "classroom_session_invalid_or_expired",
-      connected: false,
-      message: "Reconnect Google Classroom.",
+      connected: sessionResult.connected === true,
+      message: sessionResult.connected ? "Google Classroom is temporarily unavailable." : "Reconnect Google Classroom.",
     });
     return;
   }

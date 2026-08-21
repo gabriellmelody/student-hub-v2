@@ -143,7 +143,7 @@ async function handlePopupCodeExchange(request, response, config) {
     const existingSessionResult = readClassroomSession(request);
     const sessionCookie = createClassroomSessionCookieFromTokenResponse(
       tokenResult.json,
-      existingSessionResult.ok ? existingSessionResult.session : null,
+      existingSessionResult.session || null,
       accountIdentity
     );
 
@@ -290,7 +290,7 @@ export default async function handler(request, response) {
       const existingSessionResult = readClassroomSession(request);
       const sessionCookie = createClassroomSessionCookie(
         tokenJson,
-        existingSessionResult.ok ? existingSessionResult.session : null,
+        existingSessionResult.session || null,
         accountIdentity
       );
 
