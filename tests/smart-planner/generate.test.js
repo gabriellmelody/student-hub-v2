@@ -374,6 +374,8 @@ test("provider failures preserve the previously confirmed allowance", async () =
       "provider_unavailable",
       "provider_timeout",
       "provider_error",
+      "provider_output_missing",
+      "output_truncated",
       "parse_error",
     ]) {
       let providerResult = providerPlan();

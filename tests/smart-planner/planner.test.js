@@ -576,7 +576,7 @@ test("provider errors make exactly one Anthropic request", async () => {
   globalThis.fetch = async (_url, options) => {
     calls += 1;
     const body = JSON.parse(options.body);
-    assert.equal(body.max_tokens, 2000);
+    assert.equal(body.max_tokens, 3000);
     assert.deepEqual(
       body.output_config.format.schema,
       ANTHROPIC_SMART_PLANNER_OUTPUT_SCHEMA
@@ -690,7 +690,11 @@ test("provider success reaches parsing and parse failures stay distinct and secr
         ok: true,
         status: 200,
         headers: new Headers(),
-        json: async () => ({ content: [{ type: "text", text: JSON.stringify(readyPlan()) }] }),
+        json: async () => ({
+          stop_reason: "end_turn",
+          usage: { output_tokens: 420 },
+          content: [{ type: "text", text: JSON.stringify(readyPlan()) }],
+        }),
       };
     },
   });
@@ -711,4 +715,70 @@ test("provider success reaches parsing and parse failures stay distinct and secr
   assert.equal(invalid.status, "parse_error");
   assert.equal(JSON.stringify(logs).includes(secret), false);
   assert.equal(JSON.stringify(invalid).includes(secret), false);
+});
+
+test("selects the final text block after thinking content", async () => {
+  const logs = [];
+  const result = await requestAnthropicPlan(input, {
+    env: { ANTHROPIC_API_KEY: "server-test-key" },
+    log: {
+      info(label, metadata) { logs.push([label, metadata]); },
+      warn(label, metadata) { logs.push([label, metadata]); },
+    },
+    fetchImpl: async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        stop_reason: "end_turn",
+        usage: { output_tokens: 510 },
+        content: [
+          { type: "thinking", thinking: "must not be logged" },
+          { type: "text", text: "" },
+          { type: "text", text: JSON.stringify(readyPlan()) },
+        ],
+      }),
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  const received = logs.find(([label]) => label === "smart-planner: provider response received")[1];
+  assert.deepEqual(received.contentBlockTypes, ["thinking", "text", "text"]);
+  assert.equal(received.textBlockCount, 2);
+  assert.equal(received.outputTokens, 510);
+  assert.equal(JSON.stringify(logs).includes("must not be logged"), false);
+});
+
+test("classifies missing and truncated output before JSON parsing", async () => {
+  async function requestWithEnvelope(envelope) {
+    return requestAnthropicPlan(input, {
+      env: { ANTHROPIC_API_KEY: "server-test-key" },
+      log: { info() {}, warn() {} },
+      fetchImpl: async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => envelope,
+      }),
+    });
+  }
+
+  const missing = await requestWithEnvelope({
+    stop_reason: "end_turn",
+    content: [{ type: "thinking", thinking: "private" }],
+  });
+  assert.equal(missing.status, "provider_output_missing");
+
+  const truncated = await requestWithEnvelope({
+    stop_reason: "max_tokens",
+    usage: { output_tokens: 3000 },
+    content: [{ type: "text", text: '{"status":"ready"' }],
+  });
+  assert.equal(truncated.status, "output_truncated");
+
+  const malformed = await requestWithEnvelope({
+    stop_reason: "end_turn",
+    content: [{ type: "text", text: "not-json" }],
+  });
+  assert.equal(malformed.status, "parse_error");
 });

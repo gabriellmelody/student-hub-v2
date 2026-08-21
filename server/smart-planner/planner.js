@@ -758,10 +758,33 @@ function logProviderFailure(response, responseJson, category, log = console) {
   });
 }
 
+export function getAnthropicOutputMetadata(responseJson) {
+  const content = Array.isArray(responseJson?.content) ? responseJson.content : [];
+  const textBlocks = content.filter(
+    (block) => block?.type === "text" && typeof block.text === "string"
+  );
+  const selectedText = [...textBlocks]
+    .reverse()
+    .find((block) => block.text.trim().length > 0)?.text || "";
+
+  return {
+    stopReason: text(responseJson?.stop_reason, 40) || null,
+    contentBlockTypes: content
+      .map((block) => text(block?.type, 40) || "unknown")
+      .slice(0, 12),
+    textBlockCount: textBlocks.length,
+    selectedText,
+    selectedTextLength: selectedText.length,
+    outputTokens: Number.isInteger(responseJson?.usage?.output_tokens)
+      ? responseJson.usage.output_tokens
+      : null,
+  };
+}
+
 export async function requestAnthropicPlan(input, {
   env = process.env,
   fetchImpl = fetch,
-  timeoutMs = 26000,
+  timeoutMs = 28000,
   log = console,
   now = () => Date.now(),
 } = {}) {
@@ -780,7 +803,7 @@ export async function requestAnthropicPlan(input, {
   );
   const requestBody = {
     model,
-    max_tokens: 2000,
+    max_tokens: 3000,
     system: SMART_PLANNER_SYSTEM_PROMPT,
     messages: [
       {
@@ -812,23 +835,59 @@ export async function requestAnthropicPlan(input, {
       body: JSON.stringify(requestBody),
       signal: controller.signal,
     });
+    const responseJson = await readSafeJson(response);
+    const outputMetadata = getAnthropicOutputMetadata(responseJson);
     log.info("smart-planner: provider response received", {
       model,
       httpStatus: Number.isInteger(response?.status) ? response.status : null,
       elapsedMs: now() - startedAt,
+      stopReason: outputMetadata.stopReason,
+      contentBlockTypes: outputMetadata.contentBlockTypes,
+      textBlockCount: outputMetadata.textBlockCount,
+      selectedTextLength: outputMetadata.selectedTextLength,
+      outputTokens: outputMetadata.outputTokens,
     });
-    const responseJson = await readSafeJson(response);
 
     if (response.ok) {
-      const outputText = Array.isArray(responseJson?.content)
-        ? responseJson.content.find((item) => item?.type === "text")?.text
-        : "";
+      if (outputMetadata.stopReason === "max_tokens") {
+        log.warn("smart-planner: parse failed", {
+          reason: "output_truncated",
+          stopReason: outputMetadata.stopReason,
+          contentBlockTypes: outputMetadata.contentBlockTypes,
+          selectedTextLength: outputMetadata.selectedTextLength,
+        });
+        return {
+          ok: false,
+          status: "output_truncated",
+          message: "Smart Planner’s response was incomplete. Use the Basic planner for now.",
+        };
+      }
+
+      if (!outputMetadata.selectedText) {
+        log.warn("smart-planner: parse failed", {
+          reason: "missing_text_output",
+          stopReason: outputMetadata.stopReason,
+          contentBlockTypes: outputMetadata.contentBlockTypes,
+          selectedTextLength: 0,
+        });
+        return {
+          ok: false,
+          status: "provider_output_missing",
+          message: "Smart Planner returned no readable plan.",
+        };
+      }
+
       try {
-        const output = JSON.parse(outputText || "{}");
+        const output = JSON.parse(outputMetadata.selectedText);
         log.info("smart-planner: provider response parsed", { model, elapsedMs: now() - startedAt });
         return { ok: true, model, output };
       } catch {
-        logProviderFailure(response, responseJson, "parse_error", log);
+        log.warn("smart-planner: parse failed", {
+          reason: "invalid_complete_json",
+          stopReason: outputMetadata.stopReason,
+          contentBlockTypes: outputMetadata.contentBlockTypes,
+          selectedTextLength: outputMetadata.selectedTextLength,
+        });
         return {
           ok: false,
           status: "parse_error",
