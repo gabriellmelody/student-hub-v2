@@ -96,6 +96,37 @@ html:has(.settings-page) {
   gap: var(--density-home-gap);
 }
 
+.settings-search { position: relative; margin-bottom: var(--density-home-gap); }
+.settings-search > label { display: block; margin-bottom: 7px; color: var(--text-secondary); font-size: var(--font-helper); font-weight: 700; }
+.settings-search > input { width: 100%; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-button); padding: 0 13px; background: var(--control-bg); color: var(--text); font: inherit; }
+.settings-search > input:focus { border-color: var(--accent); outline: 2px solid var(--accent-tint); }
+.settings-search-results { position: absolute; z-index: 20; top: calc(100% + 6px); width: 100%; max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-card); padding: 5px; background: var(--surface); box-shadow: var(--shadow-card); }
+.settings-search-results button { width: 100%; display: flex; justify-content: space-between; gap: 12px; border: 0; border-radius: var(--radius-button); padding: 10px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.settings-search-results button.active { background: var(--accent-tint); }
+.settings-search-results small { color: var(--text-secondary); }
+.settings-search-results p { margin: 8px; color: var(--text-secondary); }
+
+.notifications-settings { display: grid; gap: var(--density-home-gap); }
+.settings-section-card.notification-card { display: grid; gap: 14px; border: 1px solid var(--border); border-radius: var(--radius-card); padding: 18px; background: var(--surface); box-shadow: var(--shadow-sm); }
+.notification-device-status { display: flex; align-items: flex-start; gap: 10px; }
+.notification-device-status p { margin: 3px 0 0; color: var(--text-secondary); font-size: var(--font-helper); }
+.notification-status-dot { width: 10px; height: 10px; margin-top: 5px; border-radius: 50%; background: var(--text-muted); flex: 0 0 auto; }
+.notification-status-dot.enabled { background: var(--success); }
+.notification-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.notification-setting-row, .notification-value-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; border-top: 1px solid var(--border); padding: 11px 0; }
+.notification-setting-row > span, .notification-value-row > span { display: grid; gap: 3px; }
+.notification-setting-row small, .notification-value-row small { color: var(--text-secondary); font-size: var(--font-meta); }
+.notification-setting-row input { width: 42px; height: 22px; accent-color: var(--accent); flex: 0 0 auto; }
+.notification-value-row input, .notification-value-row select, .notification-time-range input { min-height: 38px; border: 1px solid var(--border); border-radius: var(--radius-button); padding: 0 9px; background: var(--control-bg); color: var(--text); font: inherit; }
+.notification-time-range { display: flex; justify-content: flex-end; gap: 12px; }
+.notification-time-range label { display: grid; gap: 5px; color: var(--text-secondary); font-size: var(--font-meta); }
+.notification-sync-status { color: var(--text-secondary); }
+.notification-sync-error { color: var(--danger); }
+.settings-target-highlight { animation: settings-target-highlight 1.8s ease-out; border-radius: var(--radius-button); }
+@keyframes settings-target-highlight { 0%, 35% { box-shadow: 0 0 0 3px var(--accent-tint); background: var(--accent-tint); } 100% { box-shadow: none; } }
+@media (prefers-reduced-motion: reduce) { .settings-target-highlight { animation: none; outline: 3px solid var(--accent-tint); } }
+@media (max-width: 560px) { .settings-hub-grid { grid-template-columns: 1fr; } .notification-setting-row, .notification-value-row { align-items: flex-start; } .notification-time-range { justify-content: stretch; } .notification-time-range label { flex: 1; } .notification-time-range input { width: 100%; } }
+
 .settings-hub-card {
   width: 100%;
   min-height: calc(var(--density-button-height) * 2.2);

@@ -45,11 +45,17 @@ export default function useNotificationPush({ userId = "", accessToken = "" } = 
     return next;
   }, [accessToken]);
 
+  const disableThisDevice = useCallback(async () => {
+    const next = await cleanupNotificationSubscription({ accessToken });
+    setCapability(next);
+    return next;
+  }, [accessToken]);
+
   return {
     ...capability,
     enableNotifications: enable,
     reconcile: refresh,
     cleanupForLogout,
+    disableThisDevice,
   };
 }
-

@@ -80,6 +80,7 @@ import useGuidedTour from "./hooks/useGuidedTour.js";
 import usePwaInstall from "./hooks/usePwaInstall.js";
 import { useAuth } from "./hooks/useAuth.jsx";
 import usePwaUpdate from "./hooks/usePwaUpdate.js";
+import useNotificationPreferences from "./hooks/useNotificationPreferences.js";
 import { supabase } from "./lib/supabase.js";
 import {
   fetchClassroomSyncSettings,
@@ -261,7 +262,9 @@ function getInitialNavigationState() {
 
   return {
     activePage: routePage || (opensIntegrations || opensSettings ? "settings" : "home"),
-    settingsView: opensIntegrations ? "integrations" : "hub",
+    settingsView: window.location.pathname === "/settings/notifications"
+      ? "notifications"
+      : opensIntegrations ? "integrations" : "hub",
     classroomCallbackStatus:
       classroomResult === "connected" || classroomResult === "error"
         ? {
@@ -281,6 +284,7 @@ function getInitialNavigationState() {
 
 function App() {
   const auth = useAuth();
+  const notificationPreferences = useNotificationPreferences(auth.user);
   const [initialNavigation] = useState(getInitialNavigationState);
   const [activePage, setActivePage] = useState(initialNavigation.activePage);
   const [settingsView, setSettingsView] = useState(
@@ -3543,6 +3547,12 @@ function App() {
           onInstallDayLo={startInstallFlow}
           user={auth.user}
           onChangePassword={auth.changePassword}
+          notificationPush={auth.notificationPush}
+          notificationPreferences={notificationPreferences.preferences}
+          notificationPreferencesLoading={notificationPreferences.loading}
+          notificationPreferencesSaving={notificationPreferences.saving}
+          notificationPreferencesError={notificationPreferences.error}
+          onUpdateNotificationPreferences={notificationPreferences.updatePreferences}
           classroomSyncSettings={classroomSyncSettings}
           classroomSyncSettingsLoading={
             classroomSyncSettingsState.userId !== (auth.user?.id || "") ||

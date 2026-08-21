@@ -1,0 +1,14 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { DEFAULT_NOTIFICATION_PREFERENCES } from "../utils/notificationSchedulingUtils.js";
+import { ensureNotificationPreferences, mapNotificationPreferences, reconcileNotificationTimezone, updateNotificationPreferences } from "./notificationPreferences.js";
+
+function clientWith(rows = []) {
+  const calls = [];
+  return { calls, from(table) { const state = { table, action: "select", payload: null }; const builder = { select() { return builder; }, eq() { return builder; }, maybeSingle() { calls.push({ ...state }); return Promise.resolve(rows.shift() || { data: null, error: null }); }, insert(payload) { state.action = "insert"; state.payload = payload; return builder; }, update(payload) { state.action = "update"; state.payload = payload; return builder; }, single() { calls.push({ ...state }); return Promise.resolve(rows.shift() || { data: null, error: null }); } }; return builder; } };
+}
+const row = (overrides = {}) => ({ user_id: "user-a", master_enabled: false, new_classroom_tasks_enabled: true, task_due_tomorrow_enabled: true, task_due_today_enabled: true, daily_planning_enabled: true, daily_planning_time: "17:00:00", plan_start_enabled: true, plan_start_lead_minutes: 15, quiet_hours_enabled: true, quiet_hours_start: "22:00:00", quiet_hours_end: "07:00:00", notification_preview: "private", timezone: "UTC", ...overrides });
+
+test("account preference defaults are inserted and mapped", async () => { const client = clientWith([{ data: null, error: null }, { data: row(), error: null }]); const result = await ensureNotificationPreferences(client, "user-a"); assert.equal(result.dailyPlanningTime, "17:00"); assert.equal(client.calls[1].payload.master_enabled, DEFAULT_NOTIFICATION_PREFERENCES.masterEnabled); });
+test("preference updates save through the account-owned row", async () => { const client = clientWith([{ data: row({ master_enabled: true }), error: null }]); const result = await updateNotificationPreferences(client, "user-a", { masterEnabled: true }); assert.equal(result.masterEnabled, true); assert.deepEqual(client.calls[0].payload, { master_enabled: true }); });
+test("timezone reconciliation updates only when changed", async () => { const unchangedClient = clientWith(); const preferences = mapNotificationPreferences(row({ timezone: "Asia/Bangkok" })); assert.equal(await reconcileNotificationTimezone(unchangedClient, "user-a", preferences, "Asia/Bangkok"), preferences); assert.equal(unchangedClient.calls.length, 0); const changedClient = clientWith([{ data: row({ timezone: "Europe/London" }), error: null }]); const changed = await reconcileNotificationTimezone(changedClient, "user-a", preferences, "Europe/London"); assert.equal(changed.timezone, "Europe/London"); assert.deepEqual(changedClient.calls[0].payload, { timezone: "Europe/London" }); });

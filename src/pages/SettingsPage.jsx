@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import ClassroomSetupIntroModal from "../components/ClassroomSetupIntroModal.jsx";
 import DayloMark from "../components/DayloMark.jsx";
@@ -100,6 +100,8 @@ import {
 } from "../utils/classroomAutoSyncUtils.js";
 import { getClassroomManagerState, sortClassroomSettingsBySubject } from "../utils/classroomManagerUtils.js";
 import { getIntegrationAuthHeaders } from "../utils/integrationAuthUtils.js";
+import { NOTIFICATION_CAPABILITY_STATES } from "../utils/notificationPushUtils.js";
+import { searchSettings } from "../utils/settingsSearch.js";
 
 const STUDENT_HUB_SUPPORT_EMAIL = normalizeSupportEmail(
   import.meta.env.VITE_STUDENT_HUB_SUPPORT_EMAIL || ""
@@ -593,6 +595,12 @@ function SettingsPage({
   onInstallDayLo = () => {},
   user = null,
   onChangePassword = async () => {},
+  notificationPush = { state: NOTIFICATION_CAPABILITY_STATES.UNSUPPORTED },
+  notificationPreferences = {},
+  notificationPreferencesLoading = false,
+  notificationPreferencesSaving = false,
+  notificationPreferencesError = null,
+  onUpdateNotificationPreferences = async () => false,
   classroomSyncSettings = [],
   classroomSyncSettingsLoading = false,
   classroomSyncSettingsError = "",
@@ -615,6 +623,11 @@ function SettingsPage({
   const setThemeColorsRef = useRef(setThemeColors);
   const settingsHeadingRef = useRef(null);
   const previousSettingsViewRef = useRef(settingsView);
+  const [settingsSearchQuery, setSettingsSearchQuery] = useState("");
+  const [searchActiveIndex, setSearchActiveIndex] = useState(0);
+  const [highlightedSettingId, setHighlightedSettingId] = useState("");
+  const highlightTimerRef = useRef(null);
+  const settingsSearchResults = useMemo(() => searchSettings(settingsSearchQuery), [settingsSearchQuery]);
 
   useEffect(() => {
     setSettingsView(initialView || "hub");
@@ -669,6 +682,33 @@ function SettingsPage({
       }
     };
   }, []);
+
+  useEffect(() => () => window.clearTimeout(highlightTimerRef.current), []);
+
+  function openSearchResult(result) {
+    setSettingsSearchQuery("");
+    setSettingsView(result.view);
+    if (!result.anchor) return;
+    window.setTimeout(() => {
+      const target = document.getElementById(result.anchor);
+      if (!target) return;
+      target.scrollIntoView({ block: "center", behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth" });
+      setHighlightedSettingId(result.anchor);
+      const focusTarget = target.matches?.("button,input,select,textarea") ? target : target.querySelector?.("button,input,select,textarea,[tabindex]");
+      focusTarget?.focus?.({ preventScroll: true });
+      window.clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = window.setTimeout(() => setHighlightedSettingId(""), 1800);
+    }, 0);
+  }
+
+  function handleSearchKeyDown(event) {
+    if (!settingsSearchResults.length) return;
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      setSearchActiveIndex((index) => (index + (event.key === "ArrowDown" ? 1 : -1) + settingsSearchResults.length) % settingsSearchResults.length);
+    } else if (event.key === "Enter") { event.preventDefault(); openSearchResult(settingsSearchResults[searchActiveIndex] || settingsSearchResults[0]); }
+    else if (event.key === "Escape") setSettingsSearchQuery("");
+  }
 
   const themeColorWarnings = getThemeColorWarnings(themeColorDraft);
   const themeColorHasWarnings = Object.keys(themeColorWarnings).length > 0;
@@ -836,6 +876,11 @@ function SettingsPage({
       title: "Account & security",
       description: "Review your sign-in method and password.",
     },
+    notifications: {
+      eyebrow: "Settings / Notifications",
+      title: "Notifications",
+      description: "Choose notification preferences for your account and this device.",
+    },
   };
   const currentViewCopy = viewCopy[settingsView];
 
@@ -867,6 +912,14 @@ function SettingsPage({
         key={settingsView}
       >
         {settingsView === "hub" ? (
+        <>
+        <div className="settings-search">
+          <label htmlFor="settings-search-input">Search settings</label>
+          <input id="settings-search-input" type="search" autoComplete="off" placeholder="Search settings" value={settingsSearchQuery} onChange={(event) => { setSettingsSearchQuery(event.target.value); setSearchActiveIndex(0); }} onKeyDown={handleSearchKeyDown} aria-controls="settings-search-results" aria-expanded={Boolean(settingsSearchQuery)} />
+          {settingsSearchQuery && <div id="settings-search-results" className="settings-search-results" role="listbox">
+            {settingsSearchResults.length ? settingsSearchResults.map((result, index) => <button key={result.id} type="button" role="option" aria-selected={index === searchActiveIndex} className={index === searchActiveIndex ? "active" : ""} onMouseEnter={() => setSearchActiveIndex(index)} onClick={() => openSearchResult(result)}><span>{result.label}</span><small>{result.section}</small></button>) : <p>No settings found.</p>}
+          </div>}
+        </div>
         <div className="settings-hub-grid">
           <button
             type="button"
@@ -880,6 +933,11 @@ function SettingsPage({
             <span className="settings-hub-arrow" aria-hidden="true">
               →
             </span>
+          </button>
+
+          <button type="button" className="settings-hub-card" onClick={() => setSettingsView("notifications")}>
+            <span><strong>Notifications</strong><small>Push, reminders, and quiet hours</small></span>
+            <span className="settings-hub-arrow" aria-hidden="true">→</span>
           </button>
 
           <button
@@ -976,7 +1034,7 @@ function SettingsPage({
             </span>
             <span className="settings-hub-arrow" aria-hidden="true">→</span>
           </button>
-        </div>
+        </div></>
       ) : settingsView === "accountSecurity" ? (
         <AccountSecuritySettings user={user} onChangePassword={onChangePassword} />
       ) : settingsView === "appUpdates" ? (
@@ -985,6 +1043,8 @@ function SettingsPage({
           updateControl={updateControl}
           onInstallDayLo={onInstallDayLo}
         />
+      ) : settingsView === "notifications" ? (
+        <NotificationsSettings push={notificationPush} preferences={notificationPreferences} loading={notificationPreferencesLoading} saving={notificationPreferencesSaving} error={notificationPreferencesError} onUpdate={onUpdateNotificationPreferences} highlightedSettingId={highlightedSettingId} />
       ) : settingsView === "appearance" ? (
         <div className="panel appearance-panel">
           <section className="appearance-group">
@@ -1007,7 +1067,7 @@ function SettingsPage({
                 )}
               </div>
             )}
-            <div className="theme-setting">
+            <div id="appearance-mode" className={`theme-setting ${highlightedSettingId === "appearance-mode" ? "settings-target-highlight" : ""}`}>
               <div>
                 <h3>Appearance mode</h3>
                 <p>Choose the appearance that feels most comfortable.</p>
@@ -1032,7 +1092,7 @@ function SettingsPage({
               </div>
             </div>
 
-            <div className="theme-setting accent-setting theme-colour-setting">
+            <div id="accent-colour" className={`theme-setting accent-setting theme-colour-setting ${highlightedSettingId === "accent-colour" ? "settings-target-highlight" : ""}`}>
               <div>
                 <h3>Theme colours</h3>
                 <p>Palettes customise the three colour roles together.</p>
@@ -1327,7 +1387,7 @@ function SettingsPage({
               </div>
             </div>
 
-            <div className="theme-setting density-setting">
+            <div id="density" className={`theme-setting density-setting ${highlightedSettingId === "density" ? "settings-target-highlight" : ""}`}>
               <div>
                 <h3>Layout density</h3>
                 <p>Choose between breathing room and a tighter workspace.</p>
@@ -1383,6 +1443,7 @@ function SettingsPage({
         />
       ) : settingsView === "integrations" ? (
         <IntegrationsSettings
+          highlightedSettingId={highlightedSettingId}
           tasks={tasks}
           subjects={subjects}
           setSubjects={setSubjects}
@@ -1471,7 +1532,56 @@ function AccountSecuritySettings({ user, onChangePassword }) {
     }
   }
 
-  return <div className="panel account-security-panel"><section className="account-security-row"><div><h3>Sign-in method</h3><p>{passwordEnabled ? "Email and password" : "Google"}</p></div></section>{passwordEnabled && <section className="account-security-row"><div><h3>Password</h3><p>Use at least {AUTH_PASSWORD_MIN_LENGTH} characters.</p></div>{!editing && <button type="button" className="secondary-button" onClick={() => { setEditing(true); setMessage(""); }}>Change password</button>}{editing && <form className="account-password-form" onSubmit={submit}><label><span>Current password</span><input type="password" autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label><span>New password</span><input type="password" autoComplete="new-password" minLength={AUTH_PASSWORD_MIN_LENGTH} required value={password} onChange={(event) => setPassword(event.target.value)} /></label><PasswordStrength password={password} /><label><span>Confirm new password</span><input type="password" autoComplete="new-password" minLength={AUTH_PASSWORD_MIN_LENGTH} required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>{error && <p className="auth-message auth-message-error" role="alert">{error}</p>}<div className="account-password-actions"><button type="submit" className="primary-button" disabled={submitting}>{submitting ? "Updating..." : "Update password"}</button><button type="button" className="secondary-button" onClick={() => setEditing(false)} disabled={submitting}>Cancel</button></div></form>}</section>}{message && <p className="auth-message auth-message-success" role="status">{message}</p>}</div>;
+  return <div className="panel account-security-panel"><section className="account-security-row"><div><h3>Sign-in method</h3><p>{passwordEnabled ? "Email and password" : "Google"}</p></div></section>{passwordEnabled && <section id="change-password" className="account-security-row"><div><h3>Password</h3><p>Use at least {AUTH_PASSWORD_MIN_LENGTH} characters.</p></div>{!editing && <button type="button" className="secondary-button" onClick={() => { setEditing(true); setMessage(""); }}>Change password</button>}{editing && <form className="account-password-form" onSubmit={submit}><label><span>Current password</span><input type="password" autoComplete="current-password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} /></label><label><span>New password</span><input type="password" autoComplete="new-password" minLength={AUTH_PASSWORD_MIN_LENGTH} required value={password} onChange={(event) => setPassword(event.target.value)} /></label><PasswordStrength password={password} /><label><span>Confirm new password</span><input type="password" autoComplete="new-password" minLength={AUTH_PASSWORD_MIN_LENGTH} required value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>{error && <p className="auth-message auth-message-error" role="alert">{error}</p>}<div className="account-password-actions"><button type="submit" className="primary-button" disabled={submitting}>{submitting ? "Updating..." : "Update password"}</button><button type="button" className="secondary-button" onClick={() => setEditing(false)} disabled={submitting}>Cancel</button></div></form>}</section>}{message && <p className="auth-message auth-message-success" role="status">{message}</p>}</div>;
+}
+
+function NotificationToggle({ id, label, description, checked, disabled, onChange, highlighted }) {
+  return <label id={id} className={`notification-setting-row ${highlighted ? "settings-target-highlight" : ""}`}>
+    <span><strong>{label}</strong>{description && <small>{description}</small>}</span>
+    <input type="checkbox" role="switch" checked={Boolean(checked)} disabled={disabled} onChange={(event) => onChange(event.target.checked)} />
+  </label>;
+}
+
+function NotificationsSettings({ push, preferences, loading, saving, error, onUpdate, highlightedSettingId }) {
+  const state = push?.state || NOTIFICATION_CAPABILITY_STATES.UNSUPPORTED;
+  const subscribed = state === NOTIFICATION_CAPABILITY_STATES.SUBSCRIBED;
+  const status = {
+    [NOTIFICATION_CAPABILITY_STATES.SUBSCRIBED]: ["Enabled on this device", "This browser is registered for DayLo push notifications."],
+    [NOTIFICATION_CAPABILITY_STATES.PERMISSION_DEFAULT]: ["Not enabled on this device", "Enable notifications when you're ready. Your browser will ask for permission."],
+    [NOTIFICATION_CAPABILITY_STATES.PERMISSION_GRANTED_UNSUBSCRIBED]: ["Not enabled on this device", "Permission is available, but this browser is not registered."],
+    [NOTIFICATION_CAPABILITY_STATES.PERMISSION_DENIED]: ["Blocked by your browser", "Allow notifications for DayLo in your browser or device settings, then try again."],
+    [NOTIFICATION_CAPABILITY_STATES.IOS_INSTALL_REQUIRED]: ["Install DayLo first", "On iPhone or iPad, add DayLo to your Home Screen before enabling notifications."],
+    [NOTIFICATION_CAPABILITY_STATES.UNSUPPORTED]: ["Not supported", "Push notifications are unavailable in this browser."],
+    [NOTIFICATION_CAPABILITY_STATES.ERROR]: ["Couldn't update this device", "Check your connection and try again."],
+  }[state] || ["Not enabled on this device", "Enable push notifications for this browser."];
+  const canEnable = !subscribed && ![NOTIFICATION_CAPABILITY_STATES.UNSUPPORTED, NOTIFICATION_CAPABILITY_STATES.IOS_INSTALL_REQUIRED, NOTIFICATION_CAPABILITY_STATES.PERMISSION_DENIED].includes(state);
+  const disabled = loading || saving;
+  const toggle = (key) => (value) => void onUpdate({ [key]: value });
+
+  return <div className="notifications-settings">
+    <section className="settings-section-card notification-card">
+      <div className="settings-section-heading"><h2>Device status</h2><p>Push permission and subscriptions are managed separately on every device.</p></div>
+      <div className="notification-device-status"><span className={`notification-status-dot ${subscribed ? "enabled" : ""}`} aria-hidden="true" /><div><strong>{status[0]}</strong><p>{status[1]}</p></div></div>
+      <div className="notification-actions">{subscribed ? <button type="button" className="secondary-button" onClick={() => void push.disableThisDevice?.()}>Disable on this device</button> : <button type="button" className="primary-button" disabled={!canEnable} onClick={() => void push.enableNotifications?.()}>{state === NOTIFICATION_CAPABILITY_STATES.ERROR ? "Try again" : "Enable notifications"}</button>}</div>
+    </section>
+    <section className="settings-section-card notification-card">
+      <div className="settings-section-heading"><h2>Account preferences</h2><p>These choices sync across devices. Delivery begins only after notifications are enabled on a device.</p></div>
+      {loading ? <p role="status">Loading notification preferences...</p> : <>
+        <NotificationToggle label="Notifications" description="Account-wide delivery switch" checked={preferences.masterEnabled} disabled={disabled} onChange={toggle("masterEnabled")} />
+        <NotificationToggle label="New Classroom tasks" checked={preferences.newClassroomTasksEnabled} disabled={disabled} onChange={toggle("newClassroomTasksEnabled")} />
+        <NotificationToggle label="Tasks due tomorrow" checked={preferences.taskDueTomorrowEnabled} disabled={disabled} onChange={toggle("taskDueTomorrowEnabled")} />
+        <NotificationToggle label="Tasks due today" checked={preferences.taskDueTodayEnabled} disabled={disabled} onChange={toggle("taskDueTodayEnabled")} />
+        <NotificationToggle id="planning-reminder" highlighted={highlightedSettingId === "planning-reminder"} label="Plan my evening" checked={preferences.dailyPlanningEnabled} disabled={disabled} onChange={toggle("dailyPlanningEnabled")} />
+        <label className="notification-value-row"><span><strong>Planning reminder time</strong><small>{preferences.timezone || "UTC"}</small></span><input type="time" value={preferences.dailyPlanningTime || "17:00"} disabled={disabled || !preferences.dailyPlanningEnabled} onChange={(event) => void onUpdate({ dailyPlanningTime: event.target.value })} /></label>
+        <NotificationToggle label="Today's Plan starting soon" checked={preferences.planStartEnabled} disabled={disabled} onChange={toggle("planStartEnabled")} />
+        <label className="notification-value-row"><span><strong>Plan reminder lead time</strong></span><select value={preferences.planStartLeadMinutes || 15} disabled={disabled || !preferences.planStartEnabled} onChange={(event) => void onUpdate({ planStartLeadMinutes: Number(event.target.value) })}>{[5, 10, 15, 30].map((minutes) => <option key={minutes} value={minutes}>{minutes} minutes</option>)}</select></label>
+        <NotificationToggle id="quiet-hours" highlighted={highlightedSettingId === "quiet-hours"} label="Quiet hours" description="Hold notifications during this daily window" checked={preferences.quietHoursEnabled} disabled={disabled} onChange={toggle("quietHoursEnabled")} />
+        <div className="notification-time-range"><label><span>Starts</span><input type="time" value={preferences.quietHoursStart || "22:00"} disabled={disabled || !preferences.quietHoursEnabled} onChange={(event) => void onUpdate({ quietHoursStart: event.target.value })} /></label><label><span>Ends</span><input type="time" value={preferences.quietHoursEnd || "07:00"} disabled={disabled || !preferences.quietHoursEnabled} onChange={(event) => void onUpdate({ quietHoursEnd: event.target.value })} /></label></div>
+      </>}
+      {saving && <p className="notification-sync-status" role="status">Saving...</p>}
+      {error && <p className="notification-sync-error" role="alert">Notification preferences couldn't sync.</p>}
+    </section>
+  </div>;
 }
 
 function AppUpdatesSettings({ installControl, updateControl, onInstallDayLo }) {
@@ -1579,6 +1689,7 @@ function AppUpdatesSettings({ installControl, updateControl, onInstallDayLo }) {
 }
 
 function IntegrationsSettings({
+  highlightedSettingId = "",
   authAccessToken = "",
   tasks,
   subjects,
@@ -3928,6 +4039,7 @@ function IntegrationsSettings({
           {visibleIntegrations.map((integration) => (
             <IntegrationCard
               integration={integration}
+              highlightedSettingId={highlightedSettingId}
               key={integration.id}
               classroomConnection={classroomConnection}
               importedCount={importedCount}
@@ -4082,6 +4194,7 @@ function ClassroomSuccessToast({ title, summary, onClose }) {
 
 function IntegrationCard({
   integration,
+  highlightedSettingId = "",
   classroomConnection,
   importedCount,
   syncMessage,
@@ -4185,7 +4298,8 @@ function IntegrationCard({
 
   return (
     <article
-      className="integration-card"
+      id={isRealClassroom ? "google-classroom" : isGoogleCalendar ? "google-calendar" : undefined}
+      className={`integration-card ${highlightedSettingId === (isRealClassroom ? "google-classroom" : isGoogleCalendar ? "google-calendar" : "") ? "settings-target-highlight" : ""}`}
       data-tour={
         isSmartPlanner
           ? "smart-planner-status"
