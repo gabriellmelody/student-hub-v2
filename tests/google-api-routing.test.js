@@ -47,7 +47,7 @@ test("all consolidated Google handler modules remain callable", async () => {
   }
 });
 
-test("api contains only three deployable JavaScript functions and no helpers", async () => {
+test("api contains only four consolidated deployable JavaScript functions and no helpers", async () => {
   async function collect(directory) {
     const entries = await readdir(directory, { withFileTypes: true });
     const nested = await Promise.all(entries.map((entry) => {
@@ -65,6 +65,7 @@ test("api contains only three deployable JavaScript functions and no helpers", a
   assert.deepEqual(files, [
     "api/google-calendar/[action].js",
     "api/google-classroom/[action].js",
+    "api/notifications/[action].js",
     "api/smart-planner/generate.js",
   ]);
   assert.equal(files.some((file) => /\/(?:_|helpers?)/.test(file)), false);

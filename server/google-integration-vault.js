@@ -1,4 +1,13 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "crypto";
+import {
+  getSupabaseServerUrl,
+  getSupabaseServiceHeaders,
+  readBearerToken,
+  requireDayloUser,
+  requiredServerEnv,
+} from "./supabase-server.js";
+
+export { readBearerToken, requireDayloUser };
 
 const INTEGRATIONS = new Set(["classroom", "calendar"]);
 const OAUTH_STATE_MAX_AGE_MS = 10 * 60 * 1000;
@@ -16,14 +25,8 @@ export function isGoogleIntegrationVaultError(error) {
   return error instanceof GoogleIntegrationVaultError;
 }
 
-function requiredEnv(env, name) {
-  const value = String(env[name] || "").trim();
-  if (!value) throw new Error(`missing_${name.toLowerCase()}`);
-  return value;
-}
-
 function encryptionKey(env, purpose) {
-  const secret = requiredEnv(env, "GOOGLE_INTEGRATION_VAULT_SECRET");
+  const secret = requiredServerEnv(env, "GOOGLE_INTEGRATION_VAULT_SECRET");
   if (secret.length < 32) throw new Error("invalid_google_integration_vault_secret");
   return createHash("sha256").update(`${purpose}:${secret}`).digest();
 }
@@ -43,41 +46,8 @@ function decryptJson(value, env, purpose) {
   return JSON.parse(Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8"));
 }
 
-function isLegacyJwtKey(value) {
-  return String(value).split(".").length === 3;
-}
-
-function serviceHeaders(env, extras = {}) {
-  const serviceKey = requiredEnv(env, "SUPABASE_SERVICE_ROLE_KEY");
-  return {
-    apikey: serviceKey,
-    ...(isLegacyJwtKey(serviceKey)
-      ? { Authorization: `Bearer ${serviceKey}` }
-      : {}),
-    ...extras,
-  };
-}
-
 function vaultUrl(env, query = "") {
-  return `${requiredEnv(env, "SUPABASE_URL").replace(/\/$/, "")}/rest/v1/google_integration_tokens${query}`;
-}
-
-export function readBearerToken(request) {
-  const match = String(request.headers?.authorization || "").match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || "";
-}
-
-export async function requireDayloUser(request, { env = process.env, fetchImpl = fetch } = {}) {
-  const token = readBearerToken(request);
-  if (!token) return { ok: false, status: "daylo_auth_required", statusCode: 401 };
-  const response = await fetchImpl(`${requiredEnv(env, "SUPABASE_URL").replace(/\/$/, "")}/auth/v1/user`, {
-    headers: { ...serviceHeaders(env), Authorization: `Bearer ${token}` },
-  });
-  const body = await response.json().catch(() => null);
-  if (!response.ok || typeof body?.id !== "string") {
-    return { ok: false, status: "daylo_session_invalid", statusCode: 401 };
-  }
-  return { ok: true, userId: body.id };
+  return `${getSupabaseServerUrl(env, "/rest/v1/google_integration_tokens")}${query}`;
 }
 
 function queryFailureCategory(status, body) {
@@ -114,7 +84,7 @@ export async function loadGoogleIntegration(userId, integration, {
   const query = `?user_id=eq.${encodeURIComponent(userId)}&integration=eq.${integration}&select=*`;
   let response;
   try {
-    response = await fetchImpl(vaultUrl(env, query), { headers: serviceHeaders(env) });
+    response = await fetchImpl(vaultUrl(env, query), { headers: getSupabaseServiceHeaders(env) });
   } catch (error) {
     const category = configurationError(error) ? "configuration_invalid" : "network_error";
     log.error("vault: supabase query failed", { integration, category, elapsedMs: now() - startedAt });
@@ -189,7 +159,7 @@ export async function saveGoogleIntegration(userId, integration, session, {
   try {
     response = await fetchImpl(vaultUrl(env), {
       method: "POST",
-      headers: serviceHeaders(env, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }),
+      headers: getSupabaseServiceHeaders(env, { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" }),
       body: JSON.stringify(payload),
     });
   } catch (error) {
@@ -213,7 +183,7 @@ export async function saveGoogleIntegration(userId, integration, session, {
 
 export async function deleteGoogleIntegration(userId, integration, { env = process.env, fetchImpl = fetch } = {}) {
   const query = `?user_id=eq.${encodeURIComponent(userId)}&integration=eq.${integration}`;
-  const response = await fetchImpl(vaultUrl(env, query), { method: "DELETE", headers: serviceHeaders(env) });
+  const response = await fetchImpl(vaultUrl(env, query), { method: "DELETE", headers: getSupabaseServiceHeaders(env) });
   if (!response.ok) throw new Error("vault_delete_failed");
 }
 

@@ -318,6 +318,7 @@ test("vault table and client boundary expose no token material", () => {
   const client = readFileSync(new URL("../src/utils/integrationAuthUtils.js", import.meta.url), "utf8");
   assert.doesNotMatch(client, /SERVICE_ROLE|refresh_token|access_token/);
   const vault = readFileSync(new URL("../server/google-integration-vault.js", import.meta.url), "utf8");
+  const server = readFileSync(new URL("../server/supabase-server.js", import.meta.url), "utf8");
   assert.match(vault, /aes-256-gcm/);
-  assert.match(vault, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(server, /SUPABASE_SERVICE_ROLE_KEY/);
 });

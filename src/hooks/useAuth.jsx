@@ -8,6 +8,7 @@ import {
   subscribeToUserProfileChanges,
 } from "../lib/profile.js";
 import { requestPasswordReset, resendSignupConfirmation, startGoogleOAuth } from "../utils/authUtils.js";
+import useNotificationPush from "./useNotificationPush.js";
 
 const AuthContext = createContext(null);
 const PROFILE_BOOTSTRAP_RETRY_DELAY_MS = 650;
@@ -30,6 +31,10 @@ export function AuthProvider({ children }) {
   const activeUserIdRef = useRef(null);
   const profileBootstrapRef = useRef({ userId: null, promise: null });
   const profileRefetchTimerRef = useRef(null);
+  const notificationPush = useNotificationPush({
+    userId: user?.id || "",
+    accessToken: session?.access_token || "",
+  });
 
   const loadProfile = useCallback(async (nextUser, { retry = true, silent = false } = {}) => {
     const userId = nextUser?.id || null;
@@ -212,6 +217,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const signOut = useCallback(async () => {
+    await notificationPush.cleanupForLogout();
     const result = await supabase.auth.signOut();
     if (result.error) throw result.error;
     activeUserIdRef.current = null;
@@ -222,7 +228,7 @@ export function AuthProvider({ children }) {
     setProfileError(null);
     setProfileLoading(false);
     setRecoveryMode(false);
-  }, []);
+  }, [notificationPush.cleanupForLogout]);
 
   const retryProfile = useCallback(() => loadProfile(user, { retry: false }), [loadProfile, user]);
   const refreshProfile = useCallback(
@@ -263,6 +269,7 @@ export function AuthProvider({ children }) {
     retryProfile,
     refreshProfile,
     updateProfile,
+    notificationPush,
   }), [
     user,
     session,
@@ -282,6 +289,7 @@ export function AuthProvider({ children }) {
     retryProfile,
     refreshProfile,
     updateProfile,
+    notificationPush,
   ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -23,6 +23,10 @@ const migration = readFileSync(
   new URL("../../supabase/migrations/20260821_notifications_pass1.sql", import.meta.url),
   "utf8"
 );
+const classroomCourseworkSource = readFileSync(
+  new URL("../../server/google-classroom/coursework-preview.js", import.meta.url),
+  "utf8"
+);
 
 test("notification occurrence keys are deterministic and identifier-based", () => {
   assert.equal(
@@ -37,6 +41,17 @@ test("notification occurrence keys are deterministic and identifier-based", () =
   assert.equal(
     planStartOccurrenceKey("plan-1", "2026-08-21", "17:30"),
     "plan-start:plan-1:2026-08-21:17:30"
+  );
+});
+
+test("Classroom occurrence keys cannot collide across courses", () => {
+  assert.match(
+    classroomCourseworkSource,
+    /externalId: `\$\{course\.classroomCourseId\}:\$\{courseworkId\}`/
+  );
+  assert.notEqual(
+    classroomNewOccurrenceKey("course-a:work-1"),
+    classroomNewOccurrenceKey("course-b:work-1")
   );
 });
 

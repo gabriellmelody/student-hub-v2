@@ -253,9 +253,14 @@ function getInitialNavigationState() {
     googleCalendarResult === "connected" ||
     googleCalendarResult === "error";
   const opensSettings = window.location.pathname === "/settings";
+  const routePage = {
+    "/tasks": "tasks",
+    "/plan": "plan",
+    "/settings/notifications": "settings",
+  }[window.location.pathname];
 
   return {
-    activePage: opensIntegrations || opensSettings ? "settings" : "home",
+    activePage: routePage || (opensIntegrations || opensSettings ? "settings" : "home"),
     settingsView: opensIntegrations ? "integrations" : "hub",
     classroomCallbackStatus:
       classroomResult === "connected" || classroomResult === "error"
