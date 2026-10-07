@@ -9,10 +9,12 @@ import {
   deleteCloudMyList,
   deleteCloudMyListItem,
   fetchCloudMyLists,
+  mapCloudMyList,
   mapCloudMyListItem,
   renameCloudMyList,
   subscribeToCloudMyListChanges,
   updateCloudMyListItem,
+  updateCloudMyListColour,
   updateCloudMyListOrder,
 } from "./cloudMyLists.js";
 
@@ -21,8 +23,9 @@ const OTHER_USER = "22222222-2222-4222-8222-222222222222";
 const LIST = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const OTHER_LIST = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const ITEM = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
-const listRow = (overrides = {}) => ({ id: LIST, user_id: USER, name: "Personal", sort_order: 0, ...overrides });
-const itemRow = (overrides = {}) => ({ id: ITEM, user_id: USER, list_id: LIST, title: "Email coach", notes: "", is_completed: false, sort_order: 0, ...overrides });
+const SUBJECT = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+const listRow = (overrides = {}) => ({ id: LIST, user_id: USER, name: "Personal", color_key: "sky", sort_order: 0, ...overrides });
+const itemRow = (overrides = {}) => ({ id: ITEM, user_id: USER, list_id: LIST, subject_id: null, title: "Email coach", notes: "", is_completed: false, sort_order: 0, ...overrides });
 
 function mockClient(results = []) {
   const calls = [];
@@ -58,15 +61,25 @@ test("fetch is scoped to the authenticated user and keeps list/card ordering", a
 
 test("cloud rows serialize consistently across devices", () => {
   assert.deepEqual(mapCloudMyListItem(itemRow({ notes: "Line one\nLine two", is_completed: true })), {
-    id: ITEM, listId: LIST, title: "Email coach", notes: "Line one\nLine two", completed: true, sortOrder: 0,
+    id: ITEM, listId: LIST, subjectId: null, title: "Email coach", notes: "Line one\nLine two", completed: true, sortOrder: 0,
   });
+  assert.equal(mapCloudMyList(listRow({ color_key: "violet" })).colorKey, "violet");
 });
 
 test("list creation writes authenticated ownership and persisted order", async () => {
   const client = mockClient([{ data: listRow({ name: "Cooking", sort_order: 2 }), error: null }]);
   const created = await createCloudMyList(client, USER, " Cooking ", 2);
   assert.equal(created.name, "Cooking");
-  assert.deepEqual(client.calls[0].payload, { user_id: USER, name: "Cooking", sort_order: 2 });
+  assert.deepEqual(client.calls[0].payload, { user_id: USER, name: "Cooking", color_key: "sky", sort_order: 2 });
+});
+
+test("list colour persists without changing list contents", async () => {
+  const client = mockClient([{ data: listRow({ color_key: "peach" }), error: null }]);
+  const updated = await updateCloudMyListColour(client, USER, LIST, "peach");
+  assert.equal(updated.colorKey, "peach");
+  assert.deepEqual(client.calls[0].payload, { color_key: "peach" });
+  assert.deepEqual(client.calls[0].filters, [["user_id", USER], ["id", LIST]]);
+  assert.equal(Object.hasOwn(client.calls[0].payload, "items"), false);
 });
 
 test("spaces-only list names are rejected", () => {
@@ -96,8 +109,27 @@ test("empty and populated list deletion use the same user-scoped cascade boundar
 test("title-only card creation stores no academic metadata", async () => {
   const client = mockClient([{ data: itemRow(), error: null }]);
   await createCloudMyListItem(client, { userId: USER, listId: LIST, title: "Email coach" });
-  assert.deepEqual(Object.keys(client.calls[0].payload).sort(), ["is_completed", "list_id", "notes", "sort_order", "title", "user_id"]);
+  assert.deepEqual(Object.keys(client.calls[0].payload).sort(), ["is_completed", "list_id", "notes", "sort_order", "subject_id", "title", "user_id"]);
   assert.equal(client.calls[0].payload.notes, "");
+  assert.equal(client.calls[0].payload.subject_id, null);
+});
+
+test("an existing Subject UUID persists as optional card context", async () => {
+  const client = mockClient([{ data: itemRow({ subject_id: SUBJECT }), error: null }]);
+  const result = await createCloudMyListItem(client, {
+    userId: USER,
+    listId: LIST,
+    title: "Email teacher",
+    subjectId: SUBJECT,
+  });
+  assert.equal(client.calls[0].payload.subject_id, SUBJECT);
+  assert.equal(result.subjectId, SUBJECT);
+});
+
+test("invalid Subject references safely become null", () => {
+  const payload = buildMyListItemPayload({ userId: USER, listId: LIST, title: "Buy folder", subjectId: "not-a-uuid" });
+  assert.equal(payload.subject_id, null);
+  assert.equal(mapCloudMyListItem(itemRow({ subject_id: "bad" })).subjectId, null);
 });
 
 test("card creation preserves multiline notes", () => {
@@ -122,6 +154,16 @@ test("cards can be completed without deletion", async () => {
 test("completed cards can be reopened", async () => {
   const client = mockClient([{ data: itemRow({ is_completed: false }), error: null }]);
   assert.equal((await updateCloudMyListItem(client, USER, ITEM, { completed: false })).completed, false);
+});
+
+test("card Subject links can be updated or cleared without changing task semantics", async () => {
+  const linkedClient = mockClient([{ data: itemRow({ subject_id: SUBJECT }), error: null }]);
+  await updateCloudMyListItem(linkedClient, USER, ITEM, { subjectId: SUBJECT });
+  assert.deepEqual(linkedClient.calls[0].payload, { subject_id: SUBJECT });
+
+  const clearedClient = mockClient([{ data: itemRow({ subject_id: null }), error: null }]);
+  await updateCloudMyListItem(clearedClient, USER, ITEM, { subjectId: "" });
+  assert.deepEqual(clearedClient.calls[0].payload, { subject_id: null });
 });
 
 test("cards can move between lists and append with a stable order", async () => {
@@ -170,3 +212,11 @@ test("migration cascades deliberate list deletion and enables Realtime", () => {
   assert.match(sql, /supabase_realtime add table public\.my_list_items/);
 });
 
+test("polish migration keeps Subject links contextual and account scoped", () => {
+  const sql = readFileSync(new URL("../../supabase/migrations/20261007_my_lists_colour_subject.sql", import.meta.url), "utf8");
+  assert.match(sql, /add column if not exists color_key text not null default 'sky'/);
+  assert.match(sql, /add column if not exists subject_id uuid null/);
+  assert.match(sql, /references public\.subjects \(id\)[\s\S]*on delete set null/);
+  assert.match(sql, /subjects\.user_id = auth\.uid\(\)/g);
+  assert.match(sql, /where subject_id is not null/);
+});

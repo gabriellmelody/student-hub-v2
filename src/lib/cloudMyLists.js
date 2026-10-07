@@ -2,10 +2,12 @@ import {
   cleanMyListItemNotes,
   cleanMyListItemTitle,
   cleanMyListName,
+  normalizeMyListColourKey,
 } from "../utils/myListsUtils.js";
 
-const LIST_COLUMNS = "id,user_id,name,sort_order,created_at,updated_at";
-const ITEM_COLUMNS = "id,user_id,list_id,title,notes,is_completed,sort_order,created_at,updated_at";
+const LIST_COLUMNS = "id,user_id,name,color_key,sort_order,created_at,updated_at";
+const ITEM_COLUMNS = "id,user_id,list_id,subject_id,title,notes,is_completed,sort_order,created_at,updated_at";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function numericSortOrder(value) {
   const order = Number(value);
@@ -16,6 +18,7 @@ export function mapCloudMyList(row = {}) {
   return {
     id: String(row.id || ""),
     name: cleanMyListName(row.name),
+    colorKey: normalizeMyListColourKey(row.color_key),
     sortOrder: numericSortOrder(row.sort_order),
     items: [],
   };
@@ -25,6 +28,7 @@ export function mapCloudMyListItem(row = {}) {
   return {
     id: String(row.id || ""),
     listId: String(row.list_id || ""),
+    subjectId: UUID_PATTERN.test(String(row.subject_id || "")) ? String(row.subject_id) : null,
     title: cleanMyListItemTitle(row.title),
     notes: String(row.notes || "").slice(0, 5000),
     completed: row.is_completed === true,
@@ -32,10 +36,15 @@ export function mapCloudMyListItem(row = {}) {
   };
 }
 
-export function buildMyListPayload({ userId, name, sortOrder = 0 }) {
+export function buildMyListPayload({ userId, name, colorKey = "sky", sortOrder = 0 }) {
   const cleanName = cleanMyListName(name);
   if (!userId || !cleanName) throw new Error("A list name is required.");
-  return { user_id: userId, name: cleanName, sort_order: numericSortOrder(sortOrder) };
+  return {
+    user_id: userId,
+    name: cleanName,
+    color_key: normalizeMyListColourKey(colorKey),
+    sort_order: numericSortOrder(sortOrder),
+  };
 }
 
 export function buildMyListItemPayload({
@@ -43,6 +52,7 @@ export function buildMyListItemPayload({
   listId,
   title,
   notes = "",
+  subjectId = null,
   completed = false,
   sortOrder = 0,
 }) {
@@ -51,6 +61,7 @@ export function buildMyListItemPayload({
   return {
     user_id: userId,
     list_id: listId,
+    subject_id: UUID_PATTERN.test(String(subjectId || "")) ? subjectId : null,
     title: cleanTitle,
     notes: cleanMyListItemNotes(notes),
     is_completed: completed === true,
@@ -82,9 +93,9 @@ export async function fetchCloudMyLists(client, userId) {
   });
 }
 
-export async function createCloudMyList(client, userId, name, sortOrder) {
+export async function createCloudMyList(client, userId, name, sortOrder, colorKey = "sky") {
   const { data, error } = await client.from("my_lists")
-    .insert(buildMyListPayload({ userId, name, sortOrder }))
+    .insert(buildMyListPayload({ userId, name, colorKey, sortOrder }))
     .select(LIST_COLUMNS).single();
   if (error) throw error;
   return mapCloudMyList(data);
@@ -94,6 +105,14 @@ export async function renameCloudMyList(client, userId, listId, name) {
   const cleanName = cleanMyListName(name);
   if (!cleanName) throw new Error("A list name is required.");
   const { data, error } = await client.from("my_lists").update({ name: cleanName })
+    .eq("user_id", userId).eq("id", listId).select(LIST_COLUMNS).single();
+  if (error) throw error;
+  return mapCloudMyList(data);
+}
+
+export async function updateCloudMyListColour(client, userId, listId, colorKey) {
+  const { data, error } = await client.from("my_lists")
+    .update({ color_key: normalizeMyListColourKey(colorKey) })
     .eq("user_id", userId).eq("id", listId).select(LIST_COLUMNS).single();
   if (error) throw error;
   return mapCloudMyList(data);
@@ -130,6 +149,11 @@ export async function updateCloudMyListItem(client, userId, itemId, changes) {
     payload.title = title;
   }
   if (Object.hasOwn(changes, "notes")) payload.notes = cleanMyListItemNotes(changes.notes);
+  if (Object.hasOwn(changes, "subjectId")) {
+    payload.subject_id = UUID_PATTERN.test(String(changes.subjectId || ""))
+      ? changes.subjectId
+      : null;
+  }
   if (Object.hasOwn(changes, "completed")) payload.is_completed = changes.completed === true;
   if (changes.listId) payload.list_id = changes.listId;
   if (Object.hasOwn(changes, "sortOrder")) payload.sort_order = numericSortOrder(changes.sortOrder);

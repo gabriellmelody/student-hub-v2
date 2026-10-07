@@ -3459,7 +3459,7 @@ function App() {
     }
 
     if (page === "myLists") {
-      return <MyListsPage workspace={myListsWorkspace} />;
+      return <MyListsPage workspace={myListsWorkspace} subjects={subjects} />;
     }
 
     if (page === "plan") {

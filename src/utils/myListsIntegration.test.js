@@ -10,7 +10,7 @@ const cloud = readFileSync(new URL("../lib/cloudMyLists.js", import.meta.url), "
 test("My Lists is a separate sidebar destination", () => {
   assert.match(app, /label="My Lists"/);
   assert.match(app, /activePage === "myLists"/);
-  assert.match(app, /<MyListsPage workspace=\{myListsWorkspace\}/);
+  assert.match(app, /<MyListsPage workspace=\{myListsWorkspace\} subjects=\{subjects\}/);
 });
 
 test("direct My Lists reload follows the existing path-state architecture", () => {
@@ -31,8 +31,29 @@ test("populated list deletion requires explicit card-loss confirmation", () => {
 
 test("completed cards are hidden by default and can be shown", () => {
   assert.match(page, /useState\(false\)/);
-  assert.match(page, /showCompleted \|\| !item\.completed/);
+  assert.match(page, /getVisibleMyListItems\(list\.items, showCompleted\)/);
   assert.match(page, />Show completed</);
+});
+
+test("active cards expose an independent accessible completion control", () => {
+  assert.match(page, /className="my-list-card-complete"/);
+  assert.match(page, /`Mark \$\{item\.title\} complete`/);
+  assert.match(page, /event\.stopPropagation\(\)/);
+  assert.match(page, /updateItem\(item\.id, \{ completed: !item\.completed \}\)/);
+});
+
+test("completed cards can be reopened from the board and details", () => {
+  const modal = readFileSync(new URL("../components/MyListItemModal.jsx", import.meta.url), "utf8");
+  assert.match(page, /item\.completed\s*\? `Reopen \$\{item\.title\}`/);
+  assert.match(page, /aria-pressed=\{item\.completed\}/);
+  assert.match(modal, /draft\.completed \? "Reopen" : "Complete"/);
+});
+
+test("completion uses the existing cloud update and Realtime sync path", () => {
+  assert.match(hook, /updateCloudMyListItem\(supabase, userId, itemId, nextChanges\)/);
+  assert.match(hook, /completed: nextChanges\.completed === true/);
+  assert.match(cloud, /payload\.is_completed = changes\.completed === true/);
+  assert.match(cloud, /table: "my_list_items"/);
 });
 
 test("My Lists cloud data never uses the academic tasks table", () => {
@@ -48,16 +69,32 @@ test("My Lists has no Calendar export behavior", () => {
   assert.doesNotMatch(`${page}\n${hook}\n${cloud}`, /google calendar|calendarId|export.*calendar/i);
 });
 
-test("card details support notes, completion, deletion and movement without academic fields", () => {
+test("card details support notes, optional Subject context, completion, deletion and movement without academic fields", () => {
   const modal = readFileSync(new URL("../components/MyListItemModal.jsx", import.meta.url), "utf8");
   assert.match(modal, /Notes \(optional\)/);
+  assert.match(modal, /Subject \(optional\)/);
+  assert.match(modal, /<option value="">None<\/option>/);
   assert.match(modal, /Move to/);
   assert.match(modal, /draft\.completed \? "Reopen" : "Complete"/);
   assert.match(modal, /\sDelete\s*<\/button>/);
-  assert.doesNotMatch(modal, /Subject|Due date|Formative|Summative|Effort/);
+  assert.doesNotMatch(modal, /Due date|Formative|Summative|Effort/);
 });
 
 test("card order is persisted on create and cross-list movement", () => {
   assert.match(hook, /getNextItemSortOrder\(list\.items\)/);
   assert.match(hook, /nextChanges\.sortOrder = getNextItemSortOrder\(target\.items\)/);
+});
+
+test("one shared composer state switches card, list and rename editors", () => {
+  assert.match(page, /const \[activeComposer, setActiveComposer\] = useState\(null\)/);
+  assert.match(page, /activeComposer\?\.type === "card"/);
+  assert.match(page, /activeComposer\?\.type === "list"/);
+  assert.match(page, /activeComposer\?\.type === "rename"/);
+  assert.doesNotMatch(page, /const \[addingList/);
+  assert.doesNotMatch(page, /const \[open, setOpen\]/);
+});
+
+test("Subject context remains separate from academic Tasks, Smart Planner and Calendar", () => {
+  assert.match(page, /resolveMyListItemSubject/);
+  assert.doesNotMatch(`${page}\n${hook}\n${cloud}`, /from\("tasks"\)|SmartPlanner|smartPlanner|calendarId|Formative|Summative/);
 });

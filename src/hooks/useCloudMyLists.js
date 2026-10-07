@@ -9,10 +9,12 @@ import {
   renameCloudMyList,
   subscribeToCloudMyListChanges,
   updateCloudMyListItem,
+  updateCloudMyListColour,
   updateCloudMyListOrder,
 } from "../lib/cloudMyLists.js";
 import {
   findMyListItem,
+  getDefaultMyListColour,
   getNextItemSortOrder,
   moveMyList,
 } from "../utils/myListsUtils.js";
@@ -97,11 +99,21 @@ export default function useCloudMyLists(user) {
   }, [refresh, saving, userId]);
 
   const createList = useCallback((name) => perform(() =>
-    createCloudMyList(supabase, userId, name, listsRef.current.length)
+    createCloudMyList(
+      supabase,
+      userId,
+      name,
+      listsRef.current.length,
+      getDefaultMyListColour(listsRef.current.length)
+    )
   ), [perform, userId]);
 
   const renameList = useCallback((listId, name) => perform(() =>
     renameCloudMyList(supabase, userId, listId, name)
+  ), [perform, userId]);
+
+  const changeListColour = useCallback((listId, colorKey) => perform(() =>
+    updateCloudMyListColour(supabase, userId, listId, colorKey)
   ), [perform, userId]);
 
   const reorderList = useCallback((listId, direction) => {
@@ -138,8 +150,31 @@ export default function useCloudMyLists(user) {
       if (!target) return Promise.resolve(false);
       nextChanges.sortOrder = getNextItemSortOrder(target.items);
     }
-    return perform(() => updateCloudMyListItem(supabase, userId, itemId, nextChanges));
-  }, [perform, userId]);
+    const completionOnly = Object.keys(nextChanges).length === 1
+      && Object.hasOwn(nextChanges, "completed");
+    if (!completionOnly || saving) {
+      return perform(() => updateCloudMyListItem(supabase, userId, itemId, nextChanges));
+    }
+
+    const previousLists = listsRef.current;
+    const optimisticLists = previousLists.map((list) => ({
+      ...list,
+      items: list.items.map((item) => item.id === itemId
+        ? { ...item, completed: nextChanges.completed === true }
+        : item),
+    }));
+    listsRef.current = optimisticLists;
+    setWorkspace({ userId, lists: optimisticLists });
+
+    return perform(() => updateCloudMyListItem(supabase, userId, itemId, nextChanges))
+      .then((saved) => {
+        if (!saved && activeUserRef.current === userId && listsRef.current === optimisticLists) {
+          listsRef.current = previousLists;
+          setWorkspace({ userId, lists: previousLists });
+        }
+        return saved;
+      });
+  }, [perform, saving, userId]);
 
   const deleteItem = useCallback((itemId) => perform(() =>
     deleteCloudMyListItem(supabase, userId, itemId)
@@ -147,7 +182,7 @@ export default function useCloudMyLists(user) {
 
   return {
     lists, loading, saving, error, refresh,
-    createList, renameList, reorderList, deleteList,
+    createList, renameList, changeListColour, reorderList, deleteList,
     createItem, updateItem, deleteItem,
   };
 }

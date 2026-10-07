@@ -11,6 +11,7 @@ export default function MyListItemModal({
   item,
   currentListId,
   lists,
+  subjects = [],
   saving,
   onSave,
   onDelete,
@@ -21,6 +22,7 @@ export default function MyListItemModal({
     title: item.title,
     notes: item.notes || "",
     listId: currentListId,
+    subjectId: item.subjectId || "",
     completed: item.completed === true,
   });
   const [error, setError] = useState("");
@@ -143,6 +145,18 @@ export default function MyListItemModal({
                 value={draft.notes}
                 onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
               />
+            </label>
+            <label>
+              <span>Subject (optional)</span>
+              <select
+                value={draft.subjectId}
+                onChange={(event) => setDraft({ ...draft, subjectId: event.target.value })}
+              >
+                <option value="">None</option>
+                {subjects.map((subject) => (
+                  <option key={subject.id} value={subject.id}>{subject.name}</option>
+                ))}
+              </select>
             </label>
             <label>
               <span>Move to</span>

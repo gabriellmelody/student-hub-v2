@@ -5,8 +5,14 @@ import {
   cleanMyListItemTitle,
   cleanMyListName,
   findMyListItem,
+  getDefaultMyListColour,
+  getMyListColour,
+  getMyListSubjectColour,
   getNextItemSortOrder,
+  getVisibleMyListItems,
   moveMyList,
+  normalizeMyListColourKey,
+  resolveMyListItemSubject,
 } from "./myListsUtils.js";
 
 test("list names are trimmed and capped", () => {
@@ -54,3 +60,26 @@ test("cards can be found with their owning list", () => {
   assert.equal(result.item.title, "Buy shampoo");
 });
 
+test("list colours use stable semantic keys and safe fallbacks", () => {
+  assert.equal(normalizeMyListColourKey("violet"), "violet");
+  assert.equal(normalizeMyListColourKey("url(bad)"), "sky");
+  assert.equal(getMyListColour("url(bad)").value, "#6699ce");
+  assert.equal(getDefaultMyListColour(8), "sky");
+});
+
+test("Subject context resolves from the authoritative Subject profile", () => {
+  const subjects = [{ id: "subject-1", name: "Economics", colour: "#8876bd" }];
+  assert.equal(resolveMyListItemSubject({ subjectId: "subject-1" }, subjects), subjects[0]);
+  assert.equal(resolveMyListItemSubject({ subjectId: "missing" }, subjects), null);
+  assert.equal(getMyListSubjectColour(subjects[0]), "#8876bd");
+  assert.equal(getMyListSubjectColour({ colour: "not-css" }), "#6699ce");
+});
+
+test("completed cards leave the active board and return when requested", () => {
+  const items = [
+    { id: "open", completed: false },
+    { id: "done", completed: true },
+  ];
+  assert.deepEqual(getVisibleMyListItems(items).map((item) => item.id), ["open"]);
+  assert.deepEqual(getVisibleMyListItems(items, true).map((item) => item.id), ["open", "done"]);
+});

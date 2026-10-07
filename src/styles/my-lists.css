@@ -131,7 +131,7 @@
   min-width: 0;
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 16px;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 2px 2px 16px;
@@ -142,18 +142,20 @@
 
 .my-list-column,
 .my-list-new-column {
-  width: 278px;
-  min-width: 278px;
+  width: 324px;
+  min-width: 324px;
   scroll-snap-align: start;
 }
 
 .my-list-column {
+  position: relative;
   display: flex;
   flex-direction: column;
   max-height: min(68vh, 720px);
   border: 1px solid var(--border);
+  border-top: 4px solid var(--list-colour);
   border-radius: 8px;
-  padding: 10px;
+  padding: 13px;
   background: color-mix(in srgb, var(--surface-subtle) 88%, var(--surface));
   box-shadow: var(--shadow-sm);
 }
@@ -164,14 +166,25 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin: -1px -1px 11px;
+  padding: 3px 3px 9px;
+  border-bottom: 1px solid color-mix(in srgb, var(--list-colour) 22%, var(--border));
 }
 
 .my-list-column-title {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
+}
+
+.my-list-colour-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--list-colour);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--list-colour) 16%, transparent);
 }
 
 .my-list-column-title h2 {
@@ -179,14 +192,14 @@
   overflow: hidden;
   margin: 0;
   color: var(--text);
-  font-size: 0.82rem;
+  font-size: 0.9rem;
   font-weight: 740;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.my-list-column-title span {
+.my-list-column-title > span:last-child {
   min-width: 20px;
   padding: 2px 5px;
   border-radius: 999px;
@@ -228,7 +241,7 @@
   z-index: 20;
   top: 34px;
   right: 0;
-  width: 136px;
+  width: 166px;
   display: grid;
   gap: 2px;
   padding: 5px;
@@ -269,7 +282,7 @@
 .my-list-rename {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px;
+  grid-template-columns: minmax(0, 1fr) 30px 30px;
   gap: 5px;
 }
 
@@ -287,51 +300,165 @@
   cursor: pointer;
 }
 
+.my-list-colour-picker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  padding: 6px 7px 8px;
+}
+
+.my-list-column-menu .my-list-colour-picker button {
+  min-width: 0;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 7px;
+}
+
+.my-list-column-menu .my-list-colour-picker button.selected {
+  border-color: var(--text-secondary);
+  background: var(--surface-hover);
+}
+
+.my-list-colour-picker span {
+  width: 17px;
+  height: 17px;
+  border: 1px solid color-mix(in srgb, var(--choice-colour) 70%, var(--border));
+  border-radius: 50%;
+  background: var(--choice-colour);
+}
+
 .my-list-cards {
-  min-height: 46px;
+  min-height: 56px;
   display: grid;
   align-content: start;
-  gap: 7px;
+  gap: 10px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 1px;
 }
 
 .my-list-card {
+  position: relative;
   width: 100%;
   min-width: 0;
   display: grid;
-  gap: 4px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
   border: 1px solid var(--border-raised);
+  border-left: 3px solid color-mix(in srgb, var(--list-colour) 82%, var(--border));
   border-radius: 7px;
-  padding: 9px 10px;
+  padding: 12px;
   background: var(--surface-raised);
   color: var(--text);
-  text-align: left;
   box-shadow: var(--shadow-sm);
-  cursor: pointer;
 }
 
 .my-list-card:hover,
-.my-list-card:focus-visible {
+.my-list-card:focus-within {
   border-color: var(--border-hover);
+  border-left-color: var(--list-colour);
   background: var(--surface-hover);
+}
+
+.my-list-card-complete {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+  border: 1.5px solid color-mix(in srgb, var(--list-colour) 72%, var(--text-muted));
+  border-radius: 50%;
+  padding: 0;
+  background: var(--surface-raised);
+  color: var(--surface-raised);
+  cursor: pointer;
+}
+
+.my-list-card-complete:hover,
+.my-list-card-complete:focus-visible {
+  border-color: var(--list-colour);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--list-colour) 18%, transparent);
+}
+
+.my-list-card-complete span {
+  font-size: 0.67rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.my-list-card-open {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.my-list-card-open:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
 .my-list-card strong {
   overflow-wrap: anywhere;
-  font-size: 0.76rem;
-  font-weight: 670;
-  line-height: 1.35;
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
-.my-list-card span {
+.my-list-card-notes {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 0.65rem;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 0.69rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.my-list-card-meta {
+  min-height: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.my-list-card-meta:empty {
+  display: none;
+}
+
+.my-list-subject-chip {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--subject-colour) 42%, var(--border));
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: color-mix(in srgb, var(--subject-colour) 11%, var(--surface));
+  color: var(--text-secondary);
+  font-size: 0.61rem;
+  font-weight: 680;
+  line-height: 1.2;
+}
+
+.my-list-subject-chip i {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--subject-colour);
 }
 
 .my-list-card small {
@@ -341,11 +468,17 @@
 }
 
 .my-list-card.completed {
-  opacity: 0.68;
+  opacity: 0.66;
 }
 
 .my-list-card.completed strong {
   text-decoration: line-through;
+}
+
+.my-list-card.completed .my-list-card-complete {
+  border-color: var(--safe);
+  background: var(--safe);
+  color: var(--surface-raised);
 }
 
 .my-list-column-empty {
@@ -356,13 +489,13 @@
 
 .my-list-add-card {
   width: 100%;
-  min-height: 34px;
-  margin-top: 8px;
+  min-height: 39px;
+  margin-top: 10px;
   border: 0;
   border-radius: 7px;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 0.7rem;
+  font-size: 0.74rem;
   font-weight: 680;
   text-align: left;
   cursor: pointer;
@@ -376,13 +509,28 @@
 
 .my-list-inline-add {
   display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  border: 1px solid var(--border-raised);
+  border-left: 3px solid var(--list-colour);
+  border-radius: 7px;
+  padding: 11px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+
+.my-list-inline-add label,
+.my-list-new-composer label {
+  display: grid;
   gap: 6px;
-  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 0.68rem;
+  font-weight: 680;
 }
 
 .my-list-inline-add input {
-  min-height: 36px;
-  font-size: 0.72rem;
+  min-height: 40px;
+  font-size: 0.75rem;
 }
 
 .my-list-inline-add > div {
@@ -399,7 +547,7 @@
 }
 
 .my-list-new-column {
-  min-height: 52px;
+  min-height: 58px;
   border: 1px dashed var(--border-strong);
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 54%, transparent);
@@ -407,13 +555,13 @@
 
 .my-list-new-column > button {
   width: 100%;
-  min-height: 52px;
+  min-height: 58px;
   border: 0;
   border-radius: 8px;
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
-  font-size: 0.76rem;
+  font-size: 0.79rem;
   font-weight: 700;
   text-align: left;
   padding: 10px 12px;
@@ -428,15 +576,17 @@
 
 .my-list-new-column form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 7px;
-  padding: 9px;
+  gap: 11px;
+  padding: 13px;
+}
+
+.my-list-new-column form > div {
+  display: flex;
+  gap: 8px;
 }
 
 .my-list-new-column form .quiet-button {
-  grid-column: 1 / -1;
-  justify-self: start;
-  padding: 0;
+  padding: 5px 7px;
 }
 
 .my-list-modal-layer {
@@ -458,7 +608,7 @@
 
 .my-list-modal {
   position: relative;
-  width: min(520px, 100%);
+  width: min(560px, 100%);
   max-height: calc(100dvh - 40px);
   overflow: hidden;
   border: 1px solid var(--border-strong);
@@ -478,7 +628,7 @@
   display: flex;
   justify-content: space-between;
   gap: 20px;
-  padding: 18px 20px 14px;
+  padding: 21px 23px 17px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -511,9 +661,9 @@
 
 .my-list-modal-body {
   display: grid;
-  gap: 14px;
+  gap: 17px;
   overflow-y: auto;
-  padding: 18px 20px;
+  padding: 21px 23px;
 }
 
 .my-list-modal-body label {
@@ -557,7 +707,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 13px 20px;
+  padding: 15px 23px;
   border-top: 1px solid var(--border);
 }
 
@@ -608,8 +758,8 @@
 
   .my-list-column,
   .my-list-new-column {
-    width: min(82vw, 320px);
-    min-width: min(82vw, 320px);
+    width: min(88vw, 340px);
+    min-width: min(88vw, 340px);
   }
 
   .my-list-column {
@@ -669,4 +819,3 @@
     scroll-behavior: auto;
   }
 }
-
