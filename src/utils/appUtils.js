@@ -1096,6 +1096,19 @@ export function applyTaskImportanceDetection(task) {
     [task?.title, task?.description].filter(Boolean).join(" ")
   );
   const hasManualOverride = task?.importanceSource === "manual";
+  const manualClassification = hasManualOverride
+    ? (Array.isArray(task?.detectedTags) ? task.detectedTags : []).find((tag) =>
+        ["formative", "summative"].includes(String(tag).toLocaleLowerCase())
+      )
+    : null;
+  const detectedTags = manualClassification
+    ? [
+        manualClassification,
+        ...detection.detectedTags.filter(
+          (tag) => !["formative", "summative"].includes(String(tag).toLocaleLowerCase())
+        ),
+      ]
+    : detection.detectedTags;
   const validTaskTypes = new Set(taskTypeOptions.map((option) => option.value));
   const validImportance = new Set(
     taskImportanceOptions.map((option) => option.value)
@@ -1110,7 +1123,7 @@ export function applyTaskImportanceDetection(task) {
       hasManualOverride && validImportance.has(task?.importance)
         ? task.importance
         : detection.importance,
-    detectedTags: detection.detectedTags,
+    detectedTags,
     importanceSource: hasManualOverride ? "manual" : "auto",
   };
 }
@@ -1129,6 +1142,7 @@ export function createQuickTaskDraft(title) {
     {
       subject: "",
       title: "",
+      description: "",
       dueDate: "",
       effort: 2,
       completed: false,

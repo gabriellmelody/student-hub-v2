@@ -5,6 +5,11 @@ import {
 } from "../utils/appUtils.js";
 
 function TaskClassificationFields({ task, onChange }) {
+  const academicClassification = Array.isArray(task.detectedTags)
+    ? task.detectedTags.find((tag) =>
+        ["formative", "summative"].includes(String(tag).toLocaleLowerCase())
+      ) || ""
+    : "";
   const detectionLabel =
     task.importanceSource === "manual"
       ? "Manual choice"
@@ -26,6 +31,18 @@ function TaskClassificationFields({ task, onChange }) {
     onChange({
       ...automaticTask,
       ...applyTaskImportanceDetection(automaticTask),
+    });
+  }
+
+  function setAcademicClassification(value) {
+    const remainingTags = (Array.isArray(task.detectedTags) ? task.detectedTags : []).filter(
+      (tag) => !["formative", "summative"].includes(String(tag).toLocaleLowerCase())
+    );
+
+    onChange({
+      ...task,
+      detectedTags: value ? [value, ...remainingTags] : remainingTags,
+      importanceSource: "manual",
     });
   }
 
@@ -58,6 +75,18 @@ function TaskClassificationFields({ task, onChange }) {
               {option.label}
             </option>
           ))}
+        </select>
+      </label>
+
+      <label>
+        <span>Academic classification</span>
+        <select
+          value={academicClassification}
+          onChange={(event) => setAcademicClassification(event.target.value)}
+        >
+          <option value="">Not set</option>
+          <option value="Formative">Formative</option>
+          <option value="Summative">Summative</option>
         </select>
       </label>
 

@@ -154,7 +154,9 @@ function createEmptyTaskDraft() {
   return {
     subject: "",
     title: "",
+    description: "",
     dueDate: "",
+    dueTime: "",
     effort: 2,
     taskType: "homework",
     importance: "normal",

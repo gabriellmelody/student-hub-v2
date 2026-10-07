@@ -1,25 +1,25 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DueDateField from "../components/DueDateField.jsx";
 import SubjectField from "../components/SubjectField.jsx";
-import TaskClassificationFields from "../components/TaskClassificationFields.jsx";
 import TaskCard from "../components/TaskCard.jsx";
+import TaskClassificationFields from "../components/TaskClassificationFields.jsx";
+import TaskDetailsModal from "../components/TaskDetailsModal.jsx";
 import RevealOnScroll from "../components/RevealOnScroll.jsx";
 import {
-  getDaysLeft,
   getEffortClass,
-  formatDateKey,
-  parseDateKey,
-  taskSortOptions,
   sortTasksByMode,
   updateTaskTitleWithDetection,
 } from "../utils/appUtils.js";
+import {
+  createDueDateBoardColumns,
+  createPriorityBoardColumns,
+} from "../utils/taskBoardUtils.js";
 
 function TasksPage({
   subjects,
   activeTasks,
   backlogTasks = [],
   visibleBacklog,
-  hiddenBacklogCount,
   noDeadlineTasks,
   completedTasks,
   showAddTask,
@@ -34,45 +34,37 @@ function TasksPage({
   taskSyncError = null,
   retryTaskSync,
 }) {
-  const [taskSortMode, setTaskSortMode] = useState("smart");
+  const [taskView, setTaskView] = useState("dueDate");
   const [completedOpen, setCompletedOpen] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [quickTaskTitle, setQuickTaskTitle] = useState("");
-  const [dueDateSelection, setDueDateSelection] = useState("today");
-  const [openMenuTaskId, setOpenMenuTaskId] = useState(null);
+  const [selectedTaskId, setSelectedTaskId] = useState(null);
   const titleInputRef = useRef(null);
+  const taskReturnFocusRef = useRef(null);
   const allActiveTasks = mergeUniqueTasks([
     ...activeTasks,
     ...backlogTasks,
     ...visibleBacklog,
     ...noDeadlineTasks,
   ]);
-  const sortedActiveTasks = sortTasksByMode(activeTasks, taskSortMode);
-  const sortedBacklogTasks = sortTasksByMode(
-    backlogTasks.length > 0 ? backlogTasks : visibleBacklog,
-    taskSortMode
+  const dueDateColumns = useMemo(
+    () => createDueDateBoardColumns(allActiveTasks),
+    [allActiveTasks]
   );
-  const sortedNoDeadlineTasks = sortTasksByMode(noDeadlineTasks, taskSortMode);
-  const sortedCompletedTasks = sortTasksByMode(completedTasks, taskSortMode);
-  const recommendedGroups = getRecommendedGroups(allActiveTasks);
-  const dueDateOptions = getRollingDueDateOptions(allActiveTasks);
-  const selectedDueOption =
-    dueDateOptions.find((option) => option.id === dueDateSelection) ||
-    dueDateOptions[1];
-  const selectedDueTasks = selectedDueOption
-    ? sortTasksByMode(
-        getTasksForDueDateSelection(allActiveTasks, selectedDueOption),
-        "dueDate"
-      )
-    : [];
-  const activeCount = allActiveTasks.length;
-  const overdueCount = allActiveTasks.filter(
-    (task) => getDaysLeft(task.dueDate) !== null && getDaysLeft(task.dueDate) < 0
-  ).length;
-  const dueTodayCount = allActiveTasks.filter(
-    (task) => getDaysLeft(task.dueDate) === 0
-  ).length;
+  const priorityColumns = useMemo(
+    () => createPriorityBoardColumns(allActiveTasks),
+    [allActiveTasks]
+  );
+  const sortedCompletedTasks = sortTasksByMode(completedTasks, "dueDate");
+  const selectedTask = [...allActiveTasks, ...completedTasks].find(
+    (task) => String(task.id) === String(selectedTaskId)
+  );
+  const overdueCount =
+    dueDateColumns.find((column) => column.id === "overdue")?.tasks.length || 0;
+  const dueTodayCount =
+    dueDateColumns.find((column) => column.label === "Today")?.tasks.length || 0;
   const hasActiveTasks = allActiveTasks.length > 0;
+
   const addTaskSubmit = async (event) => {
     await addTask(event);
     setShowMoreOptions(false);
@@ -80,25 +72,27 @@ function TasksPage({
 
   async function submitQuickTask(event) {
     event.preventDefault();
-
     if (!(await addQuickTask(quickTaskTitle))) return;
-
     setQuickTaskTitle("");
   }
 
   function openQuickTaskDetails() {
     const title = quickTaskTitle.trim();
-
-    if (title) {
-      setNewTask(updateTaskTitleWithDetection(newTask, title));
-    }
-
+    if (title) setNewTask(updateTaskTitleWithDetection(newTask, title));
     setShowAddTask(true);
+  }
+
+  function openTaskDetails(taskId, returnFocusElement) {
+    taskReturnFocusRef.current = returnFocusElement || document.activeElement;
+    setSelectedTaskId(taskId);
+  }
+
+  function closeTaskDetails() {
+    setSelectedTaskId(null);
   }
 
   useEffect(() => {
     if (!showAddTask) return undefined;
-
     window.requestAnimationFrame(() => titleInputRef.current?.focus());
 
     function closeOnEscape(event) {
@@ -122,11 +116,10 @@ function TasksPage({
       <header className="page-header tasks-page-header">
         <div className="tasks-header-copy">
           <p className="eyebrow">To-do</p>
-          <h1>To-do list</h1>
-          <p>Manage school work by priority, due date, effort, or subject.</p>
+          <h1>To-do board</h1>
+          <p>Scan deadlines first, then open a task when you need the details.</p>
           <p className="task-live-counts" data-tour="todo-due-navigation">
-            {formatCount(activeCount, "active")} ·{" "}
-            {formatCount(overdueCount, "overdue")}
+            {formatCount(allActiveTasks.length, "active")} · {formatCount(overdueCount, "overdue")}
             {dueTodayCount > 0 && <> · {formatCount(dueTodayCount, "due today")}</>}
           </p>
         </div>
@@ -142,25 +135,27 @@ function TasksPage({
           </button>
 
           <div
-            className="task-sort-row"
-            aria-label="Organise tasks"
+            className="task-view-tabs"
+            role="group"
+            aria-label="Choose task board"
             data-tour="todo-organise"
           >
-            {taskSortOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className={
-                  taskSortMode === option.value
-                    ? "small-button sort-button active"
-                    : "small-button sort-button"
-                }
-                aria-pressed={taskSortMode === option.value}
-                onClick={() => setTaskSortMode(option.value)}
-              >
-                {option.value === "smart" ? "Priority" : option.label}
-              </button>
-            ))}
+            <button
+              type="button"
+              className={taskView === "dueDate" ? "active" : ""}
+              aria-pressed={taskView === "dueDate"}
+              onClick={() => setTaskView("dueDate")}
+            >
+              Due date
+            </button>
+            <button
+              type="button"
+              className={taskView === "priority" ? "active" : ""}
+              aria-pressed={taskView === "priority"}
+              onClick={() => setTaskView("priority")}
+            >
+              Priority
+            </button>
           </div>
         </div>
       </header>
@@ -174,11 +169,8 @@ function TasksPage({
             </button>
           </div>
         )}
-        <form
-          className="task-quick-add"
-          aria-label="Quick add task"
-          onSubmit={submitQuickTask}
-        >
+
+        <form className="task-quick-add" aria-label="Quick add task" onSubmit={submitQuickTask}>
           <label className="task-quick-add-field">
             <span className="sr-only">Task title</span>
             <input
@@ -200,7 +192,7 @@ function TasksPage({
           </button>
         </form>
 
-        {!hasActiveTasks && (
+        {!hasActiveTasks ? (
           <div className="task-empty-state">
             <h3>You’re caught up.</h3>
             <p>Add a task when new school work comes in.</p>
@@ -212,118 +204,13 @@ function TasksPage({
               + Add task
             </button>
           </div>
-        )}
-
-        {hasActiveTasks && taskSortMode === "smart" && (
-          <div className="task-group-stack">
-            {recommendedGroups.map((group, groupIndex) => (
-              <TaskGroup
-                key={group.id}
-                title={group.title}
-                tasks={group.tasks}
-                revealIndex={groupIndex}
-                subjects={subjects}
-                onToggle={toggleTask}
-                onDelete={deleteTask}
-                onUpdate={updateTask}
-                openMenuTaskId={openMenuTaskId}
-                setOpenMenuTaskId={setOpenMenuTaskId}
-              />
-            ))}
-          </div>
-        )}
-
-        {hasActiveTasks && taskSortMode === "dueDate" && (
-          <div className="task-due-view">
-            <RollingDueDateSelector
-              options={dueDateOptions}
-              selectedId={selectedDueOption?.id}
-              onSelect={setDueDateSelection}
-            />
-
-            <RevealOnScroll as="section" className="task-section" maxDelay={120}>
-              <h3 className="section-label">
-                {getDueDateSelectionHeading(selectedDueOption, selectedDueTasks.length)}
-              </h3>
-
-              {selectedDueTasks.length > 0 ? (
-                <div className="task-list">
-                  {selectedDueTasks.map((task, taskIndex) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      subjects={subjects}
-                      onToggle={toggleTask}
-                      onDelete={deleteTask}
-                      onUpdate={updateTask}
-                      openMenuTaskId={openMenuTaskId}
-                      setOpenMenuTaskId={setOpenMenuTaskId}
-                      reveal
-                      revealIndex={taskIndex}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="task-date-empty">
-                  <h3>Nothing here.</h3>
-                  <p>Choose another day or add a task when something comes in.</p>
-                </div>
-              )}
-            </RevealOnScroll>
-          </div>
-        )}
-
-        {hasActiveTasks && !["smart", "dueDate"].includes(taskSortMode) && (
-          <div className="task-group-stack">
-            {sortedActiveTasks.length > 0 && (
-              <TaskGroup
-                title="Active"
-                tasks={sortedActiveTasks}
-                revealIndex={0}
-                subjects={subjects}
-                onToggle={toggleTask}
-                onDelete={deleteTask}
-                onUpdate={updateTask}
-                openMenuTaskId={openMenuTaskId}
-                setOpenMenuTaskId={setOpenMenuTaskId}
-              />
-            )}
-
-            {sortedBacklogTasks.length > 0 && (
-              <TaskGroup
-                title="Later"
-                tasks={sortedBacklogTasks}
-                revealIndex={1}
-                subjects={subjects}
-                onToggle={toggleTask}
-                onDelete={deleteTask}
-                onUpdate={updateTask}
-                openMenuTaskId={openMenuTaskId}
-                setOpenMenuTaskId={setOpenMenuTaskId}
-              />
-            )}
-
-            {hiddenBacklogCount > 0 && backlogTasks.length === 0 && (
-              <p className="muted-text">
-                + {hiddenBacklogCount} more task
-                {hiddenBacklogCount === 1 ? "" : "s"} in backlog
-              </p>
-            )}
-
-            {sortedNoDeadlineTasks.length > 0 && (
-              <TaskGroup
-                title="No deadline"
-                tasks={sortedNoDeadlineTasks}
-                revealIndex={2}
-                subjects={subjects}
-                onToggle={toggleTask}
-                onDelete={deleteTask}
-                onUpdate={updateTask}
-                openMenuTaskId={openMenuTaskId}
-                setOpenMenuTaskId={setOpenMenuTaskId}
-              />
-            )}
-          </div>
+        ) : (
+          <TaskBoard
+            columns={taskView === "dueDate" ? dueDateColumns : priorityColumns}
+            subjects={subjects}
+            onOpenTask={openTaskDetails}
+            label={taskView === "dueDate" ? "Tasks by due date" : "Tasks by priority"}
+          />
         )}
 
         <section className="task-completed-section">
@@ -338,25 +225,23 @@ function TasksPage({
           </button>
 
           {completedOpen && (
-            <div className="task-group-stack task-completed-list">
+            <RevealOnScroll as="div" className="task-completed-list" maxDelay={80}>
               {sortedCompletedTasks.length > 0 ? (
-                <TaskGroup
-                  title="Completed"
-                  tasks={sortedCompletedTasks}
-                  revealIndex={0}
-                  subjects={subjects}
-                  onToggle={toggleTask}
-                  onDelete={deleteTask}
-                  onUpdate={updateTask}
-                  completed
-                  hideHeading
-                  openMenuTaskId={openMenuTaskId}
-                  setOpenMenuTaskId={setOpenMenuTaskId}
-                />
+                <div className="task-completed-grid">
+                  {sortedCompletedTasks.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      subjects={subjects}
+                      onOpen={openTaskDetails}
+                      completed
+                    />
+                  ))}
+                </div>
               ) : (
                 <p className="task-completed-empty">No completed tasks yet.</p>
               )}
-            </div>
+            </RevealOnScroll>
           )}
         </section>
       </div>
@@ -396,9 +281,19 @@ function TasksPage({
                 placeholder="What needs doing?"
                 value={newTask.title}
                 onChange={(event) =>
-                  setNewTask(
-                    updateTaskTitleWithDetection(newTask, event.target.value)
-                  )
+                  setNewTask(updateTaskTitleWithDetection(newTask, event.target.value))
+                }
+              />
+            </label>
+
+            <label className="task-form-field">
+              <span>Description (optional)</span>
+              <textarea
+                rows={3}
+                placeholder="Add details, instructions, or notes…"
+                value={newTask.description}
+                onChange={(event) =>
+                  setNewTask({ ...newTask, description: event.target.value })
                 }
               />
             </label>
@@ -413,10 +308,22 @@ function TasksPage({
               />
             </label>
 
-            <DueDateField
-              value={newTask.dueDate}
-              onChange={(dueDate) => setNewTask({ ...newTask, dueDate })}
-            />
+            <div className="task-create-deadline-grid">
+              <DueDateField
+                value={newTask.dueDate}
+                onChange={(dueDate) => setNewTask({ ...newTask, dueDate })}
+              />
+              <label className="task-form-field">
+                <span>Due time (optional)</span>
+                <input
+                  type="time"
+                  value={newTask.dueTime || ""}
+                  onChange={(event) =>
+                    setNewTask({ ...newTask, dueTime: event.target.value })
+                  }
+                />
+              </label>
+            </div>
 
             <button
               className="quiet-button task-more-options"
@@ -430,7 +337,6 @@ function TasksPage({
             {showMoreOptions && (
               <div className="task-advanced-fields">
                 <TaskClassificationFields task={newTask} onChange={setNewTask} />
-
                 <div className="effort-row">
                   <span>Effort</span>
                   {[1, 2, 3, 4, 5].map((number) => (
@@ -457,305 +363,67 @@ function TasksPage({
           </form>
         </div>
       )}
+
+      {selectedTask && (
+        <TaskDetailsModal
+          task={selectedTask}
+          subjects={subjects}
+          onSave={updateTask}
+          onToggle={toggleTask}
+          onDelete={deleteTask}
+          onClose={closeTaskDetails}
+          returnFocusRef={taskReturnFocusRef}
+        />
+      )}
     </div>
   );
 }
 
-function TaskGroup({
-  title,
-  tasks,
-  subjects,
-  onToggle,
-  onDelete,
-  onUpdate,
-  completed = false,
-  hideHeading = false,
-  revealIndex = 0,
-  openMenuTaskId,
-  setOpenMenuTaskId,
-}) {
-  if (tasks.length === 0) return null;
-
+function TaskBoard({ columns, subjects, onOpenTask, label }) {
   return (
-    <RevealOnScroll
-      as="section"
-      className="task-section"
-      index={revealIndex}
-      maxDelay={120}
-    >
-      {!hideHeading && (
-        <h3 className="section-label">
-          {title} <span>· {tasks.length}</span>
-        </h3>
-      )}
+    <div className="task-board-scroll" role="region" aria-label={label} tabIndex={0}>
+      <div className="task-board">
+        {columns.map((column) => (
+          <section
+            className={`task-board-column task-board-column-${column.kind || column.id}`}
+            key={column.id}
+          >
+            <header className="task-board-column-header">
+              <div>
+                <h2>{column.label}</h2>
+                {column.dateLabel && <span>{column.dateLabel}</span>}
+              </div>
+              <span aria-label={`${column.tasks.length} tasks`}>{column.tasks.length}</span>
+            </header>
 
-      <div className="task-list">
-        {tasks.map((task, taskIndex) => (
-          <TaskCard
-            key={task.id}
-            task={task}
-            subjects={subjects}
-            onToggle={onToggle}
-            onDelete={onDelete}
-            onUpdate={onUpdate}
-            completed={completed}
-            openMenuTaskId={openMenuTaskId}
-            setOpenMenuTaskId={setOpenMenuTaskId}
-            reveal
-            revealIndex={taskIndex}
-          />
+            <div className="task-board-column-list">
+              {column.tasks.length > 0 ? (
+                column.tasks.map((task) => (
+                  <TaskCard
+                    key={task.id}
+                    task={task}
+                    subjects={subjects}
+                    onOpen={onOpenTask}
+                  />
+                ))
+              ) : (
+                <p className="task-board-column-empty">No tasks</p>
+              )}
+            </div>
+          </section>
         ))}
       </div>
-    </RevealOnScroll>
-  );
-}
-
-function getRecommendedGroups(tasks) {
-  const buckets = [
-    { id: "overdue", title: "Overdue", tasks: [] },
-    { id: "today", title: "Due today", tasks: [] },
-    { id: "week", title: "Next 7 days", tasks: [] },
-    { id: "later", title: "Later", tasks: [] },
-    { id: "none", title: "No deadline", tasks: [] },
-  ];
-
-  tasks.forEach((task) => {
-    const daysLeft = getDaysLeft(task.dueDate);
-
-    if (daysLeft === null) {
-      buckets[4].tasks.push(task);
-    } else if (daysLeft < 0) {
-      buckets[0].tasks.push(task);
-    } else if (daysLeft === 0) {
-      buckets[1].tasks.push(task);
-    } else if (daysLeft <= 7) {
-      buckets[2].tasks.push(task);
-    } else {
-      buckets[3].tasks.push(task);
-    }
-  });
-
-  return buckets
-    .map((group) => ({ ...group, tasks: sortTasksByMode(group.tasks, "smart") }))
-    .filter((group) => group.tasks.length > 0);
-}
-
-function RollingDueDateSelector({ options, selectedId, onSelect }) {
-  return (
-    <div className="task-date-selector" aria-label="Choose due date">
-      {options.map((option) => (
-        <button
-          key={option.id}
-          type="button"
-          className={`task-date-chip${option.id === selectedId ? " active" : ""}${
-            option.kind === "overdue" ? " overdue" : ""
-          }${option.hasTasks ? " has-tasks" : ""}`}
-          aria-pressed={option.id === selectedId}
-          aria-label={option.ariaLabel}
-          onClick={() => onSelect(option.id)}
-        >
-          <span>{option.label}</span>
-          {option.meta && <strong>{option.meta}</strong>}
-          {option.count > 0 && (
-            <em className={`task-date-count task-date-count-${option.kind}`}>
-              {option.kind === "overdue" ? (
-                <>
-                  <i aria-hidden="true" className="task-date-overdue-marker">
-                    Late
-                  </i>
-                  <span className="task-date-a11y">
-                    {option.count} overdue task
-                    {option.count === 1 ? "" : "s"}
-                  </span>
-                </>
-              ) : option.hasAssessment ? (
-                <>
-                  <i aria-hidden="true" className="task-date-assessment-marker" />
-                  <span className="task-date-a11y">
-                    {option.count} task
-                    {option.count === 1 ? "" : "s"}, assessment due
-                  </span>
-                </>
-              ) : (
-                option.kind === "date" && (
-                  <i aria-hidden="true" className="task-date-deadline-dot" />
-                )
-              )}
-              {option.count}
-            </em>
-          )}
-        </button>
-      ))}
     </div>
   );
-}
-
-function getRollingDueDateOptions(tasks) {
-  const today = getStartOfDay(new Date());
-  const todayKey = formatDateKey(today);
-  const visibleDates = Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(today);
-    date.setDate(today.getDate() + index);
-    return date;
-  });
-  const lastVisibleDate = visibleDates[visibleDates.length - 1];
-  const overdueTasks = tasks.filter((task) => {
-    const daysLeft = getDaysLeft(task.dueDate);
-    return daysLeft !== null && daysLeft < 0;
-  });
-  const laterTasks = tasks.filter((task) => {
-    const dueDate = getTaskDate(task);
-    return dueDate && dueDate > lastVisibleDate;
-  });
-  const noDateTasks = tasks.filter((task) => !task.dueDate);
-
-  return [
-    {
-      id: "overdue",
-      kind: "overdue",
-      label: "Overdue",
-      meta: null,
-      count: overdueTasks.length,
-      hasAssessment: overdueTasks.some(isAssessmentTask),
-      hasTasks: overdueTasks.length > 0,
-      ariaLabel: `Overdue, ${formatTaskCount(overdueTasks.length)}`,
-    },
-    ...visibleDates.map((date, index) => {
-      const dateKey = formatDateKey(date);
-      const dateTasks = tasks.filter((task) => task.dueDate === dateKey);
-      const label =
-        dateKey === todayKey
-          ? "Today"
-          : date.toLocaleDateString(undefined, { weekday: "short" });
-
-      return {
-        id: `date:${dateKey}`,
-        kind: "date",
-        label,
-        meta: String(date.getDate()),
-        dateKey,
-        date,
-        count: dateTasks.length,
-        hasAssessment: dateTasks.some(isAssessmentTask),
-        hasTasks: dateTasks.length > 0,
-        ariaLabel: `${label} ${date.getDate()}, ${formatTaskCount(
-          dateTasks.length
-        )}${dateTasks.some(isAssessmentTask) ? ", includes assessment work" : ""}`,
-      };
-    }),
-    {
-      id: "later",
-      kind: "later",
-      label: "Later",
-      meta: null,
-      count: laterTasks.length,
-      hasAssessment: laterTasks.some(isAssessmentTask),
-      hasTasks: laterTasks.length > 0,
-      ariaLabel: `Later, ${formatTaskCount(laterTasks.length)}`,
-    },
-    {
-      id: "no-date",
-      kind: "no-date",
-      label: "No deadline",
-      meta: null,
-      count: noDateTasks.length,
-      hasAssessment: noDateTasks.some(isAssessmentTask),
-      hasTasks: noDateTasks.length > 0,
-      ariaLabel: `No deadline, ${formatTaskCount(noDateTasks.length)}`,
-    },
-  ];
-}
-
-function getTasksForDueDateSelection(tasks, option) {
-  if (!option) return [];
-
-  if (option.kind === "overdue") {
-    return tasks.filter((task) => {
-      const daysLeft = getDaysLeft(task.dueDate);
-      return daysLeft !== null && daysLeft < 0;
-    });
-  }
-
-  if (option.kind === "date") {
-    return tasks.filter((task) => task.dueDate === option.dateKey);
-  }
-
-  if (option.kind === "later") {
-    const dateOptions = getRollingDueDateOptions(tasks).filter(
-      (nextOption) => nextOption.kind === "date"
-    );
-    const lastVisibleDate = dateOptions[dateOptions.length - 1]?.date;
-    return tasks.filter((task) => {
-      const dueDate = getTaskDate(task);
-      return dueDate && lastVisibleDate && dueDate > lastVisibleDate;
-    });
-  }
-
-  if (option.kind === "no-date") {
-    return tasks.filter((task) => !task.dueDate);
-  }
-
-  return [];
-}
-
-function getDueDateSelectionHeading(option, count) {
-  if (!option) return `Due date · ${formatTaskCount(count)}`;
-
-  if (option.kind === "overdue") return `Overdue · ${formatTaskCount(count)}`;
-  if (option.kind === "later") return `Later · ${formatTaskCount(count)}`;
-  if (option.kind === "no-date") return `No deadline · ${formatTaskCount(count)}`;
-
-  return `${option.date.toLocaleDateString(undefined, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  })} · ${formatTaskCount(count)}`;
-}
-
-function getTaskDate(task) {
-  if (!task.dueDate) return null;
-
-  const date = parseDateKey(task.dueDate);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return getStartOfDay(date);
-}
-
-function getStartOfDay(date) {
-  const nextDate = new Date(date);
-  nextDate.setHours(0, 0, 0, 0);
-  return nextDate;
-}
-
-function isAssessmentTask(task) {
-  const tagText = [
-    task.taskType,
-    task.importance,
-    ...(Array.isArray(task.detectedTags) ? task.detectedTags : []),
-    task.title,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-
-  return /\b(assessment|test|quiz|exam|summative|formative|ia|mock)\b/.test(
-    tagText
-  );
-}
-
-function formatTaskCount(count) {
-  return `${count} task${count === 1 ? "" : "s"}`;
 }
 
 function mergeUniqueTasks(taskList) {
   const taskMap = new Map();
-
   taskList.forEach((task) => {
-    if (!task.completed && !taskMap.has(task.id)) {
+    if (!task.completed && !task.archived && !taskMap.has(task.id)) {
       taskMap.set(task.id, task);
     }
   });
-
   return [...taskMap.values()];
 }
 

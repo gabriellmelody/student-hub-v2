@@ -244,6 +244,14 @@ test("detailed task creation preserves date-only deadlines without timezone conv
   assert.equal(mapCloudTask(cloudRow({ due_date: payload.due_date })).dueDate, "2026-08-10");
 });
 
+test("task descriptions preserve multiline content through the cloud payload", () => {
+  const description = "Revise differentiation.\nComplete questions 1–10.\nReview the mistakes.";
+  const payload = mapTaskForInsert(dayloTask({ description }), USER_ID);
+
+  assert.equal(payload.description, description);
+  assert.equal(mapCloudTask(cloudRow({ description })).description, description);
+});
+
 test("updates preserve task UUID and Classroom metadata", async () => {
   const classroomRow = cloudRow({
     source: "classroom",

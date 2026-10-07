@@ -36,6 +36,27 @@ test("explicit Summative metadata wins over weaker title inference", () => {
   assert.equal(effective.assessmentClassification, "summative");
 });
 
+test("manual Formative or Summative classification survives task normalization", () => {
+  const formative = normalizeTask({
+    title: "Reflection",
+    description: "Short response",
+    detectedTags: ["Formative"],
+    taskType: "assessment",
+    importance: "normal",
+    importanceSource: "manual",
+  });
+  const summative = normalizeTask({
+    title: "Final response",
+    detectedTags: ["Summative"],
+    taskType: "assessment",
+    importance: "high",
+    importanceSource: "manual",
+  });
+
+  assert.ok(formative.detectedTags.includes("Formative"));
+  assert.ok(summative.detectedTags.includes("Summative"));
+});
+
 function addTaskToArray(tasks, taskInput, id = Date.now()) {
   if (!taskInput.title.trim()) return tasks;
 
@@ -45,6 +66,7 @@ function addTaskToArray(tasks, taskInput, id = Date.now()) {
       id,
       subject: taskInput.subject.trim(),
       title: taskInput.title.trim(),
+      description: taskInput.description || "",
       dueDate: taskInput.dueDate,
       effort: Number(taskInput.effort),
       completed: false,
@@ -96,6 +118,7 @@ test("Quick Add uses the normal DayLo task model", () => {
 
   assert.equal(task.id, "task-1");
   assert.equal(task.subject, "");
+  assert.equal(task.description, "");
   assert.equal(task.effort, 2);
   assert.equal(task.completed, false);
   assert.equal(task.source, "manual");
