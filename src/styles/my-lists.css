@@ -1,0 +1,672 @@
+.my-lists-page {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.my-lists-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.my-lists-header > div {
+  min-width: 0;
+}
+
+.my-lists-header h1 {
+  margin: 0;
+}
+
+.my-lists-header p:last-child {
+  margin: 7px 0 0;
+  color: var(--text-soft);
+}
+
+.my-lists-completed-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 680;
+  cursor: pointer;
+  user-select: none;
+}
+
+.my-lists-completed-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
+.my-lists-sync-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--effort-high-border);
+  border-radius: 8px;
+  background: var(--effort-high-bg);
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.my-lists-loading,
+.my-lists-empty {
+  min-height: 240px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 9px;
+  text-align: center;
+}
+
+.my-lists-empty > span {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--accent-border);
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+  font-size: 1.15rem;
+}
+
+.my-lists-empty h2,
+.my-lists-empty p {
+  margin: 0;
+}
+
+.my-lists-empty p {
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+}
+
+.my-lists-empty > .primary-button {
+  width: auto;
+  margin-top: 6px;
+}
+
+.my-lists-empty form {
+  width: min(100%, 350px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.my-lists-empty input,
+.my-list-new-column input,
+.my-list-inline-add input,
+.my-list-rename input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 8px 10px;
+  background: var(--surface-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.my-lists-empty .primary-button,
+.my-lists-empty .secondary-button {
+  width: auto;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.my-lists-board {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 2px 16px;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.my-list-column,
+.my-list-new-column {
+  width: 278px;
+  min-width: 278px;
+  scroll-snap-align: start;
+}
+
+.my-list-column {
+  display: flex;
+  flex-direction: column;
+  max-height: min(68vh, 720px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--surface-subtle) 88%, var(--surface));
+  box-shadow: var(--shadow-sm);
+}
+
+.my-list-column-header {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.my-list-column-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.my-list-column-title h2 {
+  min-width: 0;
+  overflow: hidden;
+  margin: 0;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 740;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-list-column-title span {
+  min-width: 20px;
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  text-align: center;
+}
+
+.my-list-column-menu {
+  position: relative;
+}
+
+.my-list-column-menu summary {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--text-muted);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.my-list-column-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.my-list-column-menu summary:hover,
+.my-list-column-menu summary:focus-visible,
+.my-list-column-menu[open] summary {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.my-list-column-menu > div {
+  position: absolute;
+  z-index: 20;
+  top: 34px;
+  right: 0;
+  width: 136px;
+  display: grid;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.my-list-column-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  padding: 7px 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.7rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.my-list-column-menu button:hover:not(:disabled),
+.my-list-column-menu button:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.my-list-column-menu button.danger {
+  color: var(--urgent);
+}
+
+.my-list-column-menu button:disabled {
+  opacity: 0.42;
+  cursor: default;
+}
+
+.my-list-rename {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 5px;
+}
+
+.my-list-rename input {
+  min-height: 32px;
+  padding: 5px 7px;
+  font-size: 0.78rem;
+}
+
+.my-list-rename button {
+  border: 1px solid var(--accent-border);
+  border-radius: 7px;
+  background: var(--accent-tint);
+  color: var(--accent-soft);
+  cursor: pointer;
+}
+
+.my-list-cards {
+  min-height: 46px;
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 1px;
+}
+
+.my-list-card {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border-raised);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: var(--surface-raised);
+  color: var(--text);
+  text-align: left;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.my-list-card:hover,
+.my-list-card:focus-visible {
+  border-color: var(--border-hover);
+  background: var(--surface-hover);
+}
+
+.my-list-card strong {
+  overflow-wrap: anywhere;
+  font-size: 0.76rem;
+  font-weight: 670;
+  line-height: 1.35;
+}
+
+.my-list-card span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.my-list-card small {
+  color: var(--safe);
+  font-size: 0.61rem;
+  font-weight: 700;
+}
+
+.my-list-card.completed {
+  opacity: 0.68;
+}
+
+.my-list-card.completed strong {
+  text-decoration: line-through;
+}
+
+.my-list-column-empty {
+  margin: 7px 4px 10px;
+  color: var(--text-muted);
+  font-size: 0.67rem;
+}
+
+.my-list-add-card {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 680;
+  text-align: left;
+  cursor: pointer;
+}
+
+.my-list-add-card:hover,
+.my-list-add-card:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.my-list-inline-add {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.my-list-inline-add input {
+  min-height: 36px;
+  font-size: 0.72rem;
+}
+
+.my-list-inline-add > div {
+  display: flex;
+  gap: 8px;
+}
+
+.my-list-inline-add .small-button {
+  min-height: 30px;
+}
+
+.my-list-inline-add .quiet-button {
+  padding: 4px;
+}
+
+.my-list-new-column {
+  min-height: 52px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 54%, transparent);
+}
+
+.my-list-new-column > button {
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.my-list-new-column > button:hover,
+.my-list-new-column > button:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.my-list-new-column form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 7px;
+  padding: 9px;
+}
+
+.my-list-new-column form .quiet-button {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 0;
+}
+
+.my-list-modal-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 4100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+
+.my-list-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(3, 10, 20, 0.68);
+  cursor: default;
+}
+
+.my-list-modal {
+  position: relative;
+  width: min(520px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface-raised);
+  color: var(--text);
+  box-shadow: var(--shadow-modal);
+}
+
+.my-list-modal form {
+  max-height: calc(100dvh - 40px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.my-list-modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.my-list-modal-header h2,
+.my-list-modal-header p {
+  margin: 0;
+}
+
+.my-list-modal-header h2 {
+  margin-top: 3px;
+  font-size: 1.1rem;
+}
+
+.my-list-modal-header p:last-child {
+  margin-top: 5px;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.my-list-modal-header > button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.my-list-modal-body {
+  display: grid;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+
+.my-list-modal-body label {
+  display: grid;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 680;
+}
+
+.my-list-modal-body input,
+.my-list-modal-body textarea,
+.my-list-modal-body select {
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 9px 10px;
+  background: var(--surface-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.my-list-modal-body textarea {
+  resize: vertical;
+}
+
+.my-list-card-state {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.73rem;
+}
+
+.my-list-modal-error {
+  margin: 0;
+  color: var(--urgent);
+  font-size: 0.75rem;
+}
+
+.my-list-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.my-list-modal-actions > div {
+  display: flex;
+  gap: 8px;
+}
+
+.my-list-modal-actions .primary-button,
+.my-list-modal-actions .secondary-button {
+  width: auto;
+  min-height: 38px;
+  padding: 8px 14px;
+}
+
+.my-list-delete-action {
+  border: 0;
+  padding: 7px 0;
+  background: transparent;
+  color: var(--urgent);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 680;
+  cursor: pointer;
+}
+
+@media (max-width: 700px) {
+  .my-lists-page {
+    overflow: visible;
+  }
+
+  .my-lists-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .my-lists-completed-toggle {
+    width: fit-content;
+  }
+
+  .my-lists-board {
+    width: calc(100% + 18px);
+    margin-right: -18px;
+    padding-right: 18px;
+    padding-bottom: 12px;
+  }
+
+  .my-list-column,
+  .my-list-new-column {
+    width: min(82vw, 320px);
+    min-width: min(82vw, 320px);
+  }
+
+  .my-list-column {
+    max-height: calc(100dvh - 240px);
+    min-height: 180px;
+  }
+
+  .my-lists-empty form {
+    grid-template-columns: 1fr;
+  }
+
+  .my-lists-empty .primary-button,
+  .my-lists-empty .secondary-button {
+    width: 100%;
+  }
+
+  .my-list-modal-layer {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .my-list-modal {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+  }
+
+  .my-list-modal form {
+    max-height: calc(100dvh - 20px);
+  }
+}
+
+@media (max-width: 380px) {
+  .my-list-column,
+  .my-list-new-column {
+    width: calc(100vw - 52px);
+    min-width: calc(100vw - 52px);
+  }
+
+  .my-list-modal-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .my-list-modal-actions > div {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .my-list-delete-action {
+    align-self: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .my-list-card,
+  .my-list-modal {
+    scroll-behavior: auto;
+  }
+}
+

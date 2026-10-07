@@ -20,11 +20,13 @@ import useCloudTasks from "./hooks/useCloudTasks.js";
 import useCloudAppearancePreferences from "./hooks/useCloudAppearancePreferences.js";
 import useCloudPlanning from "./hooks/useCloudPlanning.js";
 import useCloudQuickLinks from "./hooks/useCloudQuickLinks.js";
+import useCloudMyLists from "./hooks/useCloudMyLists.js";
 import {
   DEFAULT_APPEARANCE_PREFERENCES,
 } from "./lib/cloudAppearancePreferences.js";
 import CalendarPage from "./pages/CalendarPage.jsx";
 import HomePage from "./pages/HomePage.jsx";
+import MyListsPage from "./pages/MyListsPage.jsx";
 import OnboardingFlow from "./pages/Onboarding.jsx";
 import PlanPage from "./pages/PlanPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
@@ -259,6 +261,7 @@ function getInitialNavigationState() {
   const routePage = {
     "/tasks": "tasks",
     "/plan": "plan",
+    "/my-lists": "myLists",
     "/settings/notifications": "settings",
   }[window.location.pathname];
 
@@ -335,6 +338,7 @@ function App() {
     importLegacy: importLegacyQuickLinks,
     declineLegacy: declineLegacyQuickLinks,
   } = useCloudQuickLinks(auth.user);
+  const myListsWorkspace = useCloudMyLists(auth.user);
   const appearancePreferences =
     cloudAppearancePreferences || DEFAULT_APPEARANCE_PREFERENCES;
   const theme = appearancePreferences.theme;
@@ -1274,6 +1278,8 @@ function App() {
     if (typeof window !== "undefined") {
       const nextUrl = new URL(window.location.href);
 
+      if (nextUrl.pathname === "/my-lists") nextUrl.pathname = "/";
+
       nextUrl.searchParams.delete("settings");
       nextUrl.searchParams.delete("googleCalendarManager");
       nextUrl.searchParams.delete("googleClassroomManager");
@@ -1306,11 +1312,24 @@ function App() {
     }
   }
 
+  function navigateToPage(page) {
+    if (typeof window !== "undefined") {
+      const pagePaths = { tasks: "/tasks", plan: "/plan", myLists: "/my-lists" };
+      const currentPath = window.location.pathname;
+      const nextPath = pagePaths[page] || "/";
+
+      if ((page === "myLists" || currentPath === "/my-lists") && currentPath !== nextPath) {
+        window.history.pushState({}, "", nextPath);
+      }
+    }
+    setActivePage(page);
+  }
+
   function navigateMobilePage(page) {
     if (startMobilePagerNavigation(page)) return;
 
     setMobileMoreOpen(false);
-    setActivePage(page);
+    navigateToPage(page);
   }
 
 
@@ -3439,6 +3458,10 @@ function App() {
       );
     }
 
+    if (page === "myLists") {
+      return <MyListsPage workspace={myListsWorkspace} />;
+    }
+
     if (page === "plan") {
       return (
         <PlanPage
@@ -3661,31 +3684,37 @@ function App() {
             label="Home"
             icon="⌂"
             active={activePage === "home"}
-            onClick={() => setActivePage("home")}
+            onClick={() => navigateToPage("home")}
           />
           <NavButton
             label="To-do list"
             icon="✓"
             active={activePage === "tasks"}
-            onClick={() => setActivePage("tasks")}
+            onClick={() => navigateToPage("tasks")}
+          />
+          <NavButton
+            label="My Lists"
+            icon="☷"
+            active={activePage === "myLists"}
+            onClick={() => navigateToPage("myLists")}
           />
           <NavButton
             label="Today’s Plan"
             icon="◷"
             active={activePage === "plan"}
-            onClick={() => setActivePage("plan")}
+            onClick={() => navigateToPage("plan")}
           />
           <NavButton
             label="Calendar"
             icon="▦"
             active={activePage === "calendar"}
-            onClick={() => setActivePage("calendar")}
+            onClick={() => navigateToPage("calendar")}
           />
           <NavButton
             label="Subjects"
             icon="◈"
             active={activePage === "subjects"}
-            onClick={() => setActivePage("subjects")}
+            onClick={() => navigateToPage("subjects")}
           />
 
           <QuickLinksNav
@@ -3758,7 +3787,7 @@ function App() {
       <MobileMoreSheet
         open={mobileMoreOpen}
         onClose={() => setMobileMoreOpen(false)}
-        setActivePage={setActivePage}
+        setActivePage={navigateToPage}
         openSettings={openSettings}
         quickLinksPreferences={quickLinksPreferences}
         localProfile={accountIdentity}

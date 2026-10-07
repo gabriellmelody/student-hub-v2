@@ -305,16 +305,20 @@
   transform: translateY(var(--density-nav-step));
 }
 
-.nav-plan .nav-indicator {
+.nav-myLists .nav-indicator {
   transform: translateY(calc(var(--density-nav-step) * 2));
 }
 
-.nav-calendar .nav-indicator {
+.nav-plan .nav-indicator {
   transform: translateY(calc(var(--density-nav-step) * 3));
 }
 
-.nav-subjects .nav-indicator {
+.nav-calendar .nav-indicator {
   transform: translateY(calc(var(--density-nav-step) * 4));
+}
+
+.nav-subjects .nav-indicator {
+  transform: translateY(calc(var(--density-nav-step) * 5));
 }
 
 .nav-settings .nav-indicator {

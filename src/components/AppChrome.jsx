@@ -7,7 +7,11 @@ import { getPinnedQuickLinks } from "../utils/appUtils.js";
 
 function NavButton({ label, icon, active, onClick }) {
   return (
-    <button className={`nav-button ${active ? "active" : ""}`} onClick={onClick}>
+    <button
+      className={`nav-button ${active ? "active" : ""}`}
+      aria-current={active ? "page" : undefined}
+      onClick={onClick}
+    >
       <span className="nav-icon">{icon}</span>
       <span className="nav-label">{label}</span>
     </button>
@@ -16,6 +20,7 @@ function NavButton({ label, icon, active, onClick }) {
 
 function getMobilePageTitle(activePage, settingsView) {
   if (activePage === "tasks") return "To-do";
+  if (activePage === "myLists") return "My Lists";
   if (activePage === "plan") return "Today’s Plan";
   if (activePage === "calendar") return "Calendar";
   if (activePage === "subjects") return "Subjects";
@@ -63,7 +68,7 @@ function MobileBottomNav({ activePage, moreOpen, onNavigate, onToggleMore }) {
     { id: "home", label: "Home", icon: "⌂", center: true },
     { id: "calendar", label: "Calendar", icon: "▦" },
   ];
-  const moreActive = moreOpen || activePage === "subjects" || activePage === "settings";
+  const moreActive = moreOpen || activePage === "myLists" || activePage === "subjects" || activePage === "settings";
 
   return (
     <nav className="mobile-bottom-nav" aria-label="Primary mobile navigation">
@@ -177,6 +182,10 @@ function MobileMoreSheet({
 
         <div className="mobile-more-content">
           <section className="mobile-more-section" aria-label="Destinations">
+            <button type="button" onClick={() => navigate("myLists")}>
+              <span aria-hidden="true">☷</span>
+              <strong>My Lists</strong>
+            </button>
             <button type="button" onClick={() => navigate("subjects")}>
               <span aria-hidden="true">◈</span>
               <strong>Subjects</strong>
