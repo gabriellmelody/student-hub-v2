@@ -3,11 +3,13 @@ import {
   handleSubscribe,
   handleUnsubscribe,
 } from "../../server/notifications/subscriptions.js";
+import { handleDeliverDue } from "../../server/notifications/delivery.js";
 
 const handlers = Object.freeze({
   subscribe: handleSubscribe,
   unsubscribe: handleUnsubscribe,
   status: handleStatus,
+  "deliver-due": handleDeliverDue,
 });
 
 export default function handler(request, response) {
@@ -23,4 +25,3 @@ export default function handler(request, response) {
   }
   return routeHandler(request, response);
 }
-

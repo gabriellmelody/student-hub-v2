@@ -140,10 +140,10 @@ export function reconcileClassroomAssignments({ assignments, settings, subjects,
 
     const nextTask = normalizeTask({
       ...existingTask,
-      title: classroomTask.title,
-      description: classroomTask.description,
-      dueDate: classroomTask.dueDate,
-      dueTime: classroomTask.dueTime,
+      title: existingTask.manualOverrides?.title ? existingTask.title : classroomTask.title,
+      description: existingTask.manualOverrides?.description ? existingTask.description : classroomTask.description,
+      dueDate: existingTask.manualOverrides?.dueDate ? existingTask.dueDate : classroomTask.dueDate,
+      dueTime: existingTask.manualOverrides?.dueTime ? existingTask.dueTime : classroomTask.dueTime,
       completed: classroomTask.completed,
       completedAt: classroomTask.completed
         ? existingTask.completedAt || classroomTask.completedAt

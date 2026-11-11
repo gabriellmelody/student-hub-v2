@@ -200,6 +200,31 @@ test("maps the full DayLo task shape to snake_case DB fields", () => {
   assert.equal("user_id" in mapTaskForUpdate(dayloTask()), false);
 });
 
+test("Google Calendar task linkage round-trips through cloud task serialization", () => {
+  const linkedTask = dayloTask({
+    googleCalendarEventId: "event-1",
+    googleCalendarId: "daylo-tasks@group.calendar.google.com",
+    googleCalendarAccountId: "google-account-1",
+    googleCalendarEventHtmlLink: "https://calendar.google.com/calendar/event?eid=event-1",
+    scheduledDate: "2026-10-21",
+    scheduledStartTime: "19:00",
+    scheduledDurationMinutes: 60,
+    scheduledTimeZone: "Asia/Bangkok",
+  });
+  const payload = mapTaskForInsert(linkedTask, USER_ID);
+  const restored = mapCloudTask(cloudRow(payload));
+
+  assert.equal(restored.googleCalendarEventId, linkedTask.googleCalendarEventId);
+  assert.equal(restored.googleCalendarId, linkedTask.googleCalendarId);
+  assert.equal(restored.googleCalendarAccountId, linkedTask.googleCalendarAccountId);
+  assert.equal(restored.googleCalendarEventHtmlLink, linkedTask.googleCalendarEventHtmlLink);
+  assert.equal(restored.scheduledDate, linkedTask.scheduledDate);
+  assert.equal(restored.scheduledStartTime, linkedTask.scheduledStartTime);
+  assert.equal(restored.scheduledDurationMinutes, linkedTask.scheduledDurationMinutes);
+  assert.equal(restored.scheduledTimeZone, linkedTask.scheduledTimeZone);
+  assert.equal(restored.dueDate, linkedTask.dueDate);
+});
+
 test("zero-task cloud accounts load empty and never consult localStorage", async () => {
   globalThis.localStorage = {
     getItem() {
@@ -420,6 +445,7 @@ test("Today Plan and Calendar helpers preserve UUID task references", () => {
   assert.equal(restored[0].taskId, TASK_ID);
   assert.equal(calendarEvents[0].taskId, TASK_ID);
   assert.equal(calendarEvents[0].date, "2026-08-10");
+  assert.equal(calendarEvents[0].dueTime, task.dueTime || "");
 });
 
 test("App integration uses cloud Tasks and leaves legacy localStorage unimported", () => {

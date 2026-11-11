@@ -1,4 +1,8 @@
 import { getValidCalendarSession } from "./_session.js";
+import {
+  GOOGLE_CALENDAR_TASK_WRITE_SCOPE,
+  hasGoogleCalendarTaskWriteScope,
+} from "./_config.js";
 
 export default async function handler(request, response) {
   const sessionResult = await getValidCalendarSession(request, response);
@@ -50,6 +54,10 @@ export default async function handler(request, response) {
     account: {
       id: typeof session.account_id === "string" ? session.account_id : "",
       email: typeof session.account_email === "string" ? session.account_email : "",
+    },
+    taskScheduling: {
+      writeEnabled: hasGoogleCalendarTaskWriteScope(session.scope),
+      requiredScope: GOOGLE_CALENDAR_TASK_WRITE_SCOPE,
     },
   });
 }

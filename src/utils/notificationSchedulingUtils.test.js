@@ -23,6 +23,10 @@ const migration = readFileSync(
   new URL("../../supabase/migrations/20260821_notifications_pass1.sql", import.meta.url),
   "utf8"
 );
+const deliveryMigration = readFileSync(
+  new URL("../../supabase/migrations/20260824_notifications_pass4_delivery_claims.sql", import.meta.url),
+  "utf8"
+);
 const classroomCourseworkSource = readFileSync(
   new URL("../../server/google-classroom/coursework-preview.js", import.meta.url),
   "utf8"
@@ -231,4 +235,13 @@ test("delivery dedupe is per subscription and enforces matching ownership", () =
   assert.match(migration, /unique \(subscription_id, occurrence_key\)/);
   assert.match(migration, /foreign key \(subscription_id, user_id\)/);
   assert.match(migration, /references public\.push_subscriptions\(id, user_id\) on delete cascade/);
+});
+
+test("delivery retries use an atomic server-only claim", () => {
+  assert.match(deliveryMigration, /add column if not exists next_attempt_at timestamptz/);
+  assert.match(deliveryMigration, /on conflict \(subscription_id, occurrence_key\) do update/);
+  assert.match(deliveryMigration, /attempt_count < 3/);
+  assert.match(deliveryMigration, /last_attempt_at < now\(\) - interval '15 minutes'/);
+  assert.match(deliveryMigration, /revoke all on function public\.daylo_claim_notification_delivery[\s\S]*from authenticated/);
+  assert.match(deliveryMigration, /grant execute on function public\.daylo_claim_notification_delivery[\s\S]*to service_role/);
 });

@@ -26,6 +26,30 @@ const assignment = {
   alternateLink: "https://classroom.google.com/c/abc/a/def",
 };
 
+test("manual title, description, classification and effort survive a changed Classroom deadline", () => {
+  const existing = {
+    ...assignment,
+    id: "task-1",
+    title: "Finish essay conclusion",
+    description: "My notes\nSecond line",
+    effort: 5,
+    importance: "high",
+    importanceSource: "manual",
+    taskType: "assessment",
+    detectedTags: ["Summative"],
+    manualOverrides: { title: true, description: true },
+  };
+  const result = reconcileClassroomAssignments({
+    assignments: [{ ...assignment, description: "Teacher instructions", dueDate: "2026-11-20" }],
+    settings: [setting], subjects: [subject], tasks: [existing], syncedAt: "2026-11-09T00:00:00Z",
+  }).tasksToSync[0];
+  for (const field of ["title", "description", "effort", "importance", "taskType"]) {
+    assert.equal(result[field], existing[field]);
+  }
+  assert.ok(result.detectedTags.includes("Summative"));
+  assert.equal(result.dueDate, "2026-11-20");
+});
+
 test("Classroom course configuration persists with user-scoped rows", () => {
   const merged = mergeClassroomCoursesWithSettings([course], [setting]);
   assert.equal(merged[0].classroomCourseId, "course-1");

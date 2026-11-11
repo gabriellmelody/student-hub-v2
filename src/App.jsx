@@ -32,6 +32,7 @@ import PlanPage from "./pages/PlanPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import SubjectsPage from "./pages/SubjectsPage.jsx";
 import TasksPage from "./pages/TasksPage.jsx";
+
 import {
   DEFAULT_THEME_COLORS,
   themeColorPalettes,
@@ -56,9 +57,9 @@ import {
   createDemoTasks,
   createCompletedTaskHistoryRecord,
   normalizeTask,
-  createQuickTaskDraft,
   getExternalSourceKey,
 } from "./utils/appUtils.js";
+import { createEmptyTaskDraft } from "./utils/taskBoardUtils.js";
 import { createTaskFromMockAssignment } from "./utils/classroomMockUtils.js";
 import {
   getBusyGoogleCalendarIdsFromStorage,
@@ -77,6 +78,10 @@ import {
 } from "./utils/smartPlannerUtils.js";
 import { getSmartPlannerFallback, startRequestDeadline } from "./utils/smartPlannerRequestUtils.js";
 import { getIntegrationAuthHeaders } from "./utils/integrationAuthUtils.js";
+import {
+  clearTaskGoogleCalendarLinkage,
+  requestTaskCalendarOperation,
+} from "./utils/taskCalendarScheduling.js";
 import { clearOnboardingDraft, shouldShowOnboarding } from "./utils/onboardingUtils.js";
 import useGuidedTour from "./hooks/useGuidedTour.js";
 import usePwaInstall from "./hooks/usePwaInstall.js";
@@ -150,21 +155,6 @@ function resolveThemePreference(themePreference) {
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
-}
-
-function createEmptyTaskDraft() {
-  return {
-    subject: "",
-    title: "",
-    description: "",
-    dueDate: "",
-    dueTime: "",
-    effort: 2,
-    taskType: "homework",
-    importance: "normal",
-    detectedTags: [],
-    importanceSource: "auto",
-  };
 }
 
 function getBusyGoogleCalendarIds() {
@@ -261,6 +251,7 @@ function getInitialNavigationState() {
   const routePage = {
     "/tasks": "tasks",
     "/plan": "plan",
+    "/calendar": "calendar",
     "/my-lists": "myLists",
     "/settings/notifications": "settings",
   }[window.location.pathname];
@@ -296,6 +287,7 @@ function App() {
     initialNavigation.settingsView
   );
   const [settingsNavigationRequest, setSettingsNavigationRequest] = useState(0);
+  const [requestedTaskDetailsId, setRequestedTaskDetailsId] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [mobilePager, setMobilePager] = useState(null);
@@ -766,6 +758,14 @@ function App() {
     return () =>
       window.removeEventListener("popstate", syncNavigationFromHistory);
   }, []);
+
+  useEffect(() => {
+    const paths = { home: "/", tasks: "/tasks", plan: "/plan", calendar: "/calendar", myLists: "/my-lists", settings: "/settings" };
+    const path = paths[activePage];
+    if (!path) return;
+    const query = activePage === "settings" && settingsView === "integrations" ? "?tab=integrations" : "";
+    window.history.replaceState({}, "", `${path}${query}${window.location.hash}`);
+  }, [activePage, settingsView]);
 
   useEffect(() => {
     function closeMobileMoreOnDesktop() {
@@ -1278,7 +1278,7 @@ function App() {
     if (typeof window !== "undefined") {
       const nextUrl = new URL(window.location.href);
 
-      if (nextUrl.pathname === "/my-lists") nextUrl.pathname = "/";
+      nextUrl.pathname = "/settings";
 
       nextUrl.searchParams.delete("settings");
       nextUrl.searchParams.delete("googleCalendarManager");
@@ -1314,11 +1314,11 @@ function App() {
 
   function navigateToPage(page) {
     if (typeof window !== "undefined") {
-      const pagePaths = { tasks: "/tasks", plan: "/plan", myLists: "/my-lists" };
-      const currentPath = window.location.pathname;
+      const pagePaths = { tasks: "/tasks", plan: "/plan", calendar: "/calendar", settings: "/settings", myLists: "/my-lists" };
+      const currentPath = window.location.pathname + window.location.search;
       const nextPath = pagePaths[page] || "/";
 
-      if ((page === "myLists" || currentPath === "/my-lists") && currentPath !== nextPath) {
+      if (currentPath !== nextPath) {
         window.history.pushState({}, "", nextPath);
       }
     }
@@ -1777,12 +1777,35 @@ function App() {
     subjects.some((subject) => subject.source === "demo") ||
     completedTaskHistory.some((record) => record.source === "demo");
 
+  async function runTaskCalendarOperation(operation, taskId, schedule = null) {
+    const result = await requestTaskCalendarOperation({
+      accessToken: auth.session?.access_token || "",
+      operation,
+      taskId,
+      schedule,
+    });
+    if (result.ok) await refetchTasks({ silent: true });
+    return result;
+  }
+
+  function hasLinkedTaskCalendarEvent(task) {
+    return Boolean(task?.googleCalendarEventId || task?.googleCalendarId);
+  }
+
   async function toggleTask(taskId) {
     const taskBeingChanged = tasks.find((task) => task.id === taskId);
     if (!taskBeingChanged) return false;
+    let taskForSave = taskBeingChanged;
+    if (!taskBeingChanged.completed && hasLinkedTaskCalendarEvent(taskBeingChanged)) {
+      const calendarResult = await runTaskCalendarOperation("prepare-completion", taskId);
+      if (!calendarResult.ok) return false;
+      if (calendarResult.linkageCleared) {
+        taskForSave = clearTaskGoogleCalendarLinkage(taskBeingChanged);
+      }
+    }
     const completedAt = Date.now();
     const savedTask = await updateCloudTask({
-      ...taskBeingChanged,
+      ...taskForSave,
       completed: !taskBeingChanged.completed,
       completedAt: taskBeingChanged.completed ? null : completedAt,
     });
@@ -1812,9 +1835,17 @@ function App() {
 
     const taskToComplete = tasks.find((task) => task.id === taskId);
     if (!taskToComplete) return false;
+    let taskForSave = taskToComplete;
+    if (hasLinkedTaskCalendarEvent(taskToComplete)) {
+      const calendarResult = await runTaskCalendarOperation("prepare-completion", taskId);
+      if (!calendarResult.ok) return false;
+      if (calendarResult.linkageCleared) {
+        taskForSave = clearTaskGoogleCalendarLinkage(taskToComplete);
+      }
+    }
     const completedAt = Date.now();
     const savedTask = await updateCloudTask({
-      ...taskToComplete,
+      ...taskForSave,
       completed: true,
       completedAt,
     });
@@ -1843,6 +1874,11 @@ function App() {
   }
 
   async function deleteTask(taskId) {
+    const taskToDelete = tasks.find((task) => task.id === taskId);
+    if (hasLinkedTaskCalendarEvent(taskToDelete)) {
+      const calendarResult = await runTaskCalendarOperation("prepare-deletion", taskId);
+      if (!calendarResult.ok) return false;
+    }
     if (!(await deleteCloudTask(taskId))) return false;
     setPlanBlocks((currentBlocks) =>
       recalculatePlanTimes(
@@ -1859,6 +1895,15 @@ function App() {
     const currentTask = tasks.find((task) => task.id === taskId);
     if (!currentTask || !updatedTask.title.trim()) return false;
 
+    const manualOverrides = { ...currentTask.manualOverrides };
+    if (currentTask.source === "classroom") {
+      for (const field of ["title", "description", "dueDate", "dueTime"]) {
+        if (Object.hasOwn(updatedTask, field) && updatedTask[field] !== currentTask[field]) {
+          manualOverrides[field] = true;
+        }
+      }
+    }
+
     const subjectName = String(updatedTask.subject || "").trim();
     const linkedSubject = subjects.find(
       (subject) => subject.name.toLocaleLowerCase() === subjectName.toLocaleLowerCase()
@@ -1867,6 +1912,7 @@ function App() {
       normalizeTask({
         ...currentTask,
         ...updatedTask,
+        manualOverrides,
         subject: subjectName,
         linkedSubjectId: linkedSubject?.id || null,
         linkedSubjectName: subjectName,
@@ -1877,6 +1923,14 @@ function App() {
     );
 
     if (!savedTask) return false;
+
+    if (
+      hasLinkedTaskCalendarEvent(currentTask) &&
+      currentTask.title.trim() !== savedTask.title.trim()
+    ) {
+      const calendarResult = await runTaskCalendarOperation("sync-title", taskId);
+      if (!calendarResult.ok) return false;
+    }
 
     setPlanBlocks([]);
     setPlanMetadata(null);
@@ -1974,10 +2028,6 @@ function App() {
     });
 
     return Boolean(await createCloudTask(taskToAdd));
-  }
-
-  function addQuickTask(title) {
-    return addTaskToList(createQuickTaskDraft(title));
   }
 
   async function addTask(event) {
@@ -2301,6 +2351,7 @@ function App() {
         }
 
         const syncedAt = new Date().toISOString();
+        if (classroomSyncUserIdRef.current !== userId) return { ok: false, skipped: true };
         const reconciliation = reconcileClassroomAssignments({
           assignments: result.assignments || [],
           settings: enabledSettings,
@@ -2358,6 +2409,7 @@ function App() {
         if (classroomSyncUserIdRef.current === userId) {
           const reconnect = [
             "no_classroom_session",
+            "classroom_account_reconnect_required",
             "classroom_reauthorization_required",
             "classroom_session_invalid_or_expired",
           ].includes(error?.message);
@@ -3414,21 +3466,21 @@ function App() {
     if (page === "home") {
       return (
         <HomePage
+          authAccessToken={auth.session?.access_token || ""}
           tasks={visibleTasks}
           subjects={subjects}
-          activeTasks={activeTasks}
-          completedTasks={completedTasks}
-          noDeadlineTasks={noDeadlineTasks}
-          visibleBacklog={visibleBacklog}
-          hiddenBacklogCount={hiddenBacklogCount}
-          progressPercentage={progressPercentage}
-          nextTask={nextTask}
-          openSmartPlanner={openSmartPlanner}
+          planningPreferences={cloudPlanningPreferences}
           loading={planningLoading}
-          syncError={planningSyncError}
-          hasPlan={accountPlanBlocks.length > 0}
-          planBlocks={accountPlanBlocks}
           setActivePage={setActivePage}
+          openTaskDetails={(taskId) => {
+            setRequestedTaskDetailsId(String(taskId));
+            setActivePage("tasks");
+          }}
+          openAddTask={() => {
+            setShowAddTask(true);
+            setActivePage("tasks");
+          }}
+          openIntegrations={() => openSettings("integrations")}
         />
       );
     }
@@ -3448,12 +3500,20 @@ function App() {
           newTask={newTask}
           setNewTask={setNewTask}
           addTask={addTask}
-          addQuickTask={addQuickTask}
           toggleTask={toggleTask}
           deleteTask={deleteTask}
           updateTask={updateTask}
           taskSyncError={tasksSyncError}
           retryTaskSync={refetchTasks}
+          scheduleTaskInCalendar={(taskId, schedule) =>
+            runTaskCalendarOperation("schedule", taskId, schedule)
+          }
+          removeTaskFromCalendar={(taskId) =>
+            runTaskCalendarOperation("remove", taskId)
+          }
+          openCalendarSettings={() => openSettings("integrations")}
+          requestedTaskId={requestedTaskDetailsId}
+          onTaskDetailsRequestHandled={() => setRequestedTaskDetailsId("")}
         />
       );
     }
@@ -3465,6 +3525,14 @@ function App() {
     if (page === "plan") {
       return (
         <PlanPage
+          tasks={tasks}
+          subjects={subjects}
+          planningPreferences={cloudPlanningPreferences}
+          updatePlanningPreferences={updatePlanningPreferences}
+          openTaskDetails={(taskId) => {
+            setRequestedTaskDetailsId(String(taskId));
+            setActivePage("tasks");
+          }}
           planBlocks={accountPlanBlocks}
           planMetadata={accountPlanBlocks.length > 0 ? planMetadata : null}
           clearPlan={clearPlan}
@@ -3495,6 +3563,10 @@ function App() {
           subjects={subjects}
           setActivePage={setActivePage}
           addTaskToList={addTaskToList}
+          openTaskDetails={(taskId) => {
+            setRequestedTaskDetailsId(String(taskId));
+            setActivePage("tasks");
+          }}
         />
       );
     }

@@ -1,8 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  createEmptyTaskDraft,
   createDueDateBoardColumns,
   createPriorityBoardColumns,
+  createTaskDraftForBoardColumn,
+  getVisibleTaskColumnItems,
+  TASK_BOARD_VISIBLE_LIMIT,
 } from "./taskBoardUtils.js";
 
 function task(id, dueDate, extra = {}) {
@@ -92,4 +96,49 @@ test("priority board uses existing authoritative importance values", () => {
 
   assert.deepEqual(columns.map((column) => column.label), ["Urgent", "High", "Normal"]);
   assert.deepEqual(columns.map((column) => column.tasks[0]?.id), ["urgent", "high", "normal"]);
+});
+
+test("Due Date column creation defaults follow the selected column", () => {
+  const now = new Date(2026, 6, 29, 12);
+  const columns = createDueDateBoardColumns([], now);
+  const today = columns.find((column) => column.label === "Today");
+  const tomorrow = columns.find((column) => column.label === "Tomorrow");
+  const friday = columns.find((column) => column.label === "Friday");
+  const later = columns.find((column) => column.id === "later");
+  const unscheduled = columns.find((column) => column.id === "unscheduled");
+  const overdue = columns.find((column) => column.id === "overdue");
+
+  assert.equal(createTaskDraftForBoardColumn(today, "dueDate", now).dueDate, "2026-07-29");
+  assert.equal(createTaskDraftForBoardColumn(tomorrow, "dueDate", now).dueDate, "2026-07-30");
+  assert.equal(createTaskDraftForBoardColumn(friday, "dueDate", now).dueDate, "2026-07-31");
+  assert.equal(createTaskDraftForBoardColumn(later, "dueDate", now).dueDate, "2026-08-04");
+  assert.equal(createTaskDraftForBoardColumn(unscheduled, "dueDate", now).dueDate, "");
+  assert.equal(createTaskDraftForBoardColumn(overdue, "dueDate", now).dueDate, "2026-07-29");
+});
+
+test("Priority column creation defaults use the selected authoritative priority", () => {
+  for (const column of createPriorityBoardColumns([])) {
+    const draft = createTaskDraftForBoardColumn(column, "priority");
+    assert.equal(draft.importance, column.importance);
+    assert.equal(draft.importanceSource, "manual");
+    assert.equal(draft.dueDate, "");
+  }
+});
+
+test("new task drafts keep date and due time independently optional", () => {
+  const draft = createEmptyTaskDraft();
+  assert.equal(draft.dueDate, "");
+  assert.equal(draft.dueTime, "");
+  assert.notEqual(draft.dueTime, "00:00");
+});
+
+test("task columns show seven cards by default and expand independently", () => {
+  const tasks = Array.from({ length: 11 }, (_, index) => task(`task-${index + 1}`, ""));
+  assert.equal(TASK_BOARD_VISIBLE_LIMIT, 7);
+  assert.deepEqual(
+    getVisibleTaskColumnItems(tasks).map(({ id }) => id),
+    tasks.slice(0, 7).map(({ id }) => id)
+  );
+  assert.equal(getVisibleTaskColumnItems(tasks, true).length, 11);
+  assert.equal(getVisibleTaskColumnItems(tasks.slice(0, 3)).length, 3);
 });

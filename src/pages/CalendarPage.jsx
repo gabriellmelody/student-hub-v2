@@ -39,8 +39,8 @@ import {
 } from "../utils/calendarPresentationUtils.js";
 import { getIntegrationAuthHeaders } from "../utils/integrationAuthUtils.js";
 
-const googleCalendarEventLimit = 2;
-const weekGoogleEventLimit = 2;
+const monthCalendarItemLimit = 4;
+const weekCalendarItemLimit = 6;
 
 const effortKeywordGroups = {
   high: [
@@ -158,10 +158,28 @@ function getCalendarEventTimeLabel(event) {
   )}`;
 }
 
+function getCalendarEventStartLabel(event) {
+  if (event.allDay) return "All day";
+  const startDate = new Date(event.start);
+  if (!Number.isFinite(startDate.getTime())) return "";
+  return startDate.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function getGoogleCalendarEventStyle(event) {
   return {
     "--calendar-event-color":
       event.backgroundColor || event.calendarColor || "var(--accent-soft)",
+  };
+}
+
+function getCalendarTaskStyle(task, colourMode = "subject") {
+  const deadlineStyle = getCalendarDeadlineSummaryStyle([task], colourMode);
+  return {
+    "--calendar-task-color":
+      deadlineStyle?.["--calendar-deadline-color"] || "var(--accent-soft)",
   };
 }
 
@@ -232,6 +250,26 @@ function getAssessmentCalendarLabel(event) {
   );
 
   return assessmentBadge?.label || "Assessment";
+}
+
+function getAssessmentCalendarIndicator(event) {
+  if (!isAssessmentCalendarEvent(event)) return null;
+  const label = getAssessmentCalendarLabel(event);
+  const normalized = label.toLowerCase();
+  if (normalized.includes("common formative") || normalized === "cfa") {
+    return { short: "CFA", label: "CFA" };
+  }
+  if (normalized.includes("summative")) return { short: "S", label: "Summative" };
+  if (normalized.includes("formative")) return { short: "F", label: "Formative" };
+  return { short: "A", label };
+}
+
+function formatTaskDueTime(task) {
+  if (!task?.dueTime) return "";
+  const [hours, minutes] = String(task.dueTime).split(":").map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return "";
+  const date = new Date(2026, 0, 1, hours, minutes);
+  return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
 }
 
 function formatAssessmentSummaryLabel(event) {
@@ -326,6 +364,7 @@ function CalendarPage({
   subjects,
   setActivePage,
   addTaskToList,
+  openTaskDetails,
 }) {
   const today = new Date();
   const [visibleMonth, setVisibleMonth] = useState(
@@ -341,6 +380,13 @@ function CalendarPage({
     getInitialGoogleEventsVisibility
   );
   const [showClassSchedule, setShowClassSchedule] = useState(false);
+  const [showDayLoTasks, setShowDayLoTasks] = useState(true);
+  const [hiddenGoogleCalendarIds, setHiddenGoogleCalendarIds] = useState(
+    () => new Set()
+  );
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [selectedDayOpen, setSelectedDayOpen] = useState(false);
+  const [selectedGoogleEvent, setSelectedGoogleEvent] = useState(null);
   const [showCalendarTaskForm, setShowCalendarTaskForm] = useState(false);
   const [calendarTaskDraft, setCalendarTaskDraft] = useState(() =>
     createCalendarTaskDraft(formatDateKey(today))
@@ -369,11 +415,20 @@ function CalendarPage({
   const selectedWeekDayRef = useRef(null);
   const googleCalendarEventsCacheRef = useRef(new Map());
   const calendarEvents = getTaskCalendarEvents(tasks, subjects);
+  const displayedTaskEvents = showDayLoTasks
+    ? calendarEvents.filter((event) => !event.completed)
+    : [];
   const calendarDays = getMonthCalendarDays(visibleMonth);
+  const selectedDateValue = parseDateKey(selectedDate);
+  const miniCalendarMonth =
+    calendarView === "week"
+      ? new Date(selectedDateValue.getFullYear(), selectedDateValue.getMonth(), 1)
+      : visibleMonth;
+  const miniCalendarDays = getMonthCalendarDays(miniCalendarMonth);
   const calendarWeekDays = getCalendarWeekDays(visibleWeekStart, today);
   const visibleCalendarDays =
     calendarView === "week" ? calendarWeekDays : calendarDays;
-  const selectedEvents = calendarEvents.filter(
+  const selectedEvents = displayedTaskEvents.filter(
     (event) => event.date === selectedDate
   );
   const visibleGoogleCalendarPreferences = useMemo(
@@ -403,7 +458,6 @@ function CalendarPage({
       ])
     );
   }, [visibleGoogleCalendarPreferences]);
-  const selectedDateValue = parseDateKey(selectedDate);
   const eventRangeStart = visibleCalendarDays[0]?.date;
   const eventRangeEnd = visibleCalendarDays[visibleCalendarDays.length - 1]?.date;
   const eventRangeStartKey = visibleCalendarDays[0]?.dateKey || "";
@@ -429,11 +483,13 @@ function CalendarPage({
     });
   }, [classroomTasks, currentViewGoogleCalendarEvents]);
   const displayedGoogleCalendarEvents = showGoogleEvents
-    ? visibleGoogleCalendarEvents
+    ? visibleGoogleCalendarEvents.filter(
+        (event) => !hiddenGoogleCalendarIds.has(event.calendarId)
+      )
     : [];
   const monthGoogleCalendarEvents = getMonthGoogleEvents(
-    visibleGoogleCalendarEvents,
-    { showGoogleEvents, showClassSchedule }
+    displayedGoogleCalendarEvents,
+    { showGoogleEvents: true, showClassSchedule }
   );
   const selectedScheduleEvents = displayedGoogleCalendarEvents.filter((event) =>
     googleEventOccursOnDate(event, selectedDate)
@@ -442,16 +498,15 @@ function CalendarPage({
     () =>
       groupCalendarItemsByDate({
         dateKeys: calendarWeekDays.map((day) => day.dateKey),
-        taskEvents: calendarEvents.filter((event) => !event.completed),
-        googleEvents: visibleGoogleCalendarEvents,
+        taskEvents: displayedTaskEvents,
+        googleEvents: displayedGoogleCalendarEvents,
         getGoogleEventDateKeys: getGoogleEventDayKeys,
-        showGoogleEvents,
+        showGoogleEvents: true,
       }),
     [
-      calendarEvents,
       calendarWeekDays,
-      showGoogleEvents,
-      visibleGoogleCalendarEvents,
+      displayedGoogleCalendarEvents,
+      displayedTaskEvents,
     ]
   );
 
@@ -883,6 +938,44 @@ function CalendarPage({
     setSelectedDate(formatDateKey(currentDate));
   }
 
+  function changeMiniMonth(offset) {
+    const nextMonth = new Date(
+      miniCalendarMonth.getFullYear(),
+      miniCalendarMonth.getMonth() + offset,
+      1
+    );
+    setVisibleMonth(nextMonth);
+    setVisibleWeekStart(getCalendarWeekStart(nextMonth));
+    setSelectedDate(formatDateKey(nextMonth));
+  }
+
+  function toggleGoogleCalendarSource(calendarId) {
+    setHiddenGoogleCalendarIds((current) => {
+      const next = new Set(current);
+      if (next.has(calendarId)) next.delete(calendarId);
+      else next.add(calendarId);
+      return next;
+    });
+  }
+
+  function openCalendarTask(task) {
+    if (typeof openTaskDetails === "function" && task?.taskId) {
+      openTaskDetails(task.taskId);
+      return;
+    }
+    setActivePage("tasks");
+  }
+
+  function openSelectedDay(day) {
+    selectCalendarDay(day);
+    setSelectedDayOpen(true);
+  }
+
+  function openGoogleEvent(event, day) {
+    if (day) selectCalendarDay(day);
+    setSelectedGoogleEvent(event);
+  }
+
   function changeCalendarView(nextView) {
     if (nextView === calendarView) return;
 
@@ -921,6 +1014,7 @@ function CalendarPage({
   function openCalendarTaskForm() {
     setCalendarTaskDraft(createCalendarTaskDraft(selectedDate));
     setShowCalendarTaskForm(true);
+    setSelectedDayOpen(true);
   }
 
   async function submitCalendarTask(event) {
@@ -941,88 +1035,133 @@ function CalendarPage({
       <header className="page-header calendar-page-header">
         <div>
           <p className="eyebrow">Calendar</p>
-          <h2>School calendar</h2>
-          <p>Due dates from your tasks and Classroom imports.</p>
+          <h2>Calendar</h2>
+          <p>Deadlines and events, together in one place.</p>
         </div>
-
-        <div className="calendar-header-controls">
-          <div
-            className="calendar-view-toggle"
-            role="tablist"
-            aria-label="Calendar view"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={calendarView === "week"}
-              className={calendarView === "week" ? "active" : ""}
-              onClick={() => changeCalendarView("week")}
-            >
-              Week
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={calendarView === "month"}
-              className={calendarView === "month" ? "active" : ""}
-              onClick={() => changeCalendarView("month")}
-            >
-              Month
-            </button>
-          </div>
-
-          <label
-            className="calendar-google-visibility-toggle"
-            title="Changes Calendar display only"
-          >
-            <span className="calendar-google-visibility-label">
-              Google events
-            </span>
-            <span className="calendar-google-visibility-state" aria-hidden="true">
-              {showGoogleEvents ? "Shown" : "Hidden"}
-            </span>
-            <input
-              className="sr-only"
-              type="checkbox"
-              role="switch"
-              checked={showGoogleEvents}
-              aria-describedby="calendar-google-visibility-help"
-              onChange={(event) => setShowGoogleEvents(event.target.checked)}
-            />
-            <span className="calendar-google-switch" aria-hidden="true">
-              <i />
-            </span>
-            <small id="calendar-google-visibility-help" className="sr-only">
-              This changes Calendar display only. Selected calendars and study
-              planning remain unchanged.
-            </small>
-          </label>
-
-          <div className="calendar-colour-toggle" aria-label="Calendar task colour mode">
-            <span>Colour by</span>
-            <div>
-            <button
-              type="button"
-              className={dotColourMode === "subject" ? "active" : ""}
-              aria-pressed={dotColourMode === "subject"}
-              onClick={() => setDotColourMode("subject")}
-            >
-              Subject
-            </button>
-            <button
-              type="button"
-              className={dotColourMode === "effort" ? "active" : ""}
-              aria-pressed={dotColourMode === "effort"}
-              onClick={() => setDotColourMode("effort")}
-            >
-              Effort
-            </button>
-            </div>
-          </div>
-        </div>
+        <button
+          type="button"
+          className="calendar-sources-button"
+          aria-expanded={sourcesOpen}
+          aria-controls="calendar-sidebar-body"
+          onClick={() => setSourcesOpen((current) => !current)}
+        >
+          Calendars
+        </button>
       </header>
 
-      <div className="calendar-layout">
+      <div className="calendar-workspace">
+        <aside className={`panel calendar-sidebar ${sourcesOpen ? "is-open" : ""}`}>
+          <div className="calendar-sidebar-heading">
+            <strong>Calendars</strong>
+            <button
+              type="button"
+              aria-label="Close calendar sources"
+              onClick={() => setSourcesOpen(false)}
+            >
+              ×
+            </button>
+          </div>
+          <div className="calendar-sidebar-body" id="calendar-sidebar-body">
+            <section className="calendar-mini" aria-label="Mini calendar">
+              <header>
+                <strong>
+                  {miniCalendarMonth.toLocaleDateString(undefined, {
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </strong>
+                <span>
+                  <button type="button" aria-label="Previous mini-calendar month" onClick={() => changeMiniMonth(-1)}>←</button>
+                  <button type="button" aria-label="Next mini-calendar month" onClick={() => changeMiniMonth(1)}>→</button>
+                </span>
+              </header>
+              <div className="calendar-mini-weekdays" aria-hidden="true">
+                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((label, index) => <span key={`${label}-${index}`}>{label}</span>)}
+              </div>
+              <div className="calendar-mini-grid">
+                {miniCalendarDays.map((day) => (
+                  <button
+                    type="button"
+                    key={`mini-${day.dateKey}`}
+                    className={`${day.isCurrentMonth ? "" : "outside-month"} ${day.isToday ? "today" : ""} ${day.dateKey === selectedDate ? "selected" : ""}`}
+                    aria-label={day.date.toLocaleDateString(undefined, { month: "long", day: "numeric" })}
+                    aria-pressed={day.dateKey === selectedDate}
+                    onClick={() => selectCalendarDay(day)}
+                  >
+                    {day.date.getDate()}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="calendar-source-section" aria-labelledby="daylo-calendar-sources">
+              <h3 id="daylo-calendar-sources">DayLo</h3>
+              <label className="calendar-source-row">
+                <input type="checkbox" checked={showDayLoTasks} onChange={(event) => setShowDayLoTasks(event.target.checked)} />
+                <i className="calendar-source-dot is-daylo" aria-hidden="true" />
+                <span>Tasks</span>
+              </label>
+            </section>
+
+            <section className="calendar-source-section" aria-labelledby="google-calendar-sources">
+              <div className="calendar-source-heading">
+                <h3 id="google-calendar-sources">Google Calendar</h3>
+                <label className="calendar-source-master" title="Calendar display only">
+                  <input type="checkbox" checked={showGoogleEvents} onChange={(event) => setShowGoogleEvents(event.target.checked)} />
+                  <span>{showGoogleEvents ? "On" : "Off"}</span>
+                </label>
+              </div>
+              {visibleGoogleCalendarPreferences.length > 0 ? (
+                visibleGoogleCalendarPreferences.map((preference) => {
+                  const sourceVisible = showGoogleEvents && !hiddenGoogleCalendarIds.has(preference.calendarId);
+                  return (
+                    <label className="calendar-source-row" key={preference.calendarId}>
+                      <input
+                        type="checkbox"
+                        checked={sourceVisible}
+                        disabled={!showGoogleEvents}
+                        onChange={() => toggleGoogleCalendarSource(preference.calendarId)}
+                      />
+                      <i
+                        className="calendar-source-dot"
+                        aria-hidden="true"
+                        style={{ "--calendar-source-color": preference.backgroundColor || preference.calendarColor || "var(--accent-soft)" }}
+                      />
+                      <span>{preference.calendarName || preference.summary || "Google Calendar"}</span>
+                    </label>
+                  );
+                })
+              ) : (
+                <p className="calendar-source-empty">No calendars selected.</p>
+              )}
+              {showGoogleEvents && (
+                <label className="calendar-source-row is-secondary">
+                  <input type="checkbox" checked={showClassSchedule} onChange={(event) => setShowClassSchedule(event.target.checked)} />
+                  <span>Show recurring classes in Month</span>
+                </label>
+              )}
+            </section>
+
+            <section className="calendar-colour-section" aria-labelledby="calendar-colour-heading">
+              <h3 id="calendar-colour-heading">Task colours</h3>
+              <div className="calendar-colour-toggle" aria-label="Calendar task colour mode">
+                <button type="button" className={dotColourMode === "subject" ? "active" : ""} aria-pressed={dotColourMode === "subject"} onClick={() => setDotColourMode("subject")}>Subject</button>
+                <button type="button" className={dotColourMode === "effort" ? "active" : ""} aria-pressed={dotColourMode === "effort"} onClick={() => setDotColourMode("effort")}>Effort</button>
+              </div>
+            </section>
+
+            <section className="calendar-sidebar-selected" aria-label="Selected date summary">
+              <span>Selected</span>
+              <strong>{selectedDateValue.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</strong>
+              <small>{formatSelectedTaskCount(selectedEvents.length)} · {formatSelectedEventCount(selectedScheduleEvents.length)}</small>
+              <div>
+                <button type="button" onClick={() => setSelectedDayOpen(true)}>View day</button>
+                <button type="button" onClick={openCalendarTaskForm}>Add task</button>
+              </div>
+            </section>
+          </div>
+        </aside>
+
         <section
           className={`panel calendar-month-panel ${
             calendarView === "week" ? "calendar-week-panel" : ""
@@ -1031,9 +1170,6 @@ function CalendarPage({
         >
           <div className="calendar-toolbar">
             <div>
-              <p className="section-label">
-                {calendarView === "week" ? "Week" : "Month"}
-              </p>
               <h3>
                 {calendarView === "week"
                   ? formatCalendarWeekRange(visibleWeekStart)
@@ -1063,37 +1199,27 @@ function CalendarPage({
                 →
               </button>
             </div>
+                <div className="calendar-view-toggle" role="tablist" aria-label="Calendar view">
+                  <button type="button" role="tab" aria-selected={calendarView === "month"} className={calendarView === "month" ? "active" : ""} onClick={() => changeCalendarView("month")}>Month</button>
+                  <button type="button" role="tab" aria-selected={calendarView === "week"} className={calendarView === "week" ? "active" : ""} onClick={() => changeCalendarView("week")}>Week</button>
+                </div>
           </div>
 
           {calendarView === "month" ? (
             <>
-              {showGoogleEvents && (
-                <label className="calendar-month-schedule-toggle">
-                  <input
-                    type="checkbox"
-                    checked={showClassSchedule}
-                    onChange={(event) =>
-                      setShowClassSchedule(event.target.checked)
-                    }
-                  />
-                  <span>Show class schedule</span>
-                </label>
-              )}
-              <div className="calendar-weekdays" aria-hidden="true">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
-                  (weekday) => (
-                    <span key={weekday}>{weekday}</span>
-                  )
-                )}
-              </div>
+              <div className="calendar-month-scroll">
+                <div className="calendar-weekdays" aria-hidden="true">
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(
+                    (weekday) => (
+                      <span key={weekday}>{weekday}</span>
+                    )
+                  )}
+                </div>
 
-              <div className="calendar-grid">
+                <div className="calendar-grid">
                 {calendarDays.map((day) => {
-              const dayEvents = calendarEvents.filter(
+              const activeDayEvents = displayedTaskEvents.filter(
                 (event) => event.date === day.dateKey
-              );
-              const activeDayEvents = dayEvents.filter(
-                (event) => !event.completed
               );
               const assessmentCount = activeDayEvents.filter(
                 isAssessmentCalendarEvent
@@ -1104,113 +1230,60 @@ function CalendarPage({
               const monthPresentation = getMonthDayPresentation(
                 activeDayEvents,
                 dayGoogleCalendarEvents,
-                { googleEventLimit: googleCalendarEventLimit }
+                { itemLimit: monthCalendarItemLimit }
               );
-              const visibleEventBars = monthPresentation.googleEvents;
-              const hiddenEventCount = monthPresentation.hiddenGoogleEventCount;
               const isSelected = day.dateKey === selectedDate;
 
                   return (
-                <button
-                  type="button"
+                <article
                   key={day.dateKey}
                   className={`calendar-day ${
                     day.isCurrentMonth ? "" : "outside-month"
                   } ${day.isToday ? "today" : ""} ${
                     isSelected ? "selected" : ""
                   }`}
-                  aria-pressed={isSelected}
-                  aria-label={`${day.date.toLocaleDateString(undefined, {
-                    month: "long",
-                    day: "numeric",
-                  })}, ${formatDueCount(activeDayEvents.length)}${
-                    assessmentCount > 0
-                      ? `, ${assessmentCount} assessment${
-                          assessmentCount === 1 ? "" : "s"
-                        }`
-                      : ""
-                  }, ${dayGoogleCalendarEvents.length} calendar event${
-                    dayGoogleCalendarEvents.length === 1 ? "" : "s"
-                  }`}
-                  onClick={() => selectCalendarDay(day)}
                 >
-                  <span className="calendar-day-number">{day.date.getDate()}</span>
-
-                  {visibleEventBars.length > 0 && (
-                    <>
-                      <span className="calendar-google-events" aria-hidden="true">
-                        {visibleEventBars.map((event) => (
-                          <span
-                            className="calendar-google-event-bar"
-                            key={`${event.calendarId}-${event.id}-${day.dateKey}`}
-                            style={getGoogleCalendarEventStyle(event)}
-                            title={`${event.title} · ${event.calendarName}`}
-                          >
-                            <span>{event.title}</span>
-                          </span>
-                        ))}
-                        {hiddenEventCount > 0 && (
-                          <small className="calendar-google-event-overflow">
-                            +{hiddenEventCount} more
-                          </small>
-                        )}
-                      </span>
-
-                      <span className="calendar-google-event-mobile-summary" aria-hidden="true">
-                        {visibleEventBars.map((event) => (
-                          <i
-                            key={`${event.calendarId}-${event.id}-${day.dateKey}-dot`}
-                            style={getGoogleCalendarEventStyle(event)}
-                          />
-                        ))}
-                        {hiddenEventCount > 0 ? (
-                          <small>+{hiddenEventCount}</small>
-                        ) : dayGoogleCalendarEvents.length > 1 ? (
-                          <small>{dayGoogleCalendarEvents.length}</small>
-                        ) : (
-                          <small>Event</small>
-                        )}
-                      </span>
-                    </>
-                  )}
-
-                  {activeDayEvents.length > 0 && (
-                    <span className="calendar-task-dots" aria-hidden="true">
-                      <span
-                        className={`calendar-deadline-summary ${
-                          assessmentCount > 0 ? "has-assessment" : ""
-                        }`}
-                        data-colour-mode={dotColourMode}
-                        style={getCalendarDeadlineSummaryStyle(
-                          activeDayEvents,
-                          dotColourMode
-                        )}
-                        title={`${formatDueCount(activeDayEvents.length)}${
-                          assessmentCount > 0
-                            ? ` · ${assessmentCount} assessment${
-                                assessmentCount === 1 ? "" : "s"
-                              }`
-                            : ""
-                        }`}
-                      >
-                        {assessmentCount > 0 && (
-                          <span
-                            className="calendar-deadline-assessment-mark"
-                            aria-hidden="true"
-                          />
-                        )}
-                        <span className="calendar-deadline-label-desktop">
-                          {getCalendarDeadlineSummaryLabel(activeDayEvents)}
-                        </span>
-                        <span className="calendar-deadline-label-mobile">
-                          {getCalendarMobileDeadlineSummaryLabel(activeDayEvents)}
-                        </span>
-                      </span>
-                    </span>
-                  )}
-                </button>
+                  <button
+                    type="button"
+                    className="calendar-day-heading"
+                    aria-pressed={isSelected}
+                    aria-label={`${day.date.toLocaleDateString(undefined, { month: "long", day: "numeric" })}, ${formatDueCount(activeDayEvents.length)}, ${dayGoogleCalendarEvents.length} calendar events`}
+                    onClick={() => selectCalendarDay(day)}
+                  >
+                    <span className="calendar-day-number">{day.date.getDate()}</span>
+                  </button>
+                  <div className="calendar-day-content">
+                    {monthPresentation.allDayEvents.map((event) => (
+                      <button type="button" className="calendar-all-day-event" key={`all-day-${event.calendarId}-${event.id}-${day.dateKey}`} style={getGoogleCalendarEventStyle(event)} onClick={() => openGoogleEvent(event, day)} title={`${event.title} · All day`}>
+                        <span>{event.title}</span>
+                      </button>
+                    ))}
+                    {monthPresentation.tasks.map((task) => {
+                      const indicator = getAssessmentCalendarIndicator(task);
+                      const dueTime = formatTaskDueTime(task);
+                      return (
+                        <button type="button" className="calendar-task-block" key={task.id} style={getCalendarTaskStyle(task, dotColourMode)} onClick={() => openCalendarTask(task)} title={`${task.title}${indicator ? ` · ${indicator.label}` : ""}`}>
+                          {dueTime && <small>{dueTime}</small>}
+                          <span>{task.title}</span>
+                          {indicator && <b aria-label={indicator.label} title={indicator.label}>{indicator.short}</b>}
+                        </button>
+                      );
+                    })}
+                    {monthPresentation.timedEvents.map((event) => (
+                      <button type="button" className="calendar-timed-event" key={`timed-${event.calendarId}-${event.id}-${day.dateKey}`} style={getGoogleCalendarEventStyle(event)} onClick={() => openGoogleEvent(event, day)} title={`${getCalendarEventTimeLabel(event)} · ${event.title}`}>
+                        <i aria-hidden="true" />
+                        <small>{getCalendarEventStartLabel(event)}</small>
+                        <span>{event.title}</span>
+                      </button>
+                    ))}
+                    {monthPresentation.hiddenItemCount > 0 && (
+                      <button type="button" className="calendar-day-more" onClick={() => openSelectedDay(day)}>+{monthPresentation.hiddenItemCount} more</button>
+                    )}
+                  </div>
+                </article>
                   );
                 })}
+                </div>
               </div>
             </>
           ) : (
@@ -1225,12 +1298,11 @@ function CalendarPage({
                     googleEvents: [],
                   };
                   const weekPresentation = getWeekDayPresentation(dayItems, {
-                    googleEventLimit: weekGoogleEventLimit,
+                    itemLimit: weekCalendarItemLimit,
                   });
                   const visibleTasks = weekPresentation.tasks;
-                  const visibleEvents = weekPresentation.googleEvents;
-                  const hiddenGoogleEventCount =
-                    weekPresentation.hiddenGoogleEventCount;
+                  const visibleAllDayEvents = weekPresentation.allDayEvents;
+                  const visibleTimedEvents = weekPresentation.timedEvents;
                   const isSelected = day.dateKey === selectedDate;
                   const isEmptyDay =
                     dayItems.tasks.length === 0 &&
@@ -1293,91 +1365,77 @@ function CalendarPage({
                         </div>
                       )}
 
-                      {visibleTasks.length > 0 && (
-                        <section
-                          className="calendar-week-items calendar-week-tasks"
-                          aria-label={`Tasks due ${fullDateLabel}`}
-                        >
+                      {(visibleAllDayEvents.length > 0 || visibleTasks.length > 0) && (
+                        <section className="calendar-week-deadline-area" aria-label={`All-day events and deadlines ${fullDateLabel}`}>
+                          {visibleAllDayEvents.map((event) => (
+                            <button type="button" className="calendar-all-day-event" key={`week-all-${event.calendarId}-${event.id}-${day.dateKey}`} style={getGoogleCalendarEventStyle(event)} onClick={(clickEvent) => { clickEvent.stopPropagation(); openGoogleEvent(event, day); }}>
+                              <span>{event.title}</span>
+                            </button>
+                          ))}
                           {visibleTasks.map((task) => {
-                            const daysLeft = getDaysLeft(task.date);
-                            const effortLevel = getCalendarEffortLevel(task);
+                            const indicator = getAssessmentCalendarIndicator(task);
+                            const dueTime = formatTaskDueTime(task);
 
                             return (
                               <button
                                 type="button"
-                                className={`calendar-week-task ${
-                                  isAssessmentCalendarEvent(task)
-                                    ? "has-assessment"
-                                    : ""
-                                }`}
+                                className="calendar-task-block calendar-week-task"
                                 key={task.id}
-                                style={getCalendarDeadlineSummaryStyle(
-                                  [task],
-                                  dotColourMode
-                                )}
+                                style={getCalendarTaskStyle(task, dotColourMode)}
                                 onClick={(event) => {
                                   event.stopPropagation();
-                                  setSelectedDate(day.dateKey);
-                                  setActivePage("tasks");
+                                  openCalendarTask(task);
                                 }}
                               >
-                                <span className="calendar-week-item-kind">Task</span>
-                                <strong>{task.title}</strong>
-                                <small>
-                                  {[task.subject, effortLabels[effortLevel]]
-                                    .filter(Boolean)
-                                    .join(" · ")}
-                                </small>
-                                <span className={`urgency ${getUrgencyClass(daysLeft)}`}>
-                                  {getUrgencyLabel(daysLeft)}
-                                </span>
+                                {dueTime && <small>{dueTime}</small>}
+                                <span>{task.title}</span>
+                                {indicator && <b aria-label={indicator.label} title={indicator.label}>{indicator.short}</b>}
                               </button>
                             );
                           })}
                         </section>
                       )}
 
-                      {visibleEvents.length > 0 && (
+                      {visibleTimedEvents.length > 0 && (
                         <section
                           className="calendar-week-items calendar-week-google-events"
                           aria-label={`Google Calendar events ${fullDateLabel}`}
                         >
-                          {visibleEvents.map((event) => (
+                          {visibleTimedEvents.map((event) => (
                             <button
                               type="button"
-                              className="calendar-week-google-event"
+                              className="calendar-timed-event calendar-week-google-event"
                               key={`${event.calendarId}-${event.id}-${day.dateKey}`}
                               style={getGoogleCalendarEventStyle(event)}
                               onClick={(clickEvent) => {
                                 clickEvent.stopPropagation();
-                                selectCalendarDay(day);
+                                openGoogleEvent(event, day);
                               }}
                             >
-                              <span className="calendar-week-item-kind">Event</span>
-                              <strong>{event.title}</strong>
+                              <i aria-hidden="true" />
                               <small>{getCalendarEventTimeLabel(event)}</small>
+                              <span>{event.title}</span>
                             </button>
                           ))}
                         </section>
                       )}
 
-                      {hiddenGoogleEventCount > 0 && (
+                      {weekPresentation.hiddenItemCount > 0 && (
                         <div className="calendar-week-overflow">
                           <button
                             type="button"
                             className="calendar-week-more"
                             onClick={(event) => {
                               event.stopPropagation();
-                              selectCalendarDay(day);
+                              openSelectedDay(day);
                             }}
                           >
-                            +{hiddenGoogleEventCount} more event
-                            {hiddenGoogleEventCount === 1 ? "" : "s"}
+                            +{weekPresentation.hiddenItemCount} more
                           </button>
                         </div>
                       )}
 
-                      {visibleTasks.length === 0 && visibleEvents.length === 0 && (
+                      {visibleTasks.length === 0 && visibleAllDayEvents.length === 0 && visibleTimedEvents.length === 0 && (
                         <p className="calendar-week-empty">Nothing scheduled</p>
                       )}
                     </article>
@@ -1387,12 +1445,16 @@ function CalendarPage({
             </div>
           )}
         </section>
+      </div>
 
-        <aside className="panel calendar-detail-panel">
+      {selectedDayOpen && (
+        <div className="calendar-detail-layer" role="presentation">
+          <button type="button" className="calendar-detail-backdrop" aria-label="Close selected day" onClick={() => { setSelectedDayOpen(false); setShowCalendarTaskForm(false); }} />
+        <aside className="panel calendar-detail-panel" role="dialog" aria-modal="true" aria-labelledby="calendar-selected-day-title">
           <div className="calendar-detail-header">
             <div>
               <p className="section-label">Selected day</p>
-              <h3>
+              <h3 id="calendar-selected-day-title">
                 {selectedDateValue.toLocaleDateString(undefined, {
                   weekday: "long",
                   month: "long",
@@ -1400,6 +1462,17 @@ function CalendarPage({
                 })}
               </h3>
             </div>
+            <button
+              type="button"
+              className="calendar-detail-close"
+              aria-label="Close selected day"
+              onClick={() => {
+                setSelectedDayOpen(false);
+                setShowCalendarTaskForm(false);
+              }}
+            >
+              ×
+            </button>
             <div className="calendar-detail-actions">
               <span>{formatSelectedTaskCount(selectedEvents.length)}</span>
               <span>{formatSelectedEventCount(selectedScheduleEvents.length)}</span>
@@ -1541,7 +1614,7 @@ function CalendarPage({
                           ? { "--subject-color": event.subjectColour }
                           : undefined
                       }
-                      onClick={() => setActivePage("tasks")}
+                      onClick={() => openCalendarTask(event)}
                     >
                       <span>
                         <small>{event.subject}</small>
@@ -1649,10 +1722,12 @@ function CalendarPage({
             ) : selectedScheduleEvents.length > 0 ? (
               <div className="calendar-google-event-list">
                 {selectedScheduleEvents.map((event) => (
-                  <article
+                  <button
+                    type="button"
                     className="calendar-google-event-item"
                     key={`${event.calendarId}-${event.id}-${getGoogleEventDateKey(event)}`}
                     style={getGoogleCalendarEventStyle(event)}
+                    onClick={() => setSelectedGoogleEvent(event)}
                   >
                     <span className="calendar-google-event-time">
                       {getCalendarEventTimeLabel(event)}
@@ -1664,7 +1739,7 @@ function CalendarPage({
                         {event.location ? ` · ${event.location}` : ""}
                       </small>
                     </span>
-                  </article>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -1691,7 +1766,26 @@ function CalendarPage({
             Open to-do list
           </button>
         </aside>
-      </div>
+        </div>
+      )}
+
+      {selectedGoogleEvent && (
+        <div className="calendar-event-detail-layer" role="presentation">
+          <button type="button" className="calendar-detail-backdrop" aria-label="Close event details" onClick={() => setSelectedGoogleEvent(null)} />
+          <section className="calendar-event-detail-dialog" role="dialog" aria-modal="true" aria-labelledby="calendar-event-detail-title" style={getGoogleCalendarEventStyle(selectedGoogleEvent)}>
+            <header>
+              <span><i aria-hidden="true" />{selectedGoogleEvent.allDay ? "All-day event" : "Calendar event"}</span>
+              <button type="button" aria-label="Close event details" onClick={() => setSelectedGoogleEvent(null)}>×</button>
+            </header>
+            <h3 id="calendar-event-detail-title">{selectedGoogleEvent.title}</h3>
+            <p>{getCalendarEventTimeLabel(selectedGoogleEvent)}</p>
+            <dl>
+              <div><dt>Calendar</dt><dd>{selectedGoogleEvent.calendarName || "Google Calendar"}</dd></div>
+              {selectedGoogleEvent.location && <div><dt>Location</dt><dd>{selectedGoogleEvent.location}</dd></div>}
+            </dl>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

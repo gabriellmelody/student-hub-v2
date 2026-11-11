@@ -9,6 +9,22 @@ export const GOOGLE_CALENDAR_REQUIRED_ENV = [
   "GOOGLE_INTEGRATION_VAULT_SECRET",
 ];
 
+export const GOOGLE_CALENDAR_TASK_WRITE_SCOPE =
+  "https://www.googleapis.com/auth/calendar.app.created";
+
+export const GOOGLE_CALENDAR_OAUTH_SCOPES = Object.freeze([
+  "openid",
+  "email",
+  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  "https://www.googleapis.com/auth/calendar.events.readonly",
+  GOOGLE_CALENDAR_TASK_WRITE_SCOPE,
+]);
+
+export function hasGoogleCalendarTaskWriteScope(scopeValue) {
+  return new Set(String(scopeValue || "").split(/\s+/).filter(Boolean))
+    .has(GOOGLE_CALENDAR_TASK_WRITE_SCOPE);
+}
+
 export function getGoogleCalendarOAuthConfigStatus(
   env = globalThis.process?.env ?? {}
 ) {

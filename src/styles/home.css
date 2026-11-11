@@ -1907,6 +1907,595 @@
   }
 }
 
+/* Home overview dashboard */
+
+.home-overview-dashboard {
+  display: grid;
+  gap: clamp(16px, 2vw, 24px);
+  padding-bottom: 24px;
+}
+
+.home-overview-header {
+  display: grid;
+  gap: 4px;
+}
+
+.home-overview-header h2,
+.home-overview-header p {
+  margin: 0;
+}
+
+.home-overview-header h2 {
+  color: var(--text);
+  font-size: clamp(1.65rem, 3vw, 2.35rem);
+  font-weight: 760;
+  line-height: 1.08;
+}
+
+.home-overview-header p {
+  color: var(--text-secondary);
+  font-size: 0.96rem;
+}
+
+.home-overview-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.16fr) minmax(340px, 0.84fr);
+  align-items: stretch;
+  gap: clamp(16px, 2vw, 22px);
+}
+
+.home-overview-card {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 18px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 18px;
+  padding: clamp(18px, 2.2vw, 26px);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--surface) 96%, var(--accent) 4%),
+      var(--surface)
+    );
+  box-shadow: var(--shadow-card);
+}
+
+.home-overview-card-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.home-overview-card-header > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+}
+
+.home-overview-card-header > div > span {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  place-items: center;
+  color: var(--accent);
+  font-size: 1.35rem;
+  font-weight: 760;
+}
+
+.home-overview-card-header h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: clamp(1.08rem, 1.7vw, 1.35rem);
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.home-overview-card-header > button {
+  min-height: 36px;
+  border: 0;
+  border-radius: var(--radius-button);
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 680;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.home-overview-card-header > button:hover,
+.home-overview-card-header > button:focus-visible {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.home-plan-recommendations,
+.home-plan-additional {
+  display: grid;
+  gap: 12px;
+}
+
+.home-plan-recommendations.is-additional {
+  margin-top: 2px;
+}
+
+.home-recommendation {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.home-priority-label {
+  width: fit-content;
+  border-radius: 999px;
+  padding: 4px 11px;
+  background: color-mix(in srgb, var(--home-subject-colour) 18%, var(--surface));
+  color: color-mix(in srgb, var(--home-subject-colour) 76%, var(--text));
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.home-recommendation > button {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 72px;
+  grid-template-columns: 6px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--home-subject-colour) 25%, var(--border));
+  border-radius: 12px;
+  padding: 0 14px 0 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--home-subject-colour) 7%, var(--surface));
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-recommendation > button:hover,
+.home-recommendation > button:focus-visible {
+  border-color: color-mix(in srgb, var(--home-subject-colour) 55%, var(--border));
+  background: color-mix(in srgb, var(--home-subject-colour) 11%, var(--surface));
+}
+
+.home-recommendation > button > i {
+  align-self: stretch;
+  background: var(--home-subject-colour);
+}
+
+.home-recommendation > button > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 11px 0;
+}
+
+.home-recommendation small,
+.home-recommendation strong,
+.home-recommendation em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-recommendation small {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.home-recommendation strong {
+  font-size: 0.94rem;
+  font-weight: 750;
+}
+
+.home-recommendation em {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-style: normal;
+}
+
+.home-recommendation > button > b,
+.home-coming-up-item > b {
+  display: grid;
+  min-width: 30px;
+  min-height: 30px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--home-subject-colour) 44%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--home-subject-colour) 12%, var(--surface));
+  color: var(--text);
+  font-size: 0.7rem;
+}
+
+.home-recommendation.is-additional {
+  opacity: 0.88;
+}
+
+.home-plan-more,
+.home-calendar-more {
+  width: fit-content;
+  min-height: 36px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: var(--control-bg);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.home-plan-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-plan-more:hover,
+.home-plan-more:focus-visible,
+.home-calendar-more:hover,
+.home-calendar-more:focus-visible {
+  border-color: var(--accent-border);
+  color: var(--text);
+}
+
+.home-calendar-events {
+  display: grid;
+  gap: 9px;
+}
+
+.home-calendar-event {
+  display: grid;
+  min-width: 0;
+  min-height: 46px;
+  grid-template-columns: 64px 8px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-calendar-event:hover,
+.home-calendar-event:focus-visible {
+  border-color: color-mix(in srgb, var(--home-event-colour) 42%, var(--border));
+  background: color-mix(in srgb, var(--home-event-colour) 8%, transparent);
+}
+
+.home-calendar-event.is-all-day {
+  border-color: color-mix(in srgb, var(--home-event-colour) 54%, var(--border));
+  background: color-mix(in srgb, var(--home-event-colour) 11%, var(--surface));
+}
+
+.home-calendar-event-time {
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.home-calendar-event > i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--home-event-colour);
+}
+
+.home-calendar-event > strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.86rem;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-calendar-more {
+  border: 0;
+  border-radius: var(--radius-button);
+  background: transparent;
+}
+
+.home-coming-up-summary,
+.home-quick-access {
+  gap: 16px;
+}
+
+.home-coming-up-list {
+  display: grid;
+  gap: 8px;
+}
+
+.home-coming-up-item {
+  display: grid;
+  min-width: 0;
+  min-height: 60px;
+  grid-template-columns: 104px 6px minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 0 14px 0 0;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-coming-up-item:hover,
+.home-coming-up-item:focus-visible {
+  border-color: color-mix(in srgb, var(--home-subject-colour) 48%, var(--border));
+  background: color-mix(in srgb, var(--home-subject-colour) 7%, var(--surface));
+}
+
+.home-coming-up-date {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  padding: 10px 14px;
+  background: var(--control-bg);
+}
+
+.home-coming-up-date small,
+.home-coming-up-copy small {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
+.home-coming-up-date strong {
+  font-size: 0.84rem;
+}
+
+.home-coming-up-item > i {
+  background: var(--home-subject-colour);
+}
+
+.home-coming-up-copy {
+  display: grid;
+  min-width: 0;
+  align-content: center;
+  gap: 4px;
+  padding: 10px 14px;
+}
+
+.home-coming-up-copy strong,
+.home-coming-up-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-coming-up-copy strong {
+  font-size: 0.9rem;
+  font-weight: 730;
+}
+
+.home-coming-up-item > b {
+  align-self: center;
+}
+
+.home-quick-access-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.home-quick-access-grid > button,
+.home-quick-access-grid > a {
+  display: grid;
+  min-width: 0;
+  min-height: 54px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  padding: 10px 13px;
+  background: var(--control-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 680;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.home-quick-access-grid > button:hover,
+.home-quick-access-grid > button:focus-visible,
+.home-quick-access-grid > a:hover,
+.home-quick-access-grid > a:focus-visible {
+  border-color: var(--accent-border);
+  background: var(--surface-hover);
+}
+
+.home-quick-access-grid > button > span,
+.home-quick-access-grid > a > span {
+  color: var(--accent);
+  font-size: 1.1rem;
+}
+
+.home-quick-access-grid b {
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+
+.home-overview-empty {
+  display: grid;
+  min-height: 118px;
+  place-content: center;
+  justify-items: center;
+  gap: 7px;
+  padding: 20px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.home-overview-empty strong {
+  color: var(--text);
+  font-size: 0.96rem;
+}
+
+.home-overview-empty p {
+  max-width: 320px;
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.home-overview-empty button {
+  min-height: 36px;
+  margin-top: 4px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-button);
+  padding: 7px 12px;
+  background: var(--accent-tint);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.home-intro-active .home-overview-top,
+.home-intro-active .home-coming-up-summary,
+.home-intro-active .home-quick-access {
+  animation: home-overview-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.home-intro-active .home-coming-up-summary {
+  animation-delay: 90ms;
+}
+
+.home-intro-active .home-quick-access {
+  animation-delay: 150ms;
+}
+
+@keyframes home-overview-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1040px) {
+  .home-overview-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-quick-access-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .home-overview-dashboard {
+    gap: 14px;
+  }
+
+  .home-overview-header h2 {
+    font-size: 1.58rem;
+  }
+
+  .home-overview-card {
+    gap: 14px;
+    border-radius: 16px;
+    padding: 15px;
+  }
+
+  .home-overview-card-header {
+    align-items: flex-start;
+  }
+
+  .home-overview-card-header > button {
+    min-height: 34px;
+    white-space: normal;
+    text-align: right;
+  }
+
+  .home-recommendation small,
+  .home-recommendation strong,
+  .home-recommendation em {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .home-coming-up-item {
+    grid-template-columns: 80px 5px minmax(0, 1fr) auto;
+  }
+
+  .home-coming-up-date,
+  .home-coming-up-copy {
+    padding: 10px;
+  }
+
+  .home-coming-up-copy small {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 480px) {
+  .home-overview-card-header {
+    flex-wrap: wrap;
+  }
+
+  .home-overview-card-header > button {
+    margin-left: 42px;
+    padding-left: 0;
+    text-align: left;
+  }
+
+  .home-calendar-event {
+    grid-template-columns: 58px 8px minmax(0, 1fr);
+    padding-inline: 7px;
+  }
+
+  .home-coming-up-item {
+    min-height: 68px;
+    grid-template-columns: 70px 5px minmax(0, 1fr) auto;
+    padding-right: 9px;
+  }
+
+  .home-coming-up-item > b {
+    min-width: 27px;
+    min-height: 27px;
+  }
+
+  .home-quick-access-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-intro-active .home-overview-top,
+  .home-intro-active .home-coming-up-summary,
+  .home-intro-active .home-quick-access {
+    animation: none;
+  }
+}
+
 @media (max-width: 374px) {
   .home-hero-dashboard {
     grid-template-columns: minmax(0, 1fr);

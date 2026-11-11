@@ -6,6 +6,23 @@ const PRIORITY_COLUMNS = [
   { id: "normal", label: "Normal", importance: "normal" },
 ];
 
+export const TASK_BOARD_VISIBLE_LIMIT = 7;
+
+export function createEmptyTaskDraft() {
+  return {
+    subject: "",
+    title: "",
+    description: "",
+    dueDate: "",
+    dueTime: "",
+    effort: 2,
+    taskType: "homework",
+    importance: "normal",
+    detectedTags: [],
+    importanceSource: "auto",
+  };
+}
+
 function startOfLocalDay(value) {
   const date = new Date(value);
   date.setHours(0, 0, 0, 0);
@@ -16,6 +33,35 @@ function addLocalDays(value, amount) {
   const date = startOfLocalDay(value);
   date.setDate(date.getDate() + amount);
   return date;
+}
+
+export function createTaskDraftForBoardColumn(column, boardMode, now = new Date()) {
+  const draft = createEmptyTaskDraft();
+
+  if (boardMode === "priority" && column?.importance) {
+    return {
+      ...draft,
+      importance: column.importance,
+      importanceSource: "manual",
+    };
+  }
+
+  if (column?.kind === "date" && column.dateKey) {
+    return { ...draft, dueDate: column.dateKey };
+  }
+  if (column?.kind === "overdue") {
+    return { ...draft, dueDate: formatDateKey(startOfLocalDay(now)) };
+  }
+  if (column?.kind === "later") {
+    return { ...draft, dueDate: formatDateKey(addLocalDays(now, 6)) };
+  }
+
+  return draft;
+}
+
+export function getVisibleTaskColumnItems(tasks, expanded = false) {
+  const taskList = Array.isArray(tasks) ? tasks : [];
+  return expanded ? taskList : taskList.slice(0, TASK_BOARD_VISIBLE_LIMIT);
 }
 
 function parseTaskDate(dateKey) {

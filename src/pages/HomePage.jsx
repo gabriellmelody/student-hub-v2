@@ -1,315 +1,498 @@
-import { useState } from "react";
-import {
-  getDaysLeft,
-  parseDateKey,
-  getUrgencyLabel,
-  getUrgencyClass,
-  getEffortLabel,
-  getEffortClass,
-  getTaskSignalBadges,
-} from "../utils/appUtils.js";
+import { useEffect, useMemo, useState } from "react";
 import RevealOnScroll from "../components/RevealOnScroll.jsx";
-import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
+import { DEFAULT_PLANNING_PREFERENCES } from "../lib/cloudPlanning.js";
 import {
-  attachHomeWeekDateData,
-  formatHomeWeekRange,
-  getRollingHomeWeek,
-} from "../utils/homeWeekUtils.js";
+  getHomeAssessmentIndicator,
+  formatHomeDate,
+  getHomeGreeting,
+  getHomeRecommendationItems,
+  getHomeSubjectColour,
+  getHomeUpcomingTasks,
+  sortHomeCalendarEvents,
+} from "../utils/homeDashboardUtils.js";
+import {
+  loadGoogleCalendarAccountMeta,
+  loadGoogleCalendarPreferencesFromStorage,
+} from "../utils/googleCalendarStorage.js";
+import { getIntegrationAuthHeaders } from "../utils/integrationAuthUtils.js";
+import { buildStudyRecommendations } from "../utils/studyRecommendations.js";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 const HOME_INTRO_SESSION_KEY = "studentHubHomeIntroPlayed";
+const HOME_CALENDAR_VISIBLE_LIMIT = 3;
 
 function HomePage({
-  tasks,
-  nextTask,
-  openSmartPlanner,
+  authAccessToken = "",
+  tasks = [],
+  subjects = [],
+  planningPreferences,
   loading = false,
-  syncError = null,
-  hasPlan,
-  planBlocks = [],
   setActivePage,
+  openTaskDetails,
+  openAddTask,
+  openIntegrations,
 }) {
   const [playHomeIntro] = useState(shouldPlayHomeIntro);
-  const today = getStartOfDay(new Date());
-  const weekStart = getMonday(today);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-  const homeWeek = getRollingHomeWeek(today);
-  const weekDays = attachHomeWeekDateData(homeWeek.days, { tasks });
-
-  const weeklyTasks = tasks.filter((task) => {
-    if (!task.dueDate) return false;
-
-    const dueDate = parseTaskDate(task.dueDate);
-    if (!dueDate) return false;
-
-    return dueDate >= weekStart && dueDate <= weekEnd;
-  });
-  const weeklyCompleted = weeklyTasks.filter((task) => task.completed).length;
-  const weeklyTotal = weeklyTasks.length;
-  const weeklyLeft = Math.max(weeklyTotal - weeklyCompleted, 0);
-  const weeklyProgress =
-    weeklyTotal === 0 ? 0 : Math.round((weeklyCompleted / weeklyTotal) * 100);
-  const earlierOverdueCount = tasks.filter((task) => {
-    if (task.completed || !task.dueDate) return false;
-
-    const dueDate = parseTaskDate(task.dueDate);
-    return dueDate && dueDate < weekStart;
-  }).length;
-
-  const nextPlanBlock = planBlocks.find(
-    (block) => !block.completed && block.type === "study"
+  const [showAdditionalRecommendations, setShowAdditionalRecommendations] =
+    useState(false);
+  const now = new Date();
+  const preferences = planningPreferences || DEFAULT_PLANNING_PREFERENCES;
+  const recommendations = useMemo(
+    () => buildStudyRecommendations({ tasks, subjects, preferences }),
+    [preferences, subjects, tasks]
   );
-  const nextOpenBlock =
-    nextPlanBlock ||
-    planBlocks.find(
-      (block) => !block.completed && block.type !== "message"
-    );
-  const planRepeatsNextTask =
-    Boolean(nextTask?.id) &&
-    Boolean(nextOpenBlock?.taskId) &&
-    nextOpenBlock.taskId === nextTask.id;
-
-  const upcomingTasks = [...tasks]
-    .filter((task) => {
-      const dueDate = parseTaskDate(task.dueDate);
-      return !task.completed && dueDate && dueDate >= today;
-    })
-    .sort(
-      (first, second) =>
-        first.dueDate.localeCompare(second.dueDate) ||
-        first.title.localeCompare(second.title)
-    )
-    .slice(0, 3);
+  const todayRecommendations = getHomeRecommendationItems(recommendations.today);
+  const upcomingTasks = useMemo(
+    () => getHomeUpcomingTasks(tasks, subjects, now),
+    [subjects, tasks]
+  );
+  const calendar = useTodayCalendarEvents({ authAccessToken });
+  const visibleCalendarEvents = calendar.events.slice(
+    0,
+    HOME_CALENDAR_VISIBLE_LIMIT
+  );
+  const hiddenCalendarEventCount = Math.max(
+    0,
+    calendar.events.length - visibleCalendarEvents.length
+  );
   const glowSurfaceProps = {
     onPointerEnter: handleHomeGlowPointerEnter,
     onPointerMove: handleHomeGlowPointerMove,
     onPointerLeave: handleHomeGlowPointerLeave,
   };
 
+  function openRecommendation(recommendation) {
+    if (recommendation?.taskId && typeof openTaskDetails === "function") {
+      openTaskDetails(recommendation.taskId);
+      return;
+    }
+    setActivePage("plan");
+  }
+
   return (
     <div
-      className={`page home-fixed-dashboard ${
+      className={`page home-overview-dashboard ${
         playHomeIntro ? "home-intro-active" : ""
       }`}
     >
-      <header className="page-header">
-        <h2>Your school day</h2>
+      <header className="home-overview-header">
+        <h2>{getHomeGreeting(now)} <span aria-hidden="true">👋</span></h2>
+        <p>{formatHomeDate(now)}</p>
       </header>
 
-      <section
-        className="home-hero-dashboard home-glow-surface"
-        aria-label="DayLo overview"
-        {...glowSurfaceProps}
-      >
-        <div
-          className="home-hero-zone home-next-zone"
-          data-tour="home-overview"
+      <div className="home-overview-top">
+        <section
+          className="home-overview-card home-plan-summary home-glow-surface"
+          aria-labelledby="home-plan-heading"
+          {...glowSurfaceProps}
         >
-          <p className="home-zone-label">Next up</p>
-          {nextTask ? (
-            <>
-              <div className="home-next-task">
-                <p>{nextTask.subject}</p>
-                <h3>{nextTask.title}</h3>
-                <div className="home-task-meta-row">
-                  <span className={`urgency ${getUrgencyClass(getDaysLeft(nextTask.dueDate))}`}>
-                    {getUrgencyLabel(getDaysLeft(nextTask.dueDate))}
-                  </span>
-                  {nextTask.effort && (
-                    <span className={`effort-pill ${getEffortClass(nextTask.effort)}`}>
-                      {getEffortLabel(nextTask.effort)}
+          <HomeSectionHeader
+            icon="◎"
+            title="Today's Plan"
+            titleId="home-plan-heading"
+            action={`${recommendations.dailyBlockCount} ${
+              recommendations.dailyBlockCount === 1 ? "block" : "blocks"
+            } · ${recommendations.blockDurationMinutes} min each →`}
+            actionLabel="Open Plan"
+            onAction={() => setActivePage("plan")}
+          />
+
+          {loading ? (
+            <HomeEmptyState title="Loading recommendations…" />
+          ) : todayRecommendations.primary.length > 0 ? (
+            <div className="home-plan-recommendations">
+              {todayRecommendations.primary.map((recommendation, index) => (
+                <HomeRecommendationCard
+                  key={recommendation.id}
+                  recommendation={recommendation}
+                  priority={index + 1}
+                  duration={recommendations.blockDurationMinutes}
+                  subjectColour={getHomeSubjectColour(
+                    recommendation,
+                    subjects
+                  )}
+                  onOpen={() => openRecommendation(recommendation)}
+                />
+              ))}
+
+              {todayRecommendations.additional.length > 0 && (
+                <div className="home-plan-additional">
+                  <button
+                    type="button"
+                    className="home-plan-more"
+                    aria-expanded={showAdditionalRecommendations}
+                    aria-controls="home-additional-recommendations"
+                    onClick={() =>
+                      setShowAdditionalRecommendations((current) => !current)
+                    }
+                  >
+                    {showAdditionalRecommendations
+                      ? "Show less"
+                      : `+${todayRecommendations.additional.length} more`}
+                    <span aria-hidden="true">
+                      {showAdditionalRecommendations ? "↑" : "↓"}
                     </span>
+                  </button>
+                  {showAdditionalRecommendations && (
+                    <div
+                      className="home-plan-recommendations is-additional"
+                      id="home-additional-recommendations"
+                    >
+                      {todayRecommendations.additional.map((recommendation) => (
+                        <HomeRecommendationCard
+                          key={recommendation.id}
+                          recommendation={recommendation}
+                          duration={recommendations.blockDurationMinutes}
+                          subjectColour={getHomeSubjectColour(
+                            recommendation,
+                            subjects
+                          )}
+                          onOpen={() => openRecommendation(recommendation)}
+                          additional
+                        />
+                      ))}
+                    </div>
                   )}
                 </div>
-                <TaskSignalRow task={nextTask} />
-              </div>
-              <button
-                type="button"
-                className="secondary-button home-quiet-action"
-                onClick={() => setActivePage("tasks")}
-              >
-                Open to-do list
-              </button>
-            </>
-          ) : (
-            <div className="home-empty-copy">
-              <h3>No active tasks.</h3>
-              <p>Add tasks when school work comes in.</p>
-              <button
-                type="button"
-                className="secondary-button home-quiet-action"
-                onClick={() => setActivePage("tasks")}
-              >
-                Open to-do list
-              </button>
+              )}
             </div>
-          )}
-        </div>
-
-        <div className="home-hero-zone home-plan-zone">
-          <div className="home-plan-copy">
-            <p className="home-zone-label">Today’s Plan</p>
-            {loading ? (
-              <div className="home-empty-copy" aria-busy="true">
-                <h3>Loading today’s plan...</h3>
-              </div>
-            ) : hasPlan ? (
-              nextOpenBlock ? (
-                <div className="home-plan-preview">
-                  <span>{formatPlanBlockTime(nextOpenBlock)}</span>
-                  {planRepeatsNextTask ? (
-                    <>
-                      <h3>Next study block</h3>
-                      <p>Continue where you left off.</p>
-                    </>
-                  ) : (
-                    <>
-                      <h3>{nextOpenBlock.title}</h3>
-                      {nextOpenBlock.subject && <p>{nextOpenBlock.subject}</p>}
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="home-plan-preview">
-                  <span>Done</span>
-                  <h3>Plan complete</h3>
-                  <p>Nice work. You can still review or adjust it.</p>
-                </div>
-              )
-            ) : (
-              <div className="home-empty-copy">
-                <h3>No plan yet.</h3>
-                <p>Create a realistic plan from your active tasks.</p>
-              </div>
-            )}
-          </div>
-
-          <div className="home-progress-zone">
-            <WeeklyProgressArc
-              completed={weeklyCompleted}
-              left={weeklyLeft}
-              overdueEarlier={earlierOverdueCount}
-              progress={weeklyProgress}
-              total={weeklyTotal}
+          ) : (
+            <HomeEmptyState
+              title="Nothing recommended today."
+              message="Your normal routine and urgent work will appear here."
+              action="Open Plan"
+              onAction={() => setActivePage("plan")}
             />
-          </div>
+          )}
+        </section>
 
-          <button
-            type="button"
-            className={`primary-button home-plan-action${
-              hasPlan ? "" : " home-plan-action--smart"
-            }`}
-            onClick={hasPlan ? () => setActivePage("plan") : openSmartPlanner}
-            disabled={loading}
-          >
-            {loading ? "Loading plan" : hasPlan ? "Continue plan" : "Smart Planner"}
-          </button>
-          {syncError && <span className="settings-inline-error" role="alert">Today’s Plan could not sync.</span>}
-        </div>
-      </section>
+        <section
+          className="home-overview-card home-calendar-summary home-glow-surface"
+          aria-labelledby="home-calendar-heading"
+          {...glowSurfaceProps}
+        >
+          <HomeSectionHeader
+            icon="▣"
+            title="Today's Calendar"
+            titleId="home-calendar-heading"
+            action="Open calendar →"
+            onAction={() => setActivePage("calendar")}
+          />
+
+          {calendar.status === "loading" ? (
+            <HomeEmptyState title="Loading today's events…" />
+          ) : calendar.status === "disconnected" ? (
+            <HomeEmptyState
+              title="Connect Google Calendar"
+              message="See real events alongside your DayLo deadlines."
+              action="Open Integrations"
+              onAction={openIntegrations}
+            />
+          ) : calendar.status === "no-calendars" ? (
+            <HomeEmptyState
+              title="Choose calendars to show"
+              message="Select the calendars you want DayLo to display."
+              action="Open Integrations"
+              onAction={openIntegrations}
+            />
+          ) : calendar.status === "error" ? (
+            <HomeEmptyState
+              title="Calendar unavailable"
+              message="Your events could not be loaded right now."
+              action="Open calendar"
+              onAction={() => setActivePage("calendar")}
+            />
+          ) : visibleCalendarEvents.length > 0 ? (
+            <div className="home-calendar-events">
+              {visibleCalendarEvents.map((event) => (
+                <button
+                  type="button"
+                  className={`home-calendar-event${
+                    event.allDay ? " is-all-day" : ""
+                  }`}
+                  key={`${event.calendarId}-${event.id}`}
+                  style={{
+                    "--home-event-colour":
+                      event.backgroundColor ||
+                      event.calendarColor ||
+                      "var(--accent)",
+                  }}
+                  onClick={() => setActivePage("calendar")}
+                >
+                  <span className="home-calendar-event-time">
+                    {event.allDay ? "All day" : formatEventStart(event.start)}
+                  </span>
+                  <i aria-hidden="true" />
+                  <strong>{event.title}</strong>
+                </button>
+              ))}
+              {hiddenCalendarEventCount > 0 && (
+                <button
+                  type="button"
+                  className="home-calendar-more"
+                  onClick={() => setActivePage("calendar")}
+                >
+                  +{hiddenCalendarEventCount} more event
+                  {hiddenCalendarEventCount === 1 ? "" : "s"}
+                </button>
+              )}
+            </div>
+          ) : (
+            <HomeEmptyState title="Nothing on your calendar today." />
+          )}
+        </section>
+      </div>
 
       <RevealOnScroll
         as="section"
-        className="home-week-strip-panel home-glow-surface"
-        aria-label="This week"
+        className="home-overview-card home-coming-up-summary home-glow-surface"
+        aria-labelledby="home-coming-up-heading"
         initiallyVisible={playHomeIntro}
         {...glowSurfaceProps}
       >
-        <div className="home-section-heading">
-          <div>
-            <p className="home-zone-label">This week</p>
-            <h3>{formatHomeWeekRange(homeWeek.start, homeWeek.end)}</h3>
+        <HomeSectionHeader
+          icon="▣"
+          title="Coming Up"
+          titleId="home-coming-up-heading"
+          action="Open to-do list →"
+          onAction={() => setActivePage("tasks")}
+        />
+        {upcomingTasks.length > 0 ? (
+          <div className="home-coming-up-list">
+            {upcomingTasks.map((task) => (
+              <HomeUpcomingTask
+                key={task.id}
+                task={task}
+                onOpen={() => openTaskDetails(task.id)}
+              />
+            ))}
           </div>
-          <button
-            type="button"
-            className="quiet-button home-calendar-link"
-            onClick={() => setActivePage("calendar")}
-          >
-            Open calendar <span aria-hidden="true">→</span>
-          </button>
-        </div>
-
-        <div className="home-week-strip">
-          {weekDays.map((day) => (
-            <div
-              className={`home-week-day${day.isToday ? " is-today" : ""}${
-                day.count > 0 ? " has-due-work" : ""
-              }`}
-              key={day.dateKey}
-              aria-label={`${day.label} ${day.date.getDate()}: ${
-                day.count === 1 ? "1 task due" : `${day.count} tasks due`
-              }${day.isToday ? ", today" : ""}`}
-            >
-              <span>{day.label}</span>
-              <strong>{day.date.getDate()}</strong>
-              <div className="home-week-dots" aria-hidden="true">
-                {Array.from({ length: Math.min(day.count, 3) }, (_, index) => (
-                  <i key={`${day.dateKey}-${index}`} />
-                ))}
-                {day.count > 3 && <em>+{day.count - 3}</em>}
-              </div>
-              {day.isToday && <small>Today</small>}
-            </div>
-          ))}
-        </div>
+        ) : (
+          <HomeEmptyState title="Nothing due soon." />
+        )}
       </RevealOnScroll>
 
       <RevealOnScroll
         as="section"
-        className="home-coming-up home-glow-surface"
-        aria-label="Coming up"
+        className="home-overview-card home-quick-access home-glow-surface"
+        aria-labelledby="home-quick-access-heading"
         index={1}
         initiallyVisible={playHomeIntro}
         {...glowSurfaceProps}
       >
-        <div className="home-section-heading">
-          <div>
-            <p className="home-zone-label">Coming up</p>
-            <h3>Upcoming work</h3>
-          </div>
-          <button
-            type="button"
-            className="quiet-button"
-            onClick={() => setActivePage("tasks")}
+        <HomeSectionHeader
+          icon="ϟ"
+          title="Quick Access"
+          titleId="home-quick-access-heading"
+        />
+        <div className="home-quick-access-grid">
+          <button type="button" onClick={openAddTask}>
+            <span aria-hidden="true">✓</span> Add task <b aria-hidden="true">›</b>
+          </button>
+          <button type="button" onClick={() => setActivePage("calendar")}>
+            <span aria-hidden="true">▣</span> Open calendar <b aria-hidden="true">›</b>
+          </button>
+          <a
+            href="https://classroom.google.com/"
+            target="_blank"
+            rel="noreferrer"
           >
-            Open to-do list
+            <span aria-hidden="true">◇</span> Open Classroom <b aria-hidden="true">›</b>
+          </a>
+          <button type="button" onClick={() => setActivePage("myLists")}>
+            <span aria-hidden="true">☷</span> My Lists <b aria-hidden="true">›</b>
           </button>
         </div>
-
-        {upcomingTasks.length > 0 ? (
-          <div className="home-upcoming-list">
-            {upcomingTasks.map((task) => (
-              <button
-                type="button"
-                className="home-upcoming-item"
-                key={task.id}
-                onClick={() => setActivePage("tasks")}
-              >
-                <span>
-                  <strong>{task.title}</strong>
-                  <small>{task.subject}</small>
-                </span>
-                <em>{formatDueTiming(task.dueDate)}</em>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <p className="home-coming-empty">Nothing due soon.</p>
-        )}
       </RevealOnScroll>
     </div>
   );
 }
 
+function HomeSectionHeader({ icon, title, titleId, action, actionLabel, onAction }) {
+  return (
+    <header className="home-overview-card-header">
+      <div>
+        <span aria-hidden="true">{icon}</span>
+        <h3 id={titleId}>{title}</h3>
+      </div>
+      {action && (
+        <button type="button" aria-label={actionLabel || action} onClick={onAction}>
+          {action}
+        </button>
+      )}
+    </header>
+  );
+}
+
+function HomeRecommendationCard({
+  recommendation,
+  priority,
+  duration,
+  subjectColour,
+  onOpen,
+  additional = false,
+}) {
+  const indicator = getHomeAssessmentIndicator(recommendation);
+  return (
+    <article
+      className={`home-recommendation${additional ? " is-additional" : ""}`}
+      style={{ "--home-subject-colour": subjectColour || "var(--accent)" }}
+    >
+      {priority && <span className="home-priority-label">Priority {priority}</span>}
+      <button type="button" onClick={onOpen}>
+        <i aria-hidden="true" />
+        <span>
+          <small>{recommendation.subject}</small>
+          <strong>{recommendation.title}</strong>
+          <em>{recommendation.reason} · {duration} min</em>
+        </span>
+        {indicator && (
+          <b title={indicator.label} aria-label={indicator.label}>
+            {indicator.short}
+          </b>
+        )}
+      </button>
+    </article>
+  );
+}
+
+function HomeUpcomingTask({ task, onOpen }) {
+  const dueDate = new Date(`${task.dueDate}T12:00:00`);
+  const indicator = getHomeAssessmentIndicator(task);
+  const classification = indicator?.label || "Homework";
+  const detail = String(task.description || "").trim();
+  return (
+    <button
+      type="button"
+      className="home-coming-up-item"
+      style={{ "--home-subject-colour": task.subjectColour || "var(--accent)" }}
+      onClick={onOpen}
+    >
+      <span className="home-coming-up-date">
+        <small>{dueDate.toLocaleDateString(undefined, { weekday: "short" })}</small>
+        <strong>{dueDate.toLocaleDateString(undefined, { day: "numeric", month: "short" })}</strong>
+      </span>
+      <i aria-hidden="true" />
+      <span className="home-coming-up-copy">
+        <strong>{task.title}</strong>
+        <small>{classification}{detail ? ` · ${detail}` : ` · ${task.subject || "Unassigned"}`}</small>
+      </span>
+      {indicator && (
+        <b title={indicator.label} aria-label={indicator.label}>
+          {indicator.short}
+        </b>
+      )}
+    </button>
+  );
+}
+
+function HomeEmptyState({ title, message, action, onAction }) {
+  return (
+    <div className="home-overview-empty">
+      <strong>{title}</strong>
+      {message && <p>{message}</p>}
+      {action && <button type="button" onClick={onAction}>{action}</button>}
+    </div>
+  );
+}
+
+function useTodayCalendarEvents({ authAccessToken }) {
+  const [state, setState] = useState({ status: "loading", events: [] });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const account = loadGoogleCalendarAccountMeta();
+    if (!account?.accountId) {
+      setState({ status: "disconnected", events: [] });
+      return () => controller.abort();
+    }
+
+    const preferences = Object.values(
+      loadGoogleCalendarPreferencesFromStorage()
+    );
+    const selectedCalendarIds = preferences
+      .filter(
+        (preference) =>
+          preference?.calendarId && preference.showInStudentHub === true
+      )
+      .map((preference) => preference.calendarId)
+      .sort((left, right) => left.localeCompare(right));
+
+    if (selectedCalendarIds.length === 0) {
+      setState({ status: "no-calendars", events: [] });
+      return () => controller.abort();
+    }
+
+    const timeMin = new Date();
+    timeMin.setHours(0, 0, 0, 0);
+    const timeMax = new Date(timeMin);
+    timeMax.setDate(timeMax.getDate() + 1);
+    setState({ status: "loading", events: [] });
+
+    fetch("/api/google-calendar/events", {
+      method: "POST",
+      credentials: "include",
+      signal: controller.signal,
+      headers: getIntegrationAuthHeaders(authAccessToken, {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      }),
+      body: JSON.stringify({
+        accountId: account.accountId,
+        selectedCalendarIds,
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+      }),
+    })
+      .then(async (response) => ({
+        response,
+        result: await response.json().catch(() => null),
+      }))
+      .then(({ response, result }) => {
+        if (!response.ok || result?.ok !== true) {
+          const disconnectedStatuses = new Set([
+            "no_calendar_session",
+            "calendar_session_invalid_or_expired",
+            "calendar_session_reconnect_required",
+          ]);
+          setState({
+            status: disconnectedStatuses.has(result?.status)
+              ? "disconnected"
+              : "error",
+            events: [],
+          });
+          return;
+        }
+        setState({
+          status: "connected",
+          events: sortHomeCalendarEvents(result.events || []),
+        });
+      })
+      .catch((error) => {
+        if (error?.name === "AbortError") return;
+        setState({ status: "error", events: [] });
+      });
+
+    return () => controller.abort();
+  }, [authAccessToken]);
+
+  return state;
+}
+
+function formatEventStart(value) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return "";
+  return date.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
 function shouldPlayHomeIntro() {
   if (typeof window === "undefined") return false;
-
   try {
     if (window.sessionStorage.getItem(HOME_INTRO_SESSION_KEY) === "true") {
       return false;
     }
-
     window.sessionStorage.setItem(HOME_INTRO_SESSION_KEY, "true");
     return true;
   } catch {
@@ -317,196 +500,8 @@ function shouldPlayHomeIntro() {
   }
 }
 
-function WeeklyProgressArc({
-  completed,
-  left,
-  overdueEarlier,
-  progress,
-  total,
-}) {
-  const radius = 58;
-  const center = 72;
-  const startAngle = 216;
-  const endAngle = 504;
-  const progressEndAngle = startAngle + ((endAngle - startAngle) * progress) / 100;
-  const trackPath = describeArc(center, center, radius, startAngle, endAngle);
-  const progressPath =
-    total === 0
-      ? ""
-      : describeArc(center, center, radius, startAngle, progressEndAngle);
-  const progressEndPoint = progressPath
-    ? polarToCartesian(center, center, radius, progressEndAngle)
-    : null;
-  const progressText =
-    total === 0
-      ? `0 due. No assignments due this week.${
-          overdueEarlier > 0
-            ? ` ${overdueEarlier} overdue from earlier.`
-            : ""
-        }`
-      : `${left} left. ${completed} of ${total} done this week.${
-          overdueEarlier > 0
-            ? ` ${overdueEarlier} overdue from earlier.`
-            : ""
-        }`;
-
-  return (
-    <div className="home-week-progress" aria-label={progressText}>
-      <svg
-        className="home-progress-arc"
-        viewBox="0 0 144 144"
-        role="img"
-        aria-hidden="true"
-      >
-        <path
-          className="home-progress-track-arc"
-          d={trackPath}
-          pathLength="100"
-        />
-        {progressPath && (
-          <>
-            <path
-              className="home-progress-value-arc"
-              d={progressPath}
-              pathLength="100"
-            />
-            <circle
-              className="home-progress-endpoint"
-              cx={progressEndPoint.x}
-              cy={progressEndPoint.y}
-              r="3.7"
-            />
-          </>
-        )}
-      </svg>
-      <div className="home-progress-center">
-        {total === 0 ? (
-          <>
-            <strong>0 due</strong>
-            <span>No assignments due this week.</span>
-            <EarlierOverdueIndicator count={overdueEarlier} />
-          </>
-        ) : (
-          <>
-            <strong>{left} left</strong>
-            <span>
-              {completed} of {total} done this week
-            </span>
-            <EarlierOverdueIndicator count={overdueEarlier} />
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function EarlierOverdueIndicator({ count }) {
-  if (count <= 0) return null;
-
-  return (
-    <em
-      className="home-overdue-indicator"
-      title={`${count} ${count === 1 ? "overdue assignment" : "overdue assignments"} from earlier`}
-      aria-label={`${count} ${count === 1 ? "overdue assignment" : "overdue assignments"} from earlier`}
-    >
-      <span className="home-overdue-full">
-        {count} {count === 1 ? "overdue" : "overdue"} from earlier
-      </span>
-      <span className="home-overdue-short" aria-hidden="true">
-        {count} {count === 1 ? "overdue" : "overdue"}
-      </span>
-    </em>
-  );
-}
-
-function TaskSignalRow({ task }) {
-  const signalBadges = getTaskSignalBadges(task).slice(0, 2);
-  const hasSourceBadge = ["classroom", "classroom-mock"].includes(
-    task.taskSource || task.source
-  );
-
-  if (!hasSourceBadge && signalBadges.length === 0) return null;
-
-  return (
-    <div className="task-signal-badges home-task-signals">
-      <TaskSourceBadge task={task} />
-      {signalBadges.map((badge) => (
-        <span
-          className={`task-signal-badge task-signal-${badge.tone}`}
-          key={`${badge.tone}-${badge.label}`}
-        >
-          {badge.label}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function getStartOfDay(date) {
-  const nextDate = new Date(date);
-  nextDate.setHours(0, 0, 0, 0);
-  return nextDate;
-}
-
-function getMonday(date) {
-  const monday = getStartOfDay(date);
-  const day = monday.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  monday.setDate(monday.getDate() + diff);
-  return monday;
-}
-
-function parseTaskDate(dateKey) {
-  if (!dateKey) return null;
-
-  const date = parseDateKey(dateKey);
-  if (Number.isNaN(date.getTime())) return null;
-
-  return getStartOfDay(date);
-}
-
-function formatDueTiming(dateKey) {
-  const daysLeft = getDaysLeft(dateKey);
-  return getUrgencyLabel(daysLeft);
-}
-
-function formatPlanBlockTime(block) {
-  if (!block?.start || !block?.end) return `${block?.duration || 0} min`;
-  return `${block.start}–${block.end}`;
-}
-
-function polarToCartesian(centerX, centerY, radius, angleInDegrees) {
-  const angleInRadians = ((angleInDegrees - 90) * Math.PI) / 180;
-
-  return {
-    x: centerX + radius * Math.cos(angleInRadians),
-    y: centerY + radius * Math.sin(angleInRadians),
-  };
-}
-
-function describeArc(centerX, centerY, radius, startAngle, endAngle) {
-  const start = polarToCartesian(centerX, centerY, radius, endAngle);
-  const end = polarToCartesian(centerX, centerY, radius, startAngle);
-  const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
-
-  return [
-    "M",
-    start.x,
-    start.y,
-    "A",
-    radius,
-    radius,
-    0,
-    largeArcFlag,
-    0,
-    end.x,
-    end.y,
-  ].join(" ");
-}
-
 function shouldUseHomePointerGlow() {
   if (typeof window === "undefined") return false;
-
   return (
     window.matchMedia("(hover: hover) and (pointer: fine)").matches &&
     window.matchMedia("(prefers-reduced-motion: no-preference)").matches &&
@@ -516,24 +511,24 @@ function shouldUseHomePointerGlow() {
 
 function handleHomeGlowPointerEnter(event) {
   if (!shouldUseHomePointerGlow()) return;
-
   event.currentTarget.classList.add("is-pointer-glowing");
 }
 
 function handleHomeGlowPointerMove(event) {
   if (!shouldUseHomePointerGlow()) return;
-
-  const surface = event.currentTarget;
-  const rect = surface.getBoundingClientRect();
-  surface.style.setProperty("--pointer-x", `${event.clientX - rect.left}px`);
-  surface.style.setProperty("--pointer-y", `${event.clientY - rect.top}px`);
+  const bounds = event.currentTarget.getBoundingClientRect();
+  event.currentTarget.style.setProperty(
+    "--pointer-x",
+    `${event.clientX - bounds.left}px`
+  );
+  event.currentTarget.style.setProperty(
+    "--pointer-y",
+    `${event.clientY - bounds.top}px`
+  );
 }
 
 function handleHomeGlowPointerLeave(event) {
-  const surface = event.currentTarget;
-  surface.classList.remove("is-pointer-glowing");
-  surface.style.removeProperty("--pointer-x");
-  surface.style.removeProperty("--pointer-y");
+  event.currentTarget.classList.remove("is-pointer-glowing");
 }
 
 export default HomePage;

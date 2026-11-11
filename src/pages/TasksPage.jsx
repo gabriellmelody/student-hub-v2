@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import DueDateField from "../components/DueDateField.jsx";
 import SubjectField from "../components/SubjectField.jsx";
 import TaskCard from "../components/TaskCard.jsx";
@@ -6,13 +7,23 @@ import TaskClassificationFields from "../components/TaskClassificationFields.jsx
 import TaskDetailsModal from "../components/TaskDetailsModal.jsx";
 import RevealOnScroll from "../components/RevealOnScroll.jsx";
 import {
+  blockGuidedTourBackground,
+  getFocusableTourElements,
+  getTourFocusTrapTarget,
+  restoreTourFocus,
+} from "../utils/guidedTourUtils.js";
+import {
   getEffortClass,
   sortTasksByMode,
   updateTaskTitleWithDetection,
 } from "../utils/appUtils.js";
 import {
   createDueDateBoardColumns,
+  createEmptyTaskDraft,
   createPriorityBoardColumns,
+  createTaskDraftForBoardColumn,
+  getVisibleTaskColumnItems,
+  TASK_BOARD_VISIBLE_LIMIT,
 } from "../utils/taskBoardUtils.js";
 
 function TasksPage({
@@ -27,20 +38,31 @@ function TasksPage({
   newTask,
   setNewTask,
   addTask,
-  addQuickTask,
   toggleTask,
   deleteTask,
   updateTask,
   taskSyncError = null,
   retryTaskSync,
+  scheduleTaskInCalendar,
+  removeTaskFromCalendar,
+  openCalendarSettings,
+  requestedTaskId = "",
+  onTaskDetailsRequestHandled,
 }) {
   const [taskView, setTaskView] = useState("dueDate");
   const [completedOpen, setCompletedOpen] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
-  const [quickTaskTitle, setQuickTaskTitle] = useState("");
+  const [dueTimeEnabled, setDueTimeEnabled] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
   const titleInputRef = useRef(null);
+  const addTaskDialogRef = useRef(null);
+  const addTaskReturnFocusRef = useRef(null);
   const taskReturnFocusRef = useRef(null);
+  const deepLinkedTaskIdRef = useRef(
+    typeof window === "undefined"
+      ? ""
+      : new URLSearchParams(window.location.search).get("task") || ""
+  );
   const allActiveTasks = mergeUniqueTasks([
     ...activeTasks,
     ...backlogTasks,
@@ -56,8 +78,9 @@ function TasksPage({
     [allActiveTasks]
   );
   const sortedCompletedTasks = sortTasksByMode(completedTasks, "dueDate");
+  const effectiveSelectedTaskId = requestedTaskId || selectedTaskId;
   const selectedTask = [...allActiveTasks, ...completedTasks].find(
-    (task) => String(task.id) === String(selectedTaskId)
+    (task) => String(task.id) === String(effectiveSelectedTaskId)
   );
   const overdueCount =
     dueDateColumns.find((column) => column.id === "overdue")?.tasks.length || 0;
@@ -65,20 +88,29 @@ function TasksPage({
     dueDateColumns.find((column) => column.label === "Today")?.tasks.length || 0;
   const hasActiveTasks = allActiveTasks.length > 0;
 
+  useEffect(() => {
+    const taskId = deepLinkedTaskIdRef.current;
+    if (!taskId) return;
+    const linkedTask = [...allActiveTasks, ...completedTasks].find(
+      (task) => String(task.id) === taskId
+    );
+    if (!linkedTask) return;
+    deepLinkedTaskIdRef.current = "";
+    setSelectedTaskId(linkedTask.id);
+  }, [allActiveTasks, completedTasks]);
+
   const addTaskSubmit = async (event) => {
-    await addTask(event);
-    setShowMoreOptions(false);
+    if (await addTask(event)) {
+      setShowMoreOptions(false);
+      setDueTimeEnabled(false);
+    }
   };
 
-  async function submitQuickTask(event) {
-    event.preventDefault();
-    if (!(await addQuickTask(quickTaskTitle))) return;
-    setQuickTaskTitle("");
-  }
-
-  function openQuickTaskDetails() {
-    const title = quickTaskTitle.trim();
-    if (title) setNewTask(updateTaskTitleWithDetection(newTask, title));
+  function openAddTask(column, returnFocusElement) {
+    addTaskReturnFocusRef.current = returnFocusElement || document.activeElement;
+    setNewTask(createTaskDraftForBoardColumn(column, taskView));
+    setDueTimeEnabled(false);
+    setShowMoreOptions(false);
     setShowAddTask(true);
   }
 
@@ -89,27 +121,68 @@ function TasksPage({
 
   function closeTaskDetails() {
     setSelectedTaskId(null);
-  }
-
-  useEffect(() => {
-    if (!showAddTask) return undefined;
-    window.requestAnimationFrame(() => titleInputRef.current?.focus());
-
-    function closeOnEscape(event) {
-      if (event.key === "Escape") {
-        setShowAddTask(false);
-        setShowMoreOptions(false);
+    onTaskDetailsRequestHandled?.();
+    if (typeof window !== "undefined") {
+      const nextUrl = new URL(window.location.href);
+      if (nextUrl.searchParams.has("task")) {
+        nextUrl.searchParams.delete("task");
+        window.history.replaceState({}, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
       }
     }
+  }
 
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [showAddTask, setShowAddTask]);
-
-  function closeAddTaskSheet() {
+  const closeAddTaskModal = useCallback(() => {
     setShowAddTask(false);
     setShowMoreOptions(false);
-  }
+    setDueTimeEnabled(false);
+    setNewTask(createEmptyTaskDraft());
+  }, [setNewTask, setShowAddTask]);
+
+  useLayoutEffect(() => {
+    if (!showAddTask) return undefined;
+    const returnFocusElement = addTaskReturnFocusRef.current;
+    const restoreBackground = blockGuidedTourBackground(
+      document.querySelector(".app-shell")
+    );
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => titleInputRef.current?.focus());
+
+    function handleFocusIn(event) {
+      if (addTaskDialogRef.current?.contains(event.target)) return;
+      titleInputRef.current?.focus();
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeAddTaskModal();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusableElements = getFocusableTourElements(addTaskDialogRef.current);
+      const focusTarget = getTourFocusTrapTarget({
+        focusableElements,
+        activeElement: document.activeElement,
+        shiftKey: event.shiftKey,
+        focusIsInside: addTaskDialogRef.current?.contains(document.activeElement),
+      });
+      if (!focusTarget) return;
+      event.preventDefault();
+      focusTarget.focus();
+    }
+
+    document.addEventListener("focusin", handleFocusIn);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("focusin", handleFocusIn);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      restoreBackground();
+      window.requestAnimationFrame(() => restoreTourFocus(returnFocusElement));
+    };
+  }, [closeAddTaskModal, showAddTask]);
 
   return (
     <div className="page tasks-page">
@@ -129,7 +202,7 @@ function TasksPage({
             className="primary-button task-add-trigger"
             type="button"
             data-tour="todo-add-task"
-            onClick={() => setShowAddTask(true)}
+            onClick={(event) => openAddTask(null, event.currentTarget)}
           >
             + Add task
           </button>
@@ -170,48 +243,21 @@ function TasksPage({
           </div>
         )}
 
-        <form className="task-quick-add" aria-label="Quick add task" onSubmit={submitQuickTask}>
-          <label className="task-quick-add-field">
-            <span className="sr-only">Task title</span>
-            <input
-              type="text"
-              value={quickTaskTitle}
-              placeholder="Add a task..."
-              onChange={(event) => setQuickTaskTitle(event.target.value)}
-            />
-          </label>
-          <button className="primary-button task-quick-add-submit" type="submit">
-            Add
-          </button>
-          <button
-            className="quiet-button task-quick-add-details"
-            type="button"
-            onClick={openQuickTaskDetails}
-          >
-            More details
-          </button>
-        </form>
-
-        {!hasActiveTasks ? (
-          <div className="task-empty-state">
-            <h3>You’re caught up.</h3>
-            <p>Add a task when new school work comes in.</p>
-            <button
-              className="secondary-button task-empty-action"
-              type="button"
-              onClick={() => setShowAddTask(true)}
-            >
-              + Add task
-            </button>
+        {!hasActiveTasks && (
+          <div className="task-board-empty-intro" role="status">
+            <strong>You’re caught up.</strong>
+            <span>Add a task in the column where it belongs.</span>
           </div>
-        ) : (
-          <TaskBoard
-            columns={taskView === "dueDate" ? dueDateColumns : priorityColumns}
-            subjects={subjects}
-            onOpenTask={openTaskDetails}
-            label={taskView === "dueDate" ? "Tasks by due date" : "Tasks by priority"}
-          />
         )}
+
+        <TaskBoard
+          columns={taskView === "dueDate" ? dueDateColumns : priorityColumns}
+          subjects={subjects}
+          onOpenTask={openTaskDetails}
+          onAddTask={openAddTask}
+          boardMode={taskView}
+          label={taskView === "dueDate" ? "Tasks by due date" : "Tasks by priority"}
+        />
 
         <section className="task-completed-section">
           <button
@@ -246,122 +292,171 @@ function TasksPage({
         </section>
       </div>
 
-      {showAddTask && (
-        <div className="task-sheet-layer" role="presentation">
+      {showAddTask && createPortal(
+        <div className="task-details-layer" role="presentation">
           <button
-            className="task-sheet-backdrop"
+            className="task-details-backdrop"
             type="button"
             aria-label="Close add task"
-            onClick={closeAddTaskSheet}
+            onClick={closeAddTaskModal}
           />
           <form
-            className="add-task-form task-add-sheet"
-            aria-label="Add task"
+            ref={addTaskDialogRef}
+            className="task-details-dialog task-add-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-task-title"
+            aria-describedby="add-task-description"
             onSubmit={addTaskSubmit}
           >
-            <div className="task-sheet-header">
+            <header className="task-details-header">
               <div>
-                <h3>Add task</h3>
-                <p>Capture the work, then keep moving.</p>
+                <span className="eyebrow">New task</span>
+                <h2 id="add-task-title">Add task</h2>
+                <p id="add-task-description">Capture the work, then keep moving.</p>
               </div>
               <button
                 type="button"
-                className="small-button secondary"
-                onClick={closeAddTaskSheet}
+                className="task-details-close"
+                aria-label="Close add task"
+                onClick={closeAddTaskModal}
               >
-                Cancel
+                ×
               </button>
-            </div>
+            </header>
 
-            <label className="task-form-field">
-              <span>Task title</span>
-              <input
-                ref={titleInputRef}
-                type="text"
-                placeholder="What needs doing?"
-                value={newTask.title}
-                onChange={(event) =>
-                  setNewTask(updateTaskTitleWithDetection(newTask, event.target.value))
-                }
-              />
-            </label>
-
-            <label className="task-form-field">
-              <span>Description (optional)</span>
-              <textarea
-                rows={3}
-                placeholder="Add details, instructions, or notes…"
-                value={newTask.description}
-                onChange={(event) =>
-                  setNewTask({ ...newTask, description: event.target.value })
-                }
-              />
-            </label>
-
-            <label className="task-form-field">
-              <span>Subject</span>
-              <SubjectField
-                subjects={subjects}
-                placeholder="Subject, e.g. Chemistry"
-                value={newTask.subject}
-                onChange={(subject) => setNewTask({ ...newTask, subject })}
-              />
-            </label>
-
-            <div className="task-create-deadline-grid">
-              <DueDateField
-                value={newTask.dueDate}
-                onChange={(dueDate) => setNewTask({ ...newTask, dueDate })}
-              />
-              <label className="task-form-field">
-                <span>Due time (optional)</span>
+            <div className="task-details-scroll">
+              <label className="task-form-field task-details-title-field">
+                <span>Task title</span>
                 <input
-                  type="time"
-                  value={newTask.dueTime || ""}
+                  ref={titleInputRef}
+                  type="text"
+                  placeholder="What needs doing?"
+                  value={newTask.title}
+                  required
                   onChange={(event) =>
-                    setNewTask({ ...newTask, dueTime: event.target.value })
+                    setNewTask(updateTaskTitleWithDetection(newTask, event.target.value))
                   }
                 />
               </label>
-            </div>
 
-            <button
-              className="quiet-button task-more-options"
-              type="button"
-              aria-expanded={showMoreOptions}
-              onClick={() => setShowMoreOptions((open) => !open)}
-            >
-              More options <span aria-hidden="true">{showMoreOptions ? "⌃" : "⌄"}</span>
-            </button>
+              <label className="task-form-field">
+                <span>Description (optional)</span>
+                <textarea
+                  rows={3}
+                  placeholder="Add details, instructions, or notes…"
+                  value={newTask.description}
+                  onChange={(event) =>
+                    setNewTask({ ...newTask, description: event.target.value })
+                  }
+                />
+              </label>
 
-            {showMoreOptions && (
-              <div className="task-advanced-fields">
-                <TaskClassificationFields task={newTask} onChange={setNewTask} />
-                <div className="effort-row">
-                  <span>Effort</span>
-                  {[1, 2, 3, 4, 5].map((number) => (
+              <label className="task-form-field">
+                <span>Subject</span>
+                <SubjectField
+                  subjects={subjects}
+                  placeholder="Subject, e.g. Chemistry"
+                  value={newTask.subject}
+                  onChange={(subject) => setNewTask({ ...newTask, subject })}
+                />
+              </label>
+
+              <div className="task-create-deadline-grid">
+                <DueDateField
+                  value={newTask.dueDate}
+                  onChange={(dueDate) => {
+                    if (!dueDate) setDueTimeEnabled(false);
+                    setNewTask({
+                      ...newTask,
+                      dueDate,
+                      ...(!dueDate ? { dueTime: "" } : {}),
+                    });
+                  }}
+                />
+                <div className="task-form-field task-create-time-field">
+                  <span>Due time</span>
+                  {dueTimeEnabled ? (
+                    <div className="task-create-time-input">
+                      <input
+                        type="time"
+                        aria-label="Due time"
+                        value={newTask.dueTime || ""}
+                        onChange={(event) =>
+                          setNewTask({ ...newTask, dueTime: event.target.value })
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="quiet-button"
+                        onClick={() => {
+                          setDueTimeEnabled(false);
+                          setNewTask({ ...newTask, dueTime: "" });
+                        }}
+                      >
+                        Remove time
+                      </button>
+                    </div>
+                  ) : (
                     <button
-                      key={number}
                       type="button"
-                      className={
-                        newTask.effort === number
-                          ? `effort-button selected ${getEffortClass(number)}`
-                          : `effort-button ${getEffortClass(number)}`
-                      }
-                      onClick={() => setNewTask({ ...newTask, effort: number })}
+                      className="secondary-button task-add-time"
+                      disabled={!newTask.dueDate}
+                      onClick={() => setDueTimeEnabled(true)}
                     >
-                      {number}
+                      Add time <span className="sr-only">to this due date</span>
                     </button>
-                  ))}
+                  )}
                 </div>
               </div>
-            )}
 
-            <button className="primary-button" type="submit">
-              Add task
-            </button>
+              <button
+                className="quiet-button task-more-options"
+                type="button"
+                aria-expanded={showMoreOptions}
+                onClick={() => setShowMoreOptions((open) => !open)}
+              >
+                More options <span aria-hidden="true">{showMoreOptions ? "⌃" : "⌄"}</span>
+              </button>
+
+              {showMoreOptions && (
+                <div className="task-advanced-fields">
+                  <TaskClassificationFields task={newTask} onChange={setNewTask} />
+                  <fieldset className="task-details-effort">
+                    <legend>Effort</legend>
+                    <div className="effort-row">
+                      {[1, 2, 3, 4, 5].map((number) => (
+                        <button
+                          key={number}
+                          type="button"
+                          aria-pressed={newTask.effort === number}
+                          className={
+                            newTask.effort === number
+                              ? `effort-button selected ${getEffortClass(number)}`
+                              : `effort-button ${getEffortClass(number)}`
+                          }
+                          onClick={() => setNewTask({ ...newTask, effort: number })}
+                        >
+                          {number}
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                </div>
+              )}
+            </div>
+
+            <footer className="task-details-actions task-add-actions">
+              <button className="secondary-button" type="button" onClick={closeAddTaskModal}>
+                Cancel
+              </button>
+              <button className="primary-button" type="submit" disabled={!newTask.title.trim()}>
+                Add task
+              </button>
+            </footer>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
 
       {selectedTask && (
@@ -373,18 +468,38 @@ function TasksPage({
           onDelete={deleteTask}
           onClose={closeTaskDetails}
           returnFocusRef={taskReturnFocusRef}
+          onScheduleCalendar={scheduleTaskInCalendar}
+          onRemoveCalendar={removeTaskFromCalendar}
+          onOpenCalendarSettings={openCalendarSettings}
         />
       )}
     </div>
   );
 }
 
-function TaskBoard({ columns, subjects, onOpenTask, label }) {
+function TaskBoard({ columns, subjects, onOpenTask, onAddTask, boardMode, label }) {
+  const [expandedColumns, setExpandedColumns] = useState(() => new Set());
+
+  function toggleColumn(columnKey) {
+    setExpandedColumns((current) => {
+      const next = new Set(current);
+      if (next.has(columnKey)) next.delete(columnKey);
+      else next.add(columnKey);
+      return next;
+    });
+  }
+
   return (
     <div className="task-board-scroll" role="region" aria-label={label} tabIndex={0}>
       <div className="task-board">
-        {columns.map((column) => (
-          <section
+        {columns.map((column) => {
+          const columnKey = `${boardMode}:${column.id}`;
+          const expanded = expandedColumns.has(columnKey);
+          const visibleTasks = getVisibleTaskColumnItems(column.tasks, expanded);
+          const hiddenCount = Math.max(0, column.tasks.length - TASK_BOARD_VISIBLE_LIMIT);
+          const listId = `task-column-${columnKey.replace(/[^a-z0-9_-]/gi, "-")}`;
+
+          return <section
             className={`task-board-column task-board-column-${column.kind || column.id}`}
             key={column.id}
           >
@@ -396,9 +511,9 @@ function TaskBoard({ columns, subjects, onOpenTask, label }) {
               <span aria-label={`${column.tasks.length} tasks`}>{column.tasks.length}</span>
             </header>
 
-            <div className="task-board-column-list">
+            <div className="task-board-column-list" id={listId}>
               {column.tasks.length > 0 ? (
-                column.tasks.map((task) => (
+                visibleTasks.map((task) => (
                   <TaskCard
                     key={task.id}
                     task={task}
@@ -409,9 +524,28 @@ function TaskBoard({ columns, subjects, onOpenTask, label }) {
               ) : (
                 <p className="task-board-column-empty">No tasks</p>
               )}
+              {column.tasks.length > TASK_BOARD_VISIBLE_LIMIT && (
+                <button
+                  className="task-board-show-more"
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-controls={listId}
+                  onClick={() => toggleColumn(columnKey)}
+                >
+                  {expanded ? "Show less" : `Show ${hiddenCount} more`}
+                </button>
+              )}
             </div>
+            <button
+              className="task-board-add-task"
+              type="button"
+              aria-label={`Add task to ${column.label}`}
+              onClick={(event) => onAddTask(column, event.currentTarget)}
+            >
+              <span aria-hidden="true">+</span> Add task
+            </button>
           </section>
-        ))}
+        })}
       </div>
     </div>
   );

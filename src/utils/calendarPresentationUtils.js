@@ -130,17 +130,56 @@ export function getMonthGoogleEvents(
 
 export function getWeekDayPresentation(
   dayItems,
-  { googleEventLimit = 2 } = {}
+  { googleEventLimit = 2, itemLimit = null } = {}
 ) {
   const tasks = Array.isArray(dayItems?.tasks) ? dayItems.tasks : [];
   const googleEvents = Array.isArray(dayItems?.googleEvents)
     ? dayItems.googleEvents
     : [];
+  const allDayEvents = googleEvents.filter((event) => event?.allDay === true);
+  const timedEvents = googleEvents.filter((event) => event?.allDay !== true);
+
+  if (Number.isFinite(itemLimit)) {
+    const orderedItems = [
+      ...allDayEvents.map((item) => ({ kind: "all-day", item })),
+      ...tasks.map((item) => ({ kind: "task", item })),
+      ...timedEvents.map((item) => ({ kind: "timed", item })),
+    ];
+    const visibleItems = orderedItems.slice(0, Math.max(0, itemLimit));
+    const visibleAllDayEvents = visibleItems
+      .filter((entry) => entry.kind === "all-day")
+      .map((entry) => entry.item);
+    const visibleTasks = visibleItems
+      .filter((entry) => entry.kind === "task")
+      .map((entry) => entry.item);
+    const visibleTimedEvents = visibleItems
+      .filter((entry) => entry.kind === "timed")
+      .map((entry) => entry.item);
+
+    return {
+      tasks: visibleTasks,
+      allDayEvents: visibleAllDayEvents,
+      timedEvents: visibleTimedEvents,
+      googleEvents: [...visibleAllDayEvents, ...visibleTimedEvents],
+      hiddenItemCount: Math.max(0, orderedItems.length - visibleItems.length),
+      hiddenGoogleEventCount: Math.max(
+        0,
+        googleEvents.length - visibleAllDayEvents.length - visibleTimedEvents.length
+      ),
+    };
+  }
+
   const visibleGoogleEvents = googleEvents.slice(0, googleEventLimit);
 
   return {
     tasks,
+    allDayEvents: visibleGoogleEvents.filter((event) => event?.allDay === true),
+    timedEvents: visibleGoogleEvents.filter((event) => event?.allDay !== true),
     googleEvents: visibleGoogleEvents,
+    hiddenItemCount: Math.max(
+      0,
+      googleEvents.length - visibleGoogleEvents.length
+    ),
     hiddenGoogleEventCount: Math.max(
       0,
       googleEvents.length - visibleGoogleEvents.length
@@ -151,15 +190,51 @@ export function getWeekDayPresentation(
 export function getMonthDayPresentation(
   taskEvents,
   googleEvents,
-  { googleEventLimit = 2 } = {}
+  { googleEventLimit = 2, itemLimit = null } = {}
 ) {
   const tasks = Array.isArray(taskEvents) ? taskEvents : [];
   const events = Array.isArray(googleEvents) ? googleEvents : [];
+  const allDayEvents = events.filter((event) => event?.allDay === true);
+  const timedEvents = events.filter((event) => event?.allDay !== true);
+
+  if (Number.isFinite(itemLimit)) {
+    const orderedItems = [
+      ...allDayEvents.map((item) => ({ kind: "all-day", item })),
+      ...tasks.map((item) => ({ kind: "task", item })),
+      ...timedEvents.map((item) => ({ kind: "timed", item })),
+    ];
+    const visibleItems = orderedItems.slice(0, Math.max(0, itemLimit));
+    const visibleAllDayEvents = visibleItems
+      .filter((entry) => entry.kind === "all-day")
+      .map((entry) => entry.item);
+    const visibleTasks = visibleItems
+      .filter((entry) => entry.kind === "task")
+      .map((entry) => entry.item);
+    const visibleTimedEvents = visibleItems
+      .filter((entry) => entry.kind === "timed")
+      .map((entry) => entry.item);
+
+    return {
+      tasks: visibleTasks,
+      allDayEvents: visibleAllDayEvents,
+      timedEvents: visibleTimedEvents,
+      googleEvents: [...visibleAllDayEvents, ...visibleTimedEvents],
+      hiddenItemCount: Math.max(0, orderedItems.length - visibleItems.length),
+      hiddenGoogleEventCount: Math.max(
+        0,
+        events.length - visibleAllDayEvents.length - visibleTimedEvents.length
+      ),
+    };
+  }
+
   const visibleGoogleEvents = events.slice(0, googleEventLimit);
 
   return {
     tasks,
+    allDayEvents: visibleGoogleEvents.filter((event) => event?.allDay === true),
+    timedEvents: visibleGoogleEvents.filter((event) => event?.allDay !== true),
     googleEvents: visibleGoogleEvents,
+    hiddenItemCount: Math.max(0, events.length - visibleGoogleEvents.length),
     hiddenGoogleEventCount: Math.max(0, events.length - visibleGoogleEvents.length),
   };
 }

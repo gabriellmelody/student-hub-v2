@@ -1,979 +1,812 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import {
-  getEffortLabel,
-  getEffortClass,
-  getPlanBlockKey,
-  getTaskSignalBadges,
-  parseDateKey,
-} from "../utils/appUtils.js";
-import RevealOnScroll from "../components/RevealOnScroll.jsx";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
+import {
+  DEFAULT_PLANNING_PREFERENCES,
+  normalizePlanningPreferences,
+} from "../lib/cloudPlanning.js";
+import {
+  blockGuidedTourBackground,
+  getFocusableTourElements,
+  getTourFocusTrapTarget,
+  restoreTourFocus,
+} from "../utils/guidedTourUtils.js";
+import {
+  buildStudyRecommendations,
+  clearUnlockedFutureRecommendationOverrides,
+  createRecommendationOverride,
+} from "../utils/studyRecommendations.js";
 
-function getCurrentMinutes() {
-  const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
-}
+const BLOCK_DURATION_OPTIONS = [20, 25, 30, 45, 60, 90];
 
-function parseDisplayTimeToMinutes(timeLabel) {
-  const match = String(timeLabel || "")
-    .trim()
-    .match(/^(\d{1,2}):(\d{2})(?:\s*([AP]M))?$/i);
+function formatWeekRange(startKey, endKey) {
+  const start = new Date(`${startKey}T12:00:00`);
+  const end = new Date(`${endKey}T12:00:00`);
+  const sameMonth =
+    start.getMonth() === end.getMonth() &&
+    start.getFullYear() === end.getFullYear();
 
-  if (!match) return null;
-
-  let hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  const period = match[3]?.toUpperCase();
-
-  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
-
-  if (period === "PM" && hours < 12) hours += 12;
-  if (period === "AM" && hours === 12) hours = 0;
-
-  return hours * 60 + minutes;
-}
-
-function createManualBlockDraft() {
-  return {
-    type: "study",
-    title: "",
-    subject: "",
-    duration: 30,
-  };
-}
-
-function getPlanBlockStartMinutes(block) {
-  const startMinutes = parseDisplayTimeToMinutes(block.start);
-
-  if (startMinutes === null) return Number.POSITIVE_INFINITY;
-
-  return startMinutes;
-}
-
-function getNextPlanBlockKey(planBlocks, nowMinutes) {
-  const activeBlocks = planBlocks
-    .map((block, index) => ({ block, index }))
-    .filter(({ block }) => block.type !== "message" && !block.completed);
-
-  if (activeBlocks.length === 0) return null;
-
-  const currentBlock = activeBlocks.find(({ block }) => {
-    const startMinutes = parseDisplayTimeToMinutes(block.start);
-    const endMinutes = parseDisplayTimeToMinutes(block.end);
-
-    if (startMinutes === null || endMinutes === null) return false;
-
-    const adjustedEnd = endMinutes <= startMinutes ? endMinutes + 24 * 60 : endMinutes;
-    const adjustedNow =
-      nowMinutes < startMinutes && adjustedEnd > 24 * 60
-        ? nowMinutes + 24 * 60
-        : nowMinutes;
-
-    return adjustedNow >= startMinutes && adjustedNow < adjustedEnd;
-  });
-
-  if (currentBlock) {
-    return getPlanBlockKey(currentBlock.block, currentBlock.index);
+  if (sameMonth) {
+    return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${end.toLocaleDateString(undefined, { day: "numeric" })}`;
   }
 
-  const upcomingBlock = activeBlocks.find(
-    ({ block }) => getPlanBlockStartMinutes(block) >= nowMinutes
-  );
-  const fallbackBlock = upcomingBlock || activeBlocks[0];
-
-  return getPlanBlockKey(fallbackBlock.block, fallbackBlock.index);
+  return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
 }
 
-function PlanPage({
-  planBlocks,
-  planMetadata,
-  clearPlan,
-  addManualPlanBlock,
-  movePlanStudyBlock,
-  updatePlanBlockDuration,
-  removePlanBlock,
-  togglePlanBlockLocked,
-  reorderPlanBlock,
-  planMoveFeedback,
-  completeTaskFromPlan,
-  completeSuggestedPlanBlock,
-  stalePlanDate,
-  startFreshPlan,
-  openSmartPlanner,
-  loading = false,
-  syncError = null,
+function createPreferenceDraft(preferences) {
+  return normalizePlanningPreferences(
+    preferences || DEFAULT_PLANNING_PREFERENCES
+  );
+}
+
+const RECOMMENDATION_TYPE_LABELS = {
+  assessment: "Assessment prep",
+  homework: "Homework",
+  routine: "Routine study",
+  review: "Review",
+};
+
+function getAssessmentIndicator(recommendation) {
+  if (recommendation.kind !== "assessment") return null;
+  const label = recommendation.assessmentLabel || "Assessment";
+  if (label === "Formative") return { short: "F", label };
+  if (label === "Summative") return { short: "S", label };
+  if (label === "CFA") return { short: "CFA", label };
+  return { short: "A", label };
+}
+
+function RecommendationCard({
+  recommendation,
+  duration,
+  onOpen,
+  onToggleLock,
+  subjectColour,
+  extra = false,
 }) {
-  const hasLockedBlocks = planBlocks.some((block) => block.locked === true);
-  const [editingBlockId, setEditingBlockId] = useState(null);
-  const [durationDraft, setDurationDraft] = useState("");
-  const [openMenuBlockId, setOpenMenuBlockId] = useState(null);
-  const [showAddBlockForm, setShowAddBlockForm] = useState(false);
-  const [manualBlockDraft, setManualBlockDraft] = useState(
-    createManualBlockDraft
+  const typeLabel = extra
+    ? "Extra work"
+    : RECOMMENDATION_TYPE_LABELS[recommendation.kind] || "Study";
+  const assessmentIndicator = getAssessmentIndicator(recommendation);
+  const className = `study-recommendation-card is-${recommendation.kind}${extra ? " is-extra" : ""}${recommendation.locked ? " is-locked" : ""}${subjectColour ? " has-subject-colour" : ""}`;
+
+  return (
+    <article
+      className={className}
+      style={subjectColour ? { "--study-subject-colour": subjectColour } : undefined}
+    >
+      <button
+        type="button"
+        className="study-recommendation-open"
+        onClick={onOpen}
+        aria-label={`View recommendation details for ${recommendation.title}`}
+      >
+      <div className="study-recommendation-heading">
+        <div>
+          <span className="study-recommendation-subject">
+            <i
+              aria-hidden="true"
+              style={{ backgroundColor: subjectColour || "var(--accent)" }}
+            />
+            {recommendation.subject}
+          </span>
+          <h3>{recommendation.title}</h3>
+        </div>
+      </div>
+      <div className="study-recommendation-meta">
+        {assessmentIndicator && (
+          <span
+            className="study-assessment-indicator"
+            title={assessmentIndicator.label}
+            aria-label={assessmentIndicator.label}
+          >
+            {assessmentIndicator.short}
+          </span>
+        )}
+        <span className="study-recommendation-type">{typeLabel}</span>
+        <span>{recommendation.reason} · {duration} min</span>
+        {recommendation.source === "classroom" && (
+          <TaskSourceBadge task={{ source: "classroom" }} />
+        )}
+      </div>
+      </button>
+      <button
+        type="button"
+        className="study-recommendation-lock"
+        aria-label={`${recommendation.locked ? "Unlock" : "Lock"} ${recommendation.title}`}
+        aria-pressed={recommendation.locked}
+        title={recommendation.locked ? "Unlock recommendation" : "Lock recommendation"}
+        onClick={onToggleLock}
+      >
+        <span className="study-lock-icon" aria-hidden="true" />
+        <span>{recommendation.locked ? "Locked" : "Lock"}</span>
+      </button>
+    </article>
   );
-  const [draggedBlockId, setDraggedBlockId] = useState(null);
-  const [dragOverBlockId, setDragOverBlockId] = useState(null);
-  const [droppedBlockId, setDroppedBlockId] = useState(null);
-  const [nowMinutes, setNowMinutes] = useState(getCurrentMinutes);
-  const planBlockNodesRef = useRef(new Map());
-  const flipFirstRectsRef = useRef(null);
-  const flipAnimationFrameRef = useRef(null);
-  const activeDragIdRef = useRef(null);
-  const lastDragOverIdRef = useRef(null);
-  const dropSettleTimerRef = useRef(null);
-  const openMenuRef = useRef(null);
-  const nextPlanBlockKey = getNextPlanBlockKey(planBlocks, nowMinutes);
+}
 
-  const syncMessage = syncError ? "Today’s Plan could not sync. Your latest change may not be saved." : "";
-
-  useEffect(() => {
-    return () => {
-      cancelAnimationFrame(flipAnimationFrameRef.current);
-      clearTimeout(dropSettleTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNowMinutes(getCurrentMinutes());
-    }, 60000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    if (!openMenuBlockId) return undefined;
-
-    function handlePointerDown(event) {
-      if (!openMenuRef.current?.contains(event.target)) {
-        setOpenMenuBlockId(null);
-      }
-    }
-
-    function handleKeyDown(event) {
-      if (event.key === "Escape") setOpenMenuBlockId(null);
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [openMenuBlockId]);
-
-  useLayoutEffect(() => {
-    const firstRects = flipFirstRectsRef.current;
-
-    if (!firstRects) return;
-
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      flipFirstRectsRef.current = null;
-      return;
-    }
-
-    flipFirstRectsRef.current = null;
-    cancelAnimationFrame(flipAnimationFrameRef.current);
-    const isDragReorder = Boolean(activeDragIdRef.current);
-    const transformDuration = isDragReorder ? 210 : 460;
-
-    const animatedBlocks = [];
-
-    planBlockNodesRef.current.forEach((node, key) => {
-      const firstRect = firstRects.get(key);
-
-      if (!firstRect) return;
-
-      const lastRect = node.getBoundingClientRect();
-      const deltaX = firstRect.left - lastRect.left;
-      const deltaY = firstRect.top - lastRect.top;
-
-      if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) return;
-
-      node.style.transition = "none";
-      node.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-      node.style.zIndex =
-        node.dataset.planBlockId === activeDragIdRef.current ||
-        node.dataset.planBlockId === planMoveFeedback?.blockId
-          ? "2"
-          : "1";
-      node.style.willChange = "transform";
-      animatedBlocks.push(node);
-    });
-
-    flipAnimationFrameRef.current = requestAnimationFrame(() => {
-      animatedBlocks.forEach((node) => {
-        node.style.transition =
-          `transform ${transformDuration}ms cubic-bezier(0.22, 1, 0.36, 1), border-color 180ms ease, background 180ms ease, box-shadow 180ms ease`;
-        node.style.transform = "";
-      });
-    });
-
-    const cleanupTimer = setTimeout(() => {
-      animatedBlocks.forEach((node) => {
-        node.style.transition = "";
-        node.style.transform = "";
-        node.style.zIndex = "";
-        node.style.willChange = "";
-      });
-    }, transformDuration + 60);
-
-    return () => clearTimeout(cleanupTimer);
-  }, [planBlocks, planMoveFeedback]);
-
-  function setPlanBlockRef(key, node) {
-    if (node) {
-      planBlockNodesRef.current.set(key, node);
-    } else {
-      planBlockNodesRef.current.delete(key);
-    }
-  }
-
-  function getPlanBlockRects() {
-    const rects = new Map();
-
-    planBlockNodesRef.current.forEach((node, key) => {
-      rects.set(key, node.getBoundingClientRect());
-    });
-
-    return rects;
-  }
-
-  function handleMovePlanStudyBlock(blockId, direction) {
-    if (!canMoveStudyBlock(blockId, direction)) return;
-
-    flipFirstRectsRef.current = getPlanBlockRects();
-    movePlanStudyBlock(blockId, direction);
-    setOpenMenuBlockId(null);
-  }
-
-  function closeAddBlockForm() {
-    setShowAddBlockForm(false);
-    setManualBlockDraft(createManualBlockDraft());
-  }
-
-  function handleManualBlockTypeChange(nextType) {
-    setManualBlockDraft((currentDraft) => ({
-      ...currentDraft,
-      type: nextType,
-      title:
-        nextType === "break"
-          ? currentDraft.title || "Break"
-          : currentDraft.title === "Break"
-            ? ""
-            : currentDraft.title,
-      duration: nextType === "break" ? 10 : 30,
-    }));
-  }
-
-  function submitManualBlock(event) {
-    event.preventDefault();
-    addManualPlanBlock(manualBlockDraft);
-    closeAddBlockForm();
-  }
-
-  function openBlockEditor(block) {
-    if (block.locked) return;
-
-    setOpenMenuBlockId(null);
-    setEditingBlockId(block.id);
-    setDurationDraft(String(block.duration));
-  }
-
-  function saveBlockDuration(event) {
-    event.preventDefault();
-
-    if (!editingBlockId || !Number.isFinite(Number(durationDraft))) return;
-
-    updatePlanBlockDuration(editingBlockId, durationDraft);
-    setEditingBlockId(null);
-    setDurationDraft("");
-  }
-
-  function cancelBlockEdit() {
-    setEditingBlockId(null);
-    setDurationDraft("");
-  }
-
-  function handleRemovePlanBlock(blockId) {
-    const block = planBlocks.find((planBlock) => planBlock.id === blockId);
-
-    if (block?.locked) return;
-
-    setOpenMenuBlockId(null);
-    removePlanBlock(blockId);
-    cancelBlockEdit();
-  }
-
-  function resetDragState() {
-    activeDragIdRef.current = null;
-    lastDragOverIdRef.current = null;
-    setDraggedBlockId(null);
-    setDragOverBlockId(null);
-  }
-
-  function canReorderBlock(activeBlockId, overBlockId) {
-    const activeIndex = planBlocks.findIndex(
-      (block) => block.id === activeBlockId
+function RecommendationList({
+  day,
+  onOpenRecommendation,
+  onToggleLock,
+  subjectColours,
+  compact = false,
+  emptyTitle = "Nothing recommended.",
+  emptyMessage = "Add a routine in Study preferences if you want a regular fallback.",
+  emptyAction = null,
+}) {
+  if (!day || (day.primary.length === 0 && day.extra.length === 0)) {
+    return (
+      <div className="study-recommendation-empty">
+        <strong>{emptyTitle}</strong>
+        <span>{emptyMessage}</span>
+        {emptyAction}
+      </div>
     );
-    const overIndex = planBlocks.findIndex((block) => block.id === overBlockId);
-
-    if (activeIndex < 0 || overIndex < 0) return false;
-
-    const rangeStart = Math.min(activeIndex, overIndex);
-    const rangeEnd = Math.max(activeIndex, overIndex);
-
-    return !planBlocks
-      .slice(rangeStart, rangeEnd + 1)
-      .some((block) => block.locked);
-  }
-
-  function canMoveStudyBlock(blockId, direction) {
-    const studyPositions = planBlocks.reduce((positions, block, index) => {
-      if (block.type === "study") positions.push(index);
-      return positions;
-    }, []);
-    const currentStudyIndex = studyPositions.findIndex(
-      (blockIndex) => planBlocks[blockIndex].id === blockId
-    );
-    const nextStudyIndex = currentStudyIndex + direction;
-
-    if (
-      currentStudyIndex < 0 ||
-      nextStudyIndex < 0 ||
-      nextStudyIndex >= studyPositions.length
-    ) {
-      return false;
-    }
-
-    return canReorderBlock(
-      blockId,
-      planBlocks[studyPositions[nextStudyIndex]].id
-    );
-  }
-
-  function handleDragStart(event, blockId) {
-    const block = planBlocks.find((planBlock) => planBlock.id === blockId);
-
-    if (block?.locked) {
-      event.preventDefault();
-      return;
-    }
-
-    activeDragIdRef.current = blockId;
-    lastDragOverIdRef.current = blockId;
-    setDraggedBlockId(blockId);
-    setDroppedBlockId(null);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plan-block", blockId);
-    const blockRect = event.currentTarget.getBoundingClientRect();
-    const dragOffsetX = Math.max(
-      16,
-      Math.min(blockRect.width - 16, event.clientX - blockRect.left)
-    );
-    const dragOffsetY = Math.max(
-      12,
-      Math.min(blockRect.height - 12, event.clientY - blockRect.top)
-    );
-    event.dataTransfer.setDragImage(
-      event.currentTarget,
-      dragOffsetX,
-      dragOffsetY
-    );
-  }
-
-  function handleDragOver(event, overBlockId) {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-
-    const activeBlockId =
-      activeDragIdRef.current || event.dataTransfer.getData("text/plan-block");
-    const activeIndex = planBlocks.findIndex(
-      (block) => block.id === activeBlockId
-    );
-    const overIndex = planBlocks.findIndex((block) => block.id === overBlockId);
-
-    if (
-      !activeBlockId ||
-      activeBlockId === overBlockId ||
-      activeIndex < 0 ||
-      overIndex < 0 ||
-      lastDragOverIdRef.current === overBlockId ||
-      !canReorderBlock(activeBlockId, overBlockId)
-    ) {
-      setDragOverBlockId(null);
-      event.dataTransfer.dropEffect = "none";
-      return;
-    }
-
-    setDragOverBlockId(overBlockId);
-
-    const overRect = event.currentTarget.getBoundingClientRect();
-    const overMidpoint = overRect.top + overRect.height / 2;
-    const movingDown = activeIndex < overIndex;
-
-    if (
-      (movingDown && event.clientY < overMidpoint) ||
-      (!movingDown && event.clientY > overMidpoint)
-    ) {
-      return;
-    }
-
-    flipFirstRectsRef.current = getPlanBlockRects();
-    lastDragOverIdRef.current = overBlockId;
-    reorderPlanBlock(activeBlockId, overBlockId);
-  }
-
-  function handleDrop(event) {
-    event.preventDefault();
-    const droppedId = activeDragIdRef.current;
-    resetDragState();
-
-    if (!droppedId) return;
-
-    clearTimeout(dropSettleTimerRef.current);
-    setDroppedBlockId(droppedId);
-    dropSettleTimerRef.current = setTimeout(() => {
-      setDroppedBlockId(null);
-    }, 240);
-  }
-
-  function handleDragHandleKeyDown(event, blockId) {
-    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-
-    const currentIndex = planBlocks.findIndex((block) => block.id === blockId);
-    const nextIndex = currentIndex + (event.key === "ArrowUp" ? -1 : 1);
-
-    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= planBlocks.length) {
-      return;
-    }
-
-    if (!canReorderBlock(blockId, planBlocks[nextIndex].id)) return;
-
-    event.preventDefault();
-    flipFirstRectsRef.current = getPlanBlockRects();
-    reorderPlanBlock(blockId, planBlocks[nextIndex].id);
-  }
-
-  function isCurrentPlanBlock(block) {
-    const startMinutes = parseDisplayTimeToMinutes(block.start);
-    const endMinutes = parseDisplayTimeToMinutes(block.end);
-
-    if (startMinutes === null || endMinutes === null) return false;
-
-    const adjustedEnd = endMinutes <= startMinutes ? endMinutes + 24 * 60 : endMinutes;
-    const adjustedNow =
-      nowMinutes < startMinutes && adjustedEnd > 24 * 60
-        ? nowMinutes + 24 * 60
-        : nowMinutes;
-
-    return adjustedNow >= startMinutes && adjustedNow < adjustedEnd;
-  }
-
-  if (loading) {
-    return <section className="plan-page" aria-busy="true"><p>Loading today’s plan...</p></section>;
   }
 
   return (
-    <div className="page plan-page">
-      {syncMessage && <p className="settings-inline-error" role="alert">{syncMessage}</p>}
-      <header className="page-header plan-page-header">
-        <p className="eyebrow">Today’s Plan</p>
-        <h1>Today’s Plan</h1>
-        <p>Follow the next block, then adjust anything that changes.</p>
-      </header>
+    <div className={compact ? "study-recommendation-list is-compact" : "study-recommendation-list"}>
+      {day.primary.map((recommendation, index) => (
+        <section
+          className={`study-recommendation-row is-priority-${index + 1}`}
+          aria-labelledby={!compact ? `${day.dateKey}-priority-${index + 1}` : undefined}
+          key={recommendation.id}
+        >
+          {!compact && (
+            <h3
+              className="study-priority-label"
+              id={`${day.dateKey}-priority-${index + 1}`}
+            >
+              Priority {index + 1}
+            </h3>
+          )}
+          <RecommendationCard
+            recommendation={recommendation}
+            duration={day.blockDurationMinutes}
+            onOpen={() => onOpenRecommendation(day.dateKey, index)}
+            onToggleLock={() => onToggleLock(day, recommendation, index)}
+            subjectColour={subjectColours.get(recommendation.subject)}
+          />
+        </section>
+      ))}
 
-      <div className="panel plan-panel" data-tour="todays-plan-overview">
-        <div className="panel-header">
+      {day.extra.length > 0 && (
+        <section className="study-recommendation-extra" aria-label="Extra work recommended">
           <div>
-            <h3>Study timeline</h3>
-            <span>
-              {planBlocks.length > 0
-                ? `${planBlocks.length} block${
-                    planBlocks.length === 1 ? "" : "s"
-                  } scheduled${
-                    planMetadata?.source
-                      ? ` · ${planMetadata.source === "smart" ? "Smart plan" : "Basic plan"}`
-                      : ""
-                  }`
-                : "Build a realistic study flow"}
+            <span className="eyebrow">Extra work recommended</span>
+            <p>Your normal target is full, but this work still needs attention.</p>
+          </div>
+          <div className="study-recommendation-extra-grid">
+            {day.extra.map((recommendation, index) => (
+              <RecommendationCard
+                key={recommendation.id}
+                recommendation={recommendation}
+                duration={day.blockDurationMinutes}
+                onOpen={() => onOpenRecommendation(day.dateKey, index + 3)}
+                onToggleLock={() => onToggleLock(day, recommendation, index + 3)}
+                subjectColour={subjectColours.get(recommendation.subject)}
+                extra
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {day.finishEarly && (
+        <section className="study-recommendation-finish-early" aria-label="If you finish early">
+          <div>
+            <span className="eyebrow">If you finish early</span>
+            <p>Optional lower-priority work after your main study target.</p>
+          </div>
+          <RecommendationCard
+            recommendation={day.finishEarly}
+            duration={day.blockDurationMinutes}
+            onOpen={() => onOpenRecommendation(day.dateKey, 2)}
+            onToggleLock={() => onToggleLock(day, day.finishEarly, 2)}
+            subjectColour={subjectColours.get(day.finishEarly.subject)}
+          />
+        </section>
+      )}
+    </div>
+  );
+}
+
+function getRecommendationForSlot(day, slotIndex) {
+  if (!day) return null;
+  if (slotIndex <= 1) return day.primary[slotIndex] || null;
+  if (slotIndex === 2) return day.finishEarly || null;
+  return day.extra[slotIndex - 3] || null;
+}
+
+function formatRecommendationDate(value) {
+  if (!value) return "";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function RecommendationDetailsModal({
+  day,
+  recommendation,
+  duration,
+  saving,
+  onClose,
+  onOpenTask,
+  onSwap,
+  onToggleLock,
+  subjectColours,
+}) {
+  const dialogRef = useRef(null);
+  const returnFocusRef = useRef(document.activeElement);
+  const typeLabel = RECOMMENDATION_TYPE_LABELS[recommendation.kind] || "Study";
+
+  useEffect(() => {
+    const returnFocusElement = returnFocusRef.current;
+    const restoreBackground = blockGuidedTourBackground(document.querySelector(".app-shell"));
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => {
+      getFocusableTourElements(dialogRef.current)[0]?.focus();
+    });
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = getFocusableTourElements(dialogRef.current);
+      const nextTarget = getTourFocusTrapTarget(focusable, document.activeElement, event.shiftKey);
+      if (!nextTarget) return;
+      event.preventDefault();
+      nextTarget.focus();
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      restoreBackground();
+      restoreTourFocus(returnFocusElement);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div className="study-detail-layer" role="presentation">
+      <button
+        type="button"
+        className="study-detail-backdrop"
+        aria-label="Close recommendation details"
+        onClick={onClose}
+      />
+      <section
+        ref={dialogRef}
+        className="study-detail-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="study-detail-title"
+      >
+        <header className="study-detail-header">
+          <div>
+            <span
+              className="study-detail-subject"
+              style={{ "--study-subject-colour": subjectColours.get(recommendation.subject) || "var(--accent)" }}
+            >
+              <i aria-hidden="true" />
+              {recommendation.subject}
             </span>
+            <h2 id="study-detail-title">{recommendation.title}</h2>
+            <p>{day.label} recommendation</p>
           </div>
+          <button type="button" aria-label="Close recommendation details" onClick={onClose}>×</button>
+        </header>
 
-          <div className="plan-actions">
-            <button
-              type="button"
-              className="small-button plan-primary-create-button"
-              data-tour="smart-planner-open"
-              onClick={openSmartPlanner}
-            >
-              Smart Planner
-            </button>
+        <div className="study-detail-layout">
+          <div className="study-detail-main">
+            <p className="study-detail-reason">{recommendation.reason} · {duration} min</p>
 
-            <button
-              type="button"
-              className="small-button secondary plan-add-block-button"
-              data-tour="todays-plan-adjust"
-              aria-expanded={showAddBlockForm}
-              onClick={() =>
-                showAddBlockForm
-                  ? closeAddBlockForm()
-                  : setShowAddBlockForm(true)
-              }
-            >
-              Add block
-            </button>
-
-            {planBlocks.length > 0 && (
-              <button
-                className="small-button secondary plan-clear-button"
-                title={
-                  hasLockedBlocks
-                    ? "Locked blocks will remain in the plan"
-                    : undefined
-                }
-                onClick={clearPlan}
-              >
-                Clear
-              </button>
+            {recommendation.description && (
+              <section className="study-detail-description">
+                <h3>What to work on</h3>
+                <p>{recommendation.description}</p>
+              </section>
             )}
-          </div>
-        </div>
 
-        {stalePlanDate && (
-          <div className="stale-plan-notice">
-            <div>
-              <strong>
-                Saved plan from{" "}
-                {parseDateKey(stalePlanDate).toLocaleDateString(undefined, {
-                  weekday: "long",
-                  month: "short",
-                  day: "numeric",
-                })}
-              </strong>
-              <p>It was not restored as Today’s Plan.</p>
+            <div className="study-detail-context" aria-label="Recommendation details">
+              {recommendation.dueDate && (
+                <span>{recommendation.kind === "assessment" ? "Assessment" : "Due"} {formatRecommendationDate(recommendation.dueDate)}</span>
+              )}
+              <span>{recommendation.assessmentLabel || typeLabel}</span>
+              <span className={recommendation.locked ? "is-locked" : ""}>
+                {recommendation.locked ? "Locked for Redo week" : "Updates with Redo week"}
+              </span>
             </div>
-            <button type="button" onClick={startFreshPlan}>
-              Start fresh
-            </button>
-          </div>
-        )}
 
-        {showAddBlockForm && (
-          <form className="manual-plan-block-form" onSubmit={submitManualBlock}>
-            <div className="manual-plan-block-heading">
-              <div>
-                <h3>Add a custom block</h3>
-                <p>Add study time or a break.</p>
-              </div>
+            <div className="study-detail-actions">
               <button
                 type="button"
-                aria-label="Close add block form"
-                onClick={closeAddBlockForm}
+                className="secondary-button"
+                disabled={saving}
+                onClick={onToggleLock}
               >
-                ×
+                <span className="study-lock-icon" aria-hidden="true" />
+                {recommendation.locked ? "Unlock recommendation" : "Lock recommendation"}
               </button>
-            </div>
-
-            <div className="manual-plan-block-fields">
-              <label>
-                <span>Type</span>
-                <select
-                  value={manualBlockDraft.type}
-                  onChange={(event) =>
-                    handleManualBlockTypeChange(event.target.value)
-                  }
+              {recommendation.taskId && (
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => onOpenTask(recommendation.taskId)}
                 >
-                  <option value="study">Study block</option>
-                  <option value="break">Break block</option>
-                </select>
-              </label>
-
-              <label>
-                <span>Title</span>
-                <input
-                  type="text"
-                  value={manualBlockDraft.title}
-                  placeholder={
-                    manualBlockDraft.type === "break" ? "Break" : "Study block"
-                  }
-                  required
-                  onChange={(event) =>
-                    setManualBlockDraft((currentDraft) => ({
-                      ...currentDraft,
-                      title: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-
-              {manualBlockDraft.type === "study" && (
-                <label>
-                  <span>Subject <small>Optional</small></span>
-                  <input
-                    type="text"
-                    value={manualBlockDraft.subject}
-                    placeholder="e.g. Maths"
-                    onChange={(event) =>
-                      setManualBlockDraft((currentDraft) => ({
-                        ...currentDraft,
-                        subject: event.target.value,
-                      }))
-                    }
-                  />
-                </label>
+                  Open Task
+                </button>
               )}
-
-              <label>
-                <span>Duration</span>
-                <span className="manual-plan-duration-input">
-                  <input
-                    type="number"
-                    min={manualBlockDraft.type === "break" ? 5 : 10}
-                    max={manualBlockDraft.type === "break" ? 60 : 240}
-                    step="5"
-                    value={manualBlockDraft.duration}
-                    required
-                    onChange={(event) =>
-                      setManualBlockDraft((currentDraft) => ({
-                        ...currentDraft,
-                        duration: event.target.value,
-                      }))
-                    }
-                  />
-                  <small>minutes</small>
-                </span>
-              </label>
             </div>
-
-            <div className="manual-plan-block-actions">
-              <button type="button" onClick={closeAddBlockForm}>
-                Cancel
-              </button>
-              <button type="submit">Add block</button>
-            </div>
-          </form>
-        )}
-
-        {planBlocks.length === 0 && (
-          <div className="empty-plan">
-            <h3>Ready when you are.</h3>
-            <p>Add tasks or a custom block to start.</p>
           </div>
-        )}
 
-        {planBlocks.length > 0 && (
-          <div
-            className="plan-timeline"
-            aria-label="Today’s Plan timeline"
-            data-tour="todays-plan-timeline"
-          >
-            {planBlocks.map((block, index) => {
-          const blockKey = getPlanBlockKey(block, index);
-
-          if (block.type === "message") {
-            return (
-              <div className="empty-plan" key={blockKey}>
-                <h3>{block.title}</h3>
-                <p>{block.note}</p>
+          <aside className="study-detail-alternatives" aria-labelledby="study-alternatives-title">
+            <div>
+              <span className="eyebrow">Swap recommendation</span>
+              <h3 id="study-alternatives-title">Other work you could do</h3>
+              <p>Choose a different recommendation for this study block.</p>
+            </div>
+            {day.alternatives.length > 0 ? (
+              <div className="study-alternative-list">
+                {day.alternatives.map((alternative) => (
+                  <button
+                    type="button"
+                    key={alternative.id}
+                    style={{ "--study-subject-colour": subjectColours.get(alternative.subject) || "var(--accent)" }}
+                    disabled={saving}
+                    onClick={() => onSwap(alternative)}
+                  >
+                    <span className="study-alternative-subject"><i aria-hidden="true" />{alternative.subject}</span>
+                    <strong>{alternative.title}</strong>
+                    <small>{alternative.reason}</small>
+                  </button>
+                ))}
               </div>
-            );
-          }
+            ) : (
+              <p className="study-detail-no-alternatives">No other useful work is available for this slot.</p>
+            )}
+          </aside>
+        </div>
+      </section>
+    </div>,
+    document.body
+  );
+}
 
-          const canMoveStudyUp =
-            block.type === "study" && canMoveStudyBlock(block.id, -1);
-          const canMoveStudyDown =
-            block.type === "study" && canMoveStudyBlock(block.id, 1);
-          const isMovedStudyBlock =
-            block.type === "study" && planMoveFeedback?.blockId === block.id;
-          const moveClassName = isMovedStudyBlock ? " plan-block-moved" : "";
-          const lockClassName = block.locked ? " plan-block-locked" : "";
-          const dragClassName = `${
-            draggedBlockId === block.id ? " plan-block-dragging" : ""
-          }${dragOverBlockId === block.id ? " plan-block-drag-over" : ""}${
-            droppedBlockId === block.id ? " plan-block-dropped" : ""
-          }${openMenuBlockId === block.id ? " plan-block-menu-open" : ""}`;
-          const signalBadges = getTaskSignalBadges(block);
-          const isNow = isCurrentPlanBlock(block);
-          const isNext = blockKey === nextPlanBlockKey;
-          const completedClassName = block.completed ? " plan-block-completed" : "";
-          const nowClassName = isNow ? " plan-block-now" : "";
-          const nextClassName = isNext ? " plan-block-next" : "";
+function StudyPreferencesModal({ preferences, onClose, onSave }) {
+  const [draft, setDraft] = useState(() => createPreferenceDraft(preferences));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const dialogRef = useRef(null);
+  const returnFocusRef = useRef(document.activeElement);
 
-          return (
-            <RevealOnScroll
-              as="div"
-              index={index}
-              delayStep={34}
-              maxDelay={150}
-              key={blockKey}
-              className={`plan-timeline-item ${
-                block.type === "break"
-                  ? "plan-timeline-item-break"
-                  : "plan-timeline-item-study"
-              }${nowClassName}${completedClassName}${nextClassName}`}
-            >
-              <div className="plan-time plan-timeline-time">
-                <span className="plan-time-range">
-                  {block.start}–{block.end}
-                </span>
-                <span className="plan-time-badges">
-                  {(block.startDayOffset > 0 || block.endDayOffset > 0) && (
-                    <span className="plan-next-day-indicator">Next day</span>
-                  )}
-                  {isNow && <span className="plan-now-indicator">Now</span>}
-                  {!isNow && isNext && (
-                    <span className="plan-next-indicator">Next</span>
-                  )}
-                  {block.edited && <span>Adjusted</span>}
-                  {block.locked && (
-                    <span className="plan-lock-indicator">Locked</span>
-                  )}
-                </span>
-              </div>
+  useEffect(() => {
+    const returnFocusElement = returnFocusRef.current;
+    const restoreBackground = blockGuidedTourBackground(
+      document.querySelector(".app-shell")
+    );
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusFrame = window.requestAnimationFrame(() => {
+      getFocusableTourElements(dialogRef.current)[0]?.focus();
+    });
 
-              <div className="plan-timeline-rail" aria-hidden="true">
-                <span className="plan-timeline-node" />
-              </div>
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = getFocusableTourElements(dialogRef.current);
+      const nextTarget = getTourFocusTrapTarget(
+        focusable,
+        document.activeElement,
+        event.shiftKey
+      );
+      if (!nextTarget) return;
+      event.preventDefault();
+      nextTarget.focus();
+    }
 
-              <article
-                className={
-                  block.type === "break"
-                    ? `plan-block break-block${lockClassName}${dragClassName}${completedClassName}${nowClassName}${nextClassName}`
-                    : `plan-block${moveClassName}${lockClassName}${dragClassName}${completedClassName}${nowClassName}${nextClassName}`
-                }
-                ref={(node) => setPlanBlockRef(blockKey, node)}
-                data-plan-block-id={block.id}
-                onDragStart={(event) => handleDragStart(event, block.id)}
-                onDragOver={(event) => handleDragOver(event, block.id)}
-                onDrop={handleDrop}
-                onDragEnd={resetDragState}
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      restoreBackground();
+      restoreTourFocus(returnFocusElement);
+    };
+  }, [onClose]);
+
+  function updateDailyBlocks(value) {
+    const dailyStudyBlocks = Number(value);
+    setDraft((current) => ({ ...current, dailyStudyBlocks }));
+  }
+
+  async function submitPreferences(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    const saved = await onSave({
+      dailyStudyBlocks: draft.dailyStudyBlocks,
+      blockDurationMinutes: draft.blockDurationMinutes,
+    });
+    setSaving(false);
+    if (!saved) {
+      setError("Study preferences could not be saved. Try again.");
+      return;
+    }
+    onClose();
+  }
+
+  return createPortal(
+    <div className="study-preferences-layer" role="presentation">
+      <button
+        className="study-preferences-backdrop"
+        type="button"
+        aria-label="Close study preferences"
+        onClick={onClose}
+      />
+      <form
+        ref={dialogRef}
+        className="study-preferences-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="study-preferences-title"
+        onSubmit={submitPreferences}
+      >
+        <header className="study-preferences-header">
+          <div>
+            <span className="eyebrow">Plan</span>
+            <h2 id="study-preferences-title">Study preferences</h2>
+            <p>Choose a realistic daily study target.</p>
+          </div>
+          <button type="button" aria-label="Close study preferences" onClick={onClose}>×</button>
+        </header>
+
+        <div className="study-preferences-scroll">
+          <div className="study-preferences-capacity">
+            <label>
+              <span>Daily study blocks</span>
+              <select value={draft.dailyStudyBlocks} onChange={(event) => updateDailyBlocks(event.target.value)}>
+                {[1, 2, 3, 4, 5, 6].map((count) => (
+                  <option key={count} value={count}>{count} block{count === 1 ? "" : "s"}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Block duration</span>
+              <select
+                value={draft.blockDurationMinutes}
+                onChange={(event) => setDraft((current) => ({
+                  ...current,
+                  blockDurationMinutes: Number(event.target.value),
+                }))}
               >
-                <div className="plan-block-header">
-                  <div className="plan-block-title-group">
-                    <h3>
-                      {block.completed && (
-                        <span className="plan-complete-mark" aria-hidden="true">
-                          ✓
-                        </span>
-                      )}
-                      {block.title}
-                    </h3>
-
-                    {block.type === "study" &&
-                      (block.subject || block.effort || signalBadges.length > 0) && (
-                        <div className="plan-study-meta">
-                          {block.subject && (
-                            <p className="plan-subject">{block.subject}</p>
-                          )}
-                          {block.effort && (
-                            <span
-                              className={`effort-pill ${getEffortClass(block.effort)}`}
-                            >
-                              {getEffortLabel(block.effort)}
-                            </span>
-                          )}
-                          <TaskSourceBadge task={block} />
-                          {signalBadges.slice(0, 1).map((badge) => (
-                            <span
-                              className={`task-signal-badge task-signal-${badge.tone}`}
-                              key={`${badge.tone}-${badge.label}`}
-                            >
-                              {badge.label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    {block.type === "suggested_study" && (
-                      <div className="plan-study-meta">
-                        {block.subject && <p className="plan-subject">{block.subject}</p>}
-                        <span className="task-signal-badge task-signal-type">Suggested study</span>
-                      </div>
-                    )}
-                  </div>
-
-                <div className="plan-block-header-actions">
-                  <button
-                    type="button"
-                    className="plan-drag-handle"
-                    draggable={!block.locked && editingBlockId !== block.id}
-                    disabled={block.locked || editingBlockId === block.id}
-                    aria-label={
-                      block.locked
-                        ? `${block.title} is locked`
-                        : `Move ${block.title}. Use drag or arrow keys.`
-                    }
-                    title={block.locked ? "Unlock to reorder" : "Drag to reorder"}
-                    onKeyDown={(event) =>
-                      handleDragHandleKeyDown(event, block.id)
-                    }
-                  >
-                    <span aria-hidden="true">⠿</span>
-                  </button>
-                  {editingBlockId !== block.id && (
-                    <div
-                      className="plan-more-menu-wrap"
-                      ref={
-                        openMenuBlockId === block.id ? openMenuRef : undefined
-                      }
-                    >
-                      <button
-                        type="button"
-                        className="plan-more-button"
-                        aria-label={`More actions for ${block.title}`}
-                        title="More actions"
-                        aria-haspopup="menu"
-                        aria-expanded={openMenuBlockId === block.id}
-                        onClick={() =>
-                          setOpenMenuBlockId((currentBlockId) =>
-                            currentBlockId === block.id ? null : block.id
-                          )
-                        }
-                      >
-                        <span aria-hidden="true">⋯</span>
-                      </button>
-
-                      {openMenuBlockId === block.id && (
-                        <div className="plan-more-menu" role="menu">
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={() => {
-                              togglePlanBlockLocked(block.id);
-                              setOpenMenuBlockId(null);
-                            }}
-                          >
-                            {block.locked ? "Unlock block" : "Lock block"}
-                          </button>
-
-                          <button
-                            type="button"
-                            role="menuitem"
-                            disabled={block.locked}
-                            onClick={() => openBlockEditor(block)}
-                          >
-                            Edit duration
-                          </button>
-
-                          {block.type === "study" && (
-                            <>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                disabled={!canMoveStudyUp}
-                                onClick={() =>
-                                  handleMovePlanStudyBlock(block.id, -1)
-                                }
-                              >
-                                Move up
-                              </button>
-                              <button
-                                type="button"
-                                role="menuitem"
-                                disabled={!canMoveStudyDown}
-                                onClick={() =>
-                                  handleMovePlanStudyBlock(block.id, 1)
-                                }
-                              >
-                                Move down
-                              </button>
-                            </>
-                          )}
-
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="plan-menu-remove"
-                            disabled={block.locked}
-                            onClick={() => handleRemovePlanBlock(block.id)}
-                          >
-                            {block.type === "break"
-                              ? "Remove break"
-                              : "Remove from plan"}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {block.tip && <p className="plan-block-tip">{block.tip}</p>}
-
-              {editingBlockId === block.id && (
-                <form className="plan-block-editor" onSubmit={saveBlockDuration}>
-                  <label>
-                    <span>Duration</span>
-                    <span className="plan-duration-input">
-                      <input
-                        type="number"
-                        min={block.type === "break" ? 5 : 10}
-                        max={block.type === "break" ? 60 : 240}
-                        step="5"
-                        value={durationDraft}
-                        autoFocus
-                        required
-                        onChange={(event) => setDurationDraft(event.target.value)}
-                      />
-                      <small>minutes</small>
-                    </span>
-                  </label>
-                  <div className="plan-editor-actions">
-                    <button
-                      type="button"
-                      className="cancel-plan-edit-button"
-                      onClick={cancelBlockEdit}
-                    >
-                      Cancel
-                    </button>
-                    <button type="submit" className="save-plan-edit-button">
-                      Save
-                    </button>
-                  </div>
-                </form>
-              )}
-
-              {block.type === "study" &&
-                block.taskId !== null &&
-                editingBlockId !== block.id && (
-                <div className="plan-block-controls">
-                  <button
-                    type="button"
-                    className="complete-plan-button"
-                    data-tour="todays-plan-complete"
-                    disabled={block.locked}
-                    aria-label={`Mark ${block.title} done`}
-                    title={block.locked ? "Unlock to mark this task done" : undefined}
-                    onClick={() => completeTaskFromPlan(block.taskId)}
-                  >
-                    <span aria-hidden="true">✓</span>
-                    <span>Mark done</span>
-                  </button>
-                </div>
-              )}
-              {block.type === "suggested_study" &&
-                !block.completed &&
-                editingBlockId !== block.id && (
-                  <div className="plan-block-controls">
-                    <button
-                      type="button"
-                      className="complete-plan-button"
-                      disabled={block.locked}
-                      onClick={() => completeSuggestedPlanBlock(block.id)}
-                    >
-                      <span aria-hidden="true">✓</span>
-                      <span>Mark done</span>
-                    </button>
-                  </div>
-                )}
-              </article>
-            </RevealOnScroll>
-          );
-            })}
+                {BLOCK_DURATION_OPTIONS.map((minutes) => (
+                  <option key={minutes} value={minutes}>{minutes} minutes</option>
+                ))}
+              </select>
+            </label>
           </div>
-        )}
-      </div>
+
+          {error && <p className="settings-inline-error" role="alert">{error}</p>}
+        </div>
+
+        <footer className="study-preferences-actions">
+          <button type="button" className="secondary-button" onClick={onClose}>Cancel</button>
+          <button type="submit" className="primary-button" disabled={saving}>
+            {saving ? "Saving…" : "Save preferences"}
+          </button>
+        </footer>
+      </form>
+    </div>,
+    document.body
+  );
+}
+
+function PlanPage({
+  tasks = [],
+  subjects = [],
+  planningPreferences,
+  updatePlanningPreferences,
+  openTaskDetails,
+  loading = false,
+  syncError = null,
+}) {
+  const [view, setView] = useState("today");
+  const [preferencesOpen, setPreferencesOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [redoRevision, setRedoRevision] = useState(0);
+  const [redoMessage, setRedoMessage] = useState("");
+  const historicalDaysRef = useRef([]);
+  const closePreferences = useCallback(() => setPreferencesOpen(false), []);
+  const closeRecommendationDetails = useCallback(() => setSelectedSlot(null), []);
+  const preferences = planningPreferences || DEFAULT_PLANNING_PREFERENCES;
+  const accountKey = planningPreferences?.userId || "default";
+  const historyAccountRef = useRef(accountKey);
+  if (historyAccountRef.current !== accountKey) {
+    historyAccountRef.current = accountKey;
+    historicalDaysRef.current = [];
+  }
+  const subjectColours = useMemo(
+    () => new Map(subjects.map((subject) => [subject.name, subject.colour || subject.color || null])),
+    [subjects]
+  );
+  const recommendations = useMemo(
+    () => {
+      void redoRevision;
+      return buildStudyRecommendations({
+        tasks,
+        subjects,
+        preferences,
+        previousDays: historicalDaysRef.current,
+      });
+    },
+    [preferences, redoRevision, subjects, tasks]
+  );
+  const selectedDay = selectedSlot
+    ? recommendations.days.find((day) => day.dateKey === selectedSlot.dateKey)
+    : null;
+  const selectedRecommendation = selectedDay
+    ? getRecommendationForSlot(selectedDay, selectedSlot.slotIndex)
+    : null;
+
+  useEffect(() => {
+    historicalDaysRef.current = recommendations.days;
+  }, [recommendations.days]);
+
+  useEffect(() => {
+    setSelectedSlot(null);
+    setRedoMessage("");
+  }, [accountKey]);
+
+  useEffect(() => {
+    if (selectedSlot && !selectedRecommendation) setSelectedSlot(null);
+  }, [selectedRecommendation, selectedSlot]);
+
+  async function persistRecommendationOverrides(nextOverrides) {
+    setOverrideSaving(true);
+    setRedoMessage("");
+    const saved = await updatePlanningPreferences({ recommendationOverrides: nextOverrides });
+    setOverrideSaving(false);
+    return Boolean(saved);
+  }
+
+  function upsertOverride(overrides, nextOverride) {
+    return [
+      ...overrides.filter((override) =>
+        !(override.dateKey === nextOverride.dateKey && override.slotIndex === nextOverride.slotIndex)
+      ),
+      nextOverride,
+    ];
+  }
+
+  async function handleToggleLock(day, recommendation, slotIndex) {
+    const overrides = preferences.recommendationOverrides || [];
+    const existing = overrides.find((override) =>
+      override.dateKey === day.dateKey && override.slotIndex === slotIndex
+    );
+    let nextOverrides;
+    if (recommendation.locked) {
+      nextOverrides = existing?.manual
+        ? upsertOverride(overrides, { ...existing, locked: false })
+        : overrides.filter((override) => override !== existing);
+    } else {
+      const nextOverride = createRecommendationOverride({
+        dateKey: day.dateKey,
+        slotIndex,
+        recommendation,
+        locked: true,
+        manual: Boolean(existing?.manual || recommendation.manualOverride),
+      });
+      if (!nextOverride) return false;
+      nextOverrides = upsertOverride(overrides, nextOverride);
+    }
+    return persistRecommendationOverrides(nextOverrides);
+  }
+
+  async function handleSwapRecommendation(alternative) {
+    if (!selectedDay || !selectedSlot) return false;
+    const overrides = preferences.recommendationOverrides || [];
+    const existing = overrides.find((override) =>
+      override.dateKey === selectedDay.dateKey && override.slotIndex === selectedSlot.slotIndex
+    );
+    const nextOverride = createRecommendationOverride({
+      dateKey: selectedDay.dateKey,
+      slotIndex: selectedSlot.slotIndex,
+      recommendation: alternative,
+      locked: Boolean(existing?.locked),
+      manual: true,
+    });
+    if (!nextOverride) return false;
+    return persistRecommendationOverrides(upsertOverride(overrides, nextOverride));
+  }
+
+  async function handleRedoWeek() {
+    const nextOverrides = clearUnlockedFutureRecommendationOverrides(
+      preferences.recommendationOverrides,
+      recommendations.todayKey
+    );
+    const saved = await persistRecommendationOverrides(nextOverrides);
+    if (!saved) return;
+    setRedoRevision((current) => current + 1);
+    setRedoMessage("Week updated");
+  }
+
+  function openRecommendationDetails(dateKey, slotIndex) {
+    setSelectedSlot({ dateKey, slotIndex });
+  }
+
+  function handleViewTabKeyDown(event) {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    const tablist = event.currentTarget.closest('[role="tablist"]');
+    const nextView = event.key === "ArrowLeft" || event.key === "Home" ? "today" : "week";
+    setView(nextView);
+    window.requestAnimationFrame(() => {
+      tablist
+        ?.querySelector(`[data-view="${nextView}"]`)
+        ?.focus();
+    });
+  }
+
+  if (loading) {
+    return <section className="plan-page" aria-busy="true"><p>Loading study recommendations…</p></section>;
+  }
+
+  return (
+    <div className="page plan-page study-plan-page">
+      {syncError && (
+        <p className="settings-inline-error" role="alert">
+          Study preferences could not sync. Your latest change may not be saved.
+        </p>
+      )}
+      <header className="page-header plan-page-header study-plan-header">
+        <div className="study-plan-title">
+          <h1>Plan</h1>
+        </div>
+        <div className="study-plan-controls">
+          <div className="study-view-toggle" role="tablist" aria-label="Recommendation period">
+            <button
+              type="button"
+              role="tab"
+              data-view="today"
+              className={view === "today" ? "is-active" : ""}
+              aria-selected={view === "today"}
+              tabIndex={view === "today" ? 0 : -1}
+              onKeyDown={handleViewTabKeyDown}
+              onClick={() => setView("today")}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              role="tab"
+              data-view="week"
+              className={view === "week" ? "is-active" : ""}
+              aria-selected={view === "week"}
+              tabIndex={view === "week" ? 0 : -1}
+              onKeyDown={handleViewTabKeyDown}
+              onClick={() => setView("week")}
+            >
+              Week
+            </button>
+          </div>
+          <div className="study-plan-toolbar-actions">
+            <span>{recommendations.dailyBlockCount} block{recommendations.dailyBlockCount === 1 ? "" : "s"} · {recommendations.blockDurationMinutes} min each</span>
+            <button type="button" className="secondary-button" onClick={() => setPreferencesOpen(true)}>
+              Edit preferences
+            </button>
+            <button type="button" className="secondary-button" disabled={overrideSaving} onClick={handleRedoWeek}>
+              {overrideSaving ? "Updating…" : "Redo week"}
+            </button>
+          </div>
+        </div>
+      </header>
+      {redoMessage && <p className="study-plan-status" role="status">{redoMessage}</p>}
+
+      {view === "today" ? (
+        <section className="panel study-today-panel" data-tour="todays-plan-overview">
+          <header>
+            <div>
+              <h2>Today</h2>
+              <p>{recommendations.today?.date.toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}</p>
+            </div>
+            <div className="study-daily-target" aria-label={`${recommendations.dailyBlockCount} study blocks of ${recommendations.blockDurationMinutes} minutes`}>
+              <strong>{recommendations.dailyBlockCount} study block{recommendations.dailyBlockCount === 1 ? "" : "s"}</strong>
+              <span>{recommendations.blockDurationMinutes} min each</span>
+            </div>
+          </header>
+          <RecommendationList
+            day={recommendations.today}
+            onOpenRecommendation={openRecommendationDetails}
+            onToggleLock={handleToggleLock}
+            subjectColours={subjectColours}
+            emptyTitle="No recommendations today"
+            emptyMessage={subjects.length === 0
+              ? "Add a Subject or task to start building study recommendations."
+              : "You have no active deadline work to focus on today."}
+          />
+        </section>
+      ) : (
+        <section className="study-week-panel" aria-labelledby="study-week-title">
+          <header>
+            <div>
+              <span className="eyebrow">Week</span>
+              <h2 id="study-week-title">{formatWeekRange(recommendations.weekStart, recommendations.weekEnd)}</h2>
+            </div>
+            <span>Monday–Sunday</span>
+          </header>
+          <div className="study-week-grid">
+            {recommendations.days.map((day) => (
+              <section className={`study-week-day${day.isToday ? " is-today" : ""}${day.historical ? " is-past" : ""}`} key={day.dateKey}>
+                <header>
+                  <div>
+                    <h3>{day.label}</h3>
+                    <span>{day.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+                  </div>
+                  {day.isToday && <span className="study-today-label">Today</span>}
+                </header>
+                <RecommendationList
+                  day={day}
+                  onOpenRecommendation={openRecommendationDetails}
+                  onToggleLock={handleToggleLock}
+                  subjectColours={subjectColours}
+                  compact
+                  emptyTitle={day.historical ? "Past day" : "No recommendations"}
+                  emptyMessage={day.historical ? "Past recommendations are left unchanged." : "No deadline work or routine study."}
+                />
+              </section>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {preferencesOpen && (
+        <StudyPreferencesModal
+          preferences={preferences}
+          onClose={closePreferences}
+          onSave={updatePlanningPreferences}
+        />
+      )}
+
+      {selectedDay && selectedRecommendation && (
+        <RecommendationDetailsModal
+          day={selectedDay}
+          recommendation={selectedRecommendation}
+          duration={selectedDay.blockDurationMinutes}
+          saving={overrideSaving}
+          onClose={closeRecommendationDetails}
+          onOpenTask={(taskId) => {
+            closeRecommendationDetails();
+            openTaskDetails(taskId);
+          }}
+          onSwap={handleSwapRecommendation}
+          onToggleLock={() => handleToggleLock(
+            selectedDay,
+            selectedRecommendation,
+            selectedSlot.slotIndex
+          )}
+          subjectColours={subjectColours}
+        />
+      )}
     </div>
   );
 }

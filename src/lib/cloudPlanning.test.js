@@ -52,8 +52,72 @@ function clientWith(results = []) {
 
 test("planning preferences map between DB JSONB and the DayLo shape", () => {
   const row = { user_id: USER_ID, preferences: { startTime: "17:00", endTime: "21:00", planStyle: "lighter", hoursAvailable: 3 } };
-  assert.deepEqual(mapCloudPlanningPreferences(row), { userId: USER_ID, ...row.preferences });
-  assert.deepEqual(mapPlanningPreferencesForUpsert(row.preferences, USER_ID), { user_id: USER_ID, preferences: row.preferences });
+  const mapped = mapCloudPlanningPreferences(row);
+  assert.equal(mapped.userId, USER_ID);
+  assert.equal(mapped.startTime, "17:00");
+  assert.equal(mapped.dailyStudyBlocks, 2);
+  assert.equal(mapped.blockDurationMinutes, 45);
+  assert.deepEqual(mapped.weeklyRoutine.monday, []);
+  assert.deepEqual(mapped.recommendationOverrides, []);
+  const normalizedPreferences = { ...mapped };
+  delete normalizedPreferences.userId;
+  assert.deepEqual(mapPlanningPreferencesForUpsert(row.preferences, USER_ID), {
+    user_id: USER_ID,
+    preferences: normalizedPreferences,
+  });
+});
+
+test("recommendation swaps and locks persist as compact account-owned preferences", () => {
+  const payload = mapPlanningPreferencesForUpsert({
+    recommendationOverrides: [{
+      dateKey: "2026-11-11",
+      slotIndex: 1,
+      locked: true,
+      manual: true,
+      recommendation: {
+        id: "homework:task-1:2026-11-11:0",
+        kind: "homework",
+        taskId: TASK_ID,
+        title: "Essay draft",
+        subject: "English",
+        reason: "Due tomorrow",
+        description: "Finish the conclusion.",
+        dueDate: "2026-11-12",
+        effort: 3,
+        importance: "high",
+        source: "manual",
+      },
+    }],
+  }, USER_ID);
+  assert.equal(payload.preferences.recommendationOverrides.length, 1);
+  assert.equal(payload.preferences.recommendationOverrides[0].locked, true);
+  assert.equal(payload.preferences.recommendationOverrides[0].recommendation.taskId, TASK_ID);
+  assert.equal(payload.preferences.recommendationOverrides[0].recommendation.description, "Finish the conclusion.");
+});
+
+test("malformed recommendation overrides are discarded safely", () => {
+  const payload = mapPlanningPreferencesForUpsert({
+    recommendationOverrides: [
+      { dateKey: "not-a-date", slotIndex: 0, recommendation: { kind: "homework", title: "Bad", subject: "Maths" } },
+      { dateKey: "2026-11-11", slotIndex: 0, recommendation: { kind: "", title: "", subject: "" } },
+    ],
+  }, USER_ID);
+  assert.deepEqual(payload.preferences.recommendationOverrides, []);
+});
+
+test("study capacity updates preserve dormant weekday routine data", () => {
+  const payload = mapPlanningPreferencesForUpsert({
+    dailyStudyBlocks: 3,
+    blockDurationMinutes: 60,
+    weeklyRoutine: {
+      monday: ["subject-a", "subject-b", "subject-a", "subject-c", "subject-d"],
+      saturday: ["weekend-subject"],
+    },
+  }, USER_ID);
+  assert.equal(payload.preferences.dailyStudyBlocks, 3);
+  assert.equal(payload.preferences.blockDurationMinutes, 60);
+  assert.deepEqual(payload.preferences.weeklyRoutine.monday, ["subject-a", "subject-b", "subject-c", "subject-d"]);
+  assert.deepEqual(payload.preferences.weeklyRoutine.saturday, ["weekend-subject"]);
 });
 
 test("missing planning preferences use current defaults without reading localStorage", async () => {

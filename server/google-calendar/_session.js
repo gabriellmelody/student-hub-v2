@@ -206,6 +206,9 @@ export function createCalendarSessionCookieFromTokenResponse(
           : "",
     created_at: createdAt,
     refreshed_at: existingSession ? new Date(now).toISOString() : null,
+    ...(sameAccount && typeof existingSession?.daylo_tasks_calendar_id === "string"
+      ? { daylo_tasks_calendar_id: existingSession.daylo_tasks_calendar_id }
+      : {}),
   };
 
   return {
@@ -395,6 +398,7 @@ export async function getValidCalendarSession(
       ...sessionResult,
       connected: true,
       refreshed: false,
+      userId: auth.userId,
     };
   }
 

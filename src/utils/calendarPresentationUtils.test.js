@@ -167,6 +167,34 @@ test("Month presentation always retains its task deadline indicators", () => {
   assert.equal(presentation.googleEvents.length, 2);
 });
 
+test("dense Month presentation orders all-day events, Tasks and timed events", () => {
+  const allDay = googleEvent({ id: "holiday", allDay: true, start: DUE_DATE, end: "2026-08-21" });
+  const timed = googleEvent({ id: "lesson" });
+  const tasks = [{ id: "task-1" }, { id: "task-2" }];
+  const presentation = getMonthDayPresentation(tasks, [timed, allDay], {
+    itemLimit: 3,
+  });
+
+  assert.deepEqual(presentation.allDayEvents, [allDay]);
+  assert.deepEqual(presentation.tasks, tasks);
+  assert.deepEqual(presentation.timedEvents, []);
+  assert.equal(presentation.hiddenItemCount, 1);
+});
+
+test("Week deadline area keeps date-only Tasks separate from timed events", () => {
+  const task = { id: "task-1", dueTime: "" };
+  const allDay = googleEvent({ id: "all-day", allDay: true, start: DUE_DATE, end: "2026-08-21" });
+  const timed = googleEvent({ id: "timed" });
+  const presentation = getWeekDayPresentation(
+    { tasks: [task], googleEvents: [timed, allDay] },
+    { itemLimit: 3 }
+  );
+
+  assert.deepEqual(presentation.allDayEvents, [allDay]);
+  assert.deepEqual(presentation.tasks, [task]);
+  assert.deepEqual(presentation.timedEvents, [timed]);
+});
+
 test("Show class schedule restores recurring Month events", () => {
   const recurringClass = googleEvent({ recurringEventId: "series-1" });
   assert.deepEqual(
@@ -249,4 +277,70 @@ test("existing Calendar navigation remains intact", () => {
   assert.match(source, /onClick=\{showToday\}/);
   assert.match(source, /changeCalendarView\("week"\)/);
   assert.match(source, /changeCalendarView\("month"\)/);
+});
+
+test("Calendar visual redesign keeps Month, Week, sources and detail interactions distinct", () => {
+  const source = readFileSync(new URL("../pages/CalendarPage.jsx", import.meta.url), "utf8");
+  const appSource = readFileSync(new URL("../App.jsx", import.meta.url), "utf8");
+
+  assert.match(source, /className="calendar-mini"/);
+  assert.match(source, /calendar-source-section/);
+  assert.match(source, /visibleGoogleCalendarPreferences\.map/);
+  assert.match(source, /role="tablist" aria-label="Calendar view"/);
+  assert.match(source, /aria-selected=\{calendarView === "month"\}/);
+  assert.match(source, /aria-selected=\{calendarView === "week"\}/);
+  assert.match(source, /calendar-task-block/);
+  assert.match(source, /calendar-all-day-event/);
+  assert.match(source, /calendar-timed-event/);
+  assert.match(source, /calendar-week-deadline-area/);
+  assert.match(source, /\+\{monthPresentation\.hiddenItemCount\} more/);
+  assert.match(source, /openCalendarTask\(task\)/);
+  assert.match(source, /setSelectedGoogleEvent\(event\)/);
+  assert.match(appSource, /<CalendarPage[\s\S]*openTaskDetails=/);
+});
+
+test("academic Task blocks expose compact Formative, Summative and CFA indicators", () => {
+  const source = readFileSync(new URL("../pages/CalendarPage.jsx", import.meta.url), "utf8");
+
+  assert.match(source, /return \{ short: "CFA", label: "CFA" \}/);
+  assert.match(source, /return \{ short: "S", label: "Summative" \}/);
+  assert.match(source, /return \{ short: "F", label: "Formative" \}/);
+  assert.match(source, /aria-label=\{indicator\.label\}/);
+});
+
+test("date-only Tasks never invent midnight and timed Tasks render their real due time", () => {
+  const source = readFileSync(new URL("../pages/CalendarPage.jsx", import.meta.url), "utf8");
+  const appUtilsSource = readFileSync(new URL("./appUtils.js", import.meta.url), "utf8");
+
+  assert.match(source, /if \(!task\?\.dueTime\) return ""/);
+  assert.match(source, /\{dueTime && <small>\{dueTime\}<\/small>\}/);
+  assert.doesNotMatch(source, /12:00\s*(?:am|AM)/);
+  assert.match(appUtilsSource, /dueTime: task\.dueTime \|\| ""/);
+});
+
+test("Calendar source filters remain display-only local state", () => {
+  const source = readFileSync(new URL("../pages/CalendarPage.jsx", import.meta.url), "utf8");
+
+  assert.match(source, /hiddenGoogleCalendarIds/);
+  assert.match(source, /showDayLoTasks/);
+  assert.match(source, /displayedGoogleCalendarEvents/);
+  assert.doesNotMatch(source, /localStorage\.setItem\([^)]*hiddenGoogleCalendarIds/);
+});
+
+test("Calendar styling uses theme tokens and responsive internal scrolling", () => {
+  const styles = readFileSync(new URL("../styles/calendar.css", import.meta.url), "utf8");
+
+  assert.match(styles, /\.calendar-workspace\s*\{[\s\S]*grid-template-columns: 220px minmax\(0, 1fr\)/);
+  assert.match(styles, /\.calendar-task-block\s*\{[\s\S]*--calendar-task-color/);
+  assert.match(styles, /\.calendar-timed-event\s*\{[\s\S]*grid-template-columns/);
+  assert.match(styles, /\.calendar-month-scroll\s*\{[\s\S]*overflow-x: auto/);
+  assert.match(styles, /@media \(max-width: 900px\)[\s\S]*\.calendar-sidebar\.is-open/);
+  assert.match(styles, /@media \(max-width: 700px\)[\s\S]*\.calendar-week-grid/);
+  assert.match(styles, /var\(--surface-raised\)/);
+  assert.match(styles, /var\(--text\)/);
+});
+
+test("Calendar remains click-based and introduces no drag or resize behavior", () => {
+  const source = readFileSync(new URL("../pages/CalendarPage.jsx", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /draggable=|onDrag|onDrop|resize/i);
 });

@@ -10,7 +10,88 @@ const PLAN_COLUMNS = "id, user_id, plan_date, plan_data, created_at, updated_at"
 export const DEFAULT_PLANNING_PREFERENCES = Object.freeze({
   ...DEFAULT_ONBOARDING_PLANNING_PREFERENCES,
   hoursAvailable: 2,
+  dailyStudyBlocks: 2,
+  blockDurationMinutes: 45,
+  weeklyRoutine: Object.freeze({
+    monday: Object.freeze([]),
+    tuesday: Object.freeze([]),
+    wednesday: Object.freeze([]),
+    thursday: Object.freeze([]),
+    friday: Object.freeze([]),
+    saturday: Object.freeze([]),
+    sunday: Object.freeze([]),
+  }),
+  recommendationOverrides: Object.freeze([]),
 });
+
+const STUDY_WEEKDAY_KEYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+];
+
+function normalizeWeeklyRoutine(value) {
+  const source = value && typeof value === "object" ? value : {};
+  return Object.fromEntries(
+    STUDY_WEEKDAY_KEYS.map((weekday) => [
+      weekday,
+      Array.from(
+        new Set(
+          (Array.isArray(source[weekday]) ? source[weekday] : [])
+            .map((subjectId) => String(subjectId || "").trim())
+            .filter(Boolean)
+        )
+      ).slice(0, 6),
+    ])
+  );
+}
+
+function cleanPreferenceString(value, maxLength) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function normalizeRecommendationOverrides(value) {
+  if (!Array.isArray(value)) return [];
+  const bySlot = new Map();
+  value.slice(-64).forEach((override) => {
+    const recommendation = override?.recommendation;
+    const dateKey = cleanPreferenceString(override?.dateKey, 10);
+    const slotIndex = Math.max(0, Math.min(12, Math.trunc(Number(override?.slotIndex))));
+    const kind = cleanPreferenceString(recommendation?.kind, 30);
+    const title = cleanPreferenceString(recommendation?.title, 180);
+    const subject = cleanPreferenceString(recommendation?.subject, 120);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || !kind || !title || !subject) return;
+    const normalized = {
+      dateKey,
+      slotIndex,
+      locked: Boolean(override?.locked),
+      manual: Boolean(override?.manual),
+      recommendation: {
+        id: cleanPreferenceString(recommendation?.id, 180),
+        kind,
+        taskId: recommendation?.taskId ? cleanPreferenceString(recommendation.taskId, 80) : null,
+        subjectId: recommendation?.subjectId ? cleanPreferenceString(recommendation.subjectId, 80) : null,
+        title,
+        subject,
+        reason: cleanPreferenceString(recommendation?.reason || "Manual choice", 180),
+        description: cleanPreferenceString(recommendation?.description, 4000),
+        dueDate: cleanPreferenceString(recommendation?.dueDate, 10),
+        assessmentLabel: cleanPreferenceString(recommendation?.assessmentLabel, 40),
+        score: Number(recommendation?.score) || 0,
+        required: Boolean(recommendation?.required),
+        effort: Number(recommendation?.effort) || null,
+        importance: cleanPreferenceString(recommendation?.importance || "normal", 20),
+        source: cleanPreferenceString(recommendation?.source || "manual", 30),
+      },
+    };
+    bySlot.set(`${dateKey}:${slotIndex}`, normalized);
+  });
+  return Array.from(bySlot.values());
+}
 
 export function getLocalPlanDate(date = new Date()) {
   return formatDateKey(date);
@@ -19,9 +100,23 @@ export function getLocalPlanDate(date = new Date()) {
 export function normalizePlanningPreferences(value = {}) {
   const onboarding = normalizeOnboardingPlanningPreferences(value);
   const hours = Number(value.hoursAvailable);
+  const dailyStudyBlocks = Math.min(
+    6,
+    Math.max(1, Math.round(Number(value.dailyStudyBlocks) || 2))
+  );
+  const requestedBlockDuration = Number(value.blockDurationMinutes);
+  const blockDurationMinutes = [20, 25, 30, 45, 60, 90].includes(
+    requestedBlockDuration
+  )
+    ? requestedBlockDuration
+    : 45;
   return {
     ...onboarding,
     hoursAvailable: Number.isFinite(hours) && hours > 0 ? hours : 2,
+    dailyStudyBlocks,
+    blockDurationMinutes,
+    weeklyRoutine: normalizeWeeklyRoutine(value.weeklyRoutine),
+    recommendationOverrides: normalizeRecommendationOverrides(value.recommendationOverrides),
   };
 }
 

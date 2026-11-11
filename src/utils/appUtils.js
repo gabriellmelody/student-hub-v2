@@ -1486,6 +1486,7 @@ export function getTaskCalendarEvents(tasks, subjects = []) {
         taskId: task.id,
         externalId: task.externalId || null,
         date: task.dueDate,
+        dueTime: task.dueTime || "",
         title: task.title,
         subject: task.subject,
         subjectName: task.subject,

@@ -4,6 +4,7 @@ import session from "../../server/google-calendar/session.js";
 import disconnect from "../../server/google-calendar/disconnect.js";
 import calendars from "../../server/google-calendar/calendars.js";
 import events from "../../server/google-calendar/events.js";
+import taskScheduling from "../../server/google-calendar/task-scheduling.js";
 
 const handlers = Object.freeze({
   connect,
@@ -12,6 +13,7 @@ const handlers = Object.freeze({
   disconnect,
   calendars,
   events,
+  "task-scheduling": taskScheduling,
 });
 
 export default function handler(request, response) {

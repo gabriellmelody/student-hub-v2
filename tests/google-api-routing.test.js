@@ -20,6 +20,7 @@ const expectedRoutes = {
     "disconnect",
     "calendars",
     "events",
+    "task-scheduling",
   ],
 };
 

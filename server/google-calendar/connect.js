@@ -1,12 +1,8 @@
-import { getGoogleCalendarOAuthConfigStatus } from "./_config.js";
+import {
+  GOOGLE_CALENDAR_OAUTH_SCOPES,
+  getGoogleCalendarOAuthConfigStatus,
+} from "./_config.js";
 import { createGoogleOAuthState, requireDayloUser } from "../google-integration-vault.js";
-
-const GOOGLE_CALENDAR_READONLY_SCOPES = [
-  "openid",
-  "email",
-  "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
-  "https://www.googleapis.com/auth/calendar.events.readonly",
-];
 
 function isReadinessCheck(request) {
   const requestUrl = new URL(request.url || "", "https://student-hub.local");
@@ -63,7 +59,8 @@ export default async function handler(request, response) {
     response_type: "code",
     access_type: "offline",
     prompt: "consent",
-    scope: GOOGLE_CALENDAR_READONLY_SCOPES.join(" "),
+    include_granted_scopes: "true",
+    scope: GOOGLE_CALENDAR_OAUTH_SCOPES.join(" "),
     state,
   });
   if (new URL(request.url || "", "https://student-hub.local").searchParams.get("mode") === "redirect") {

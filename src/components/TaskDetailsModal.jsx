@@ -15,6 +15,13 @@ import {
   getTourFocusTrapTarget,
   restoreTourFocus,
 } from "../utils/guidedTourUtils.js";
+import {
+  TASK_SCHEDULE_DURATION_OPTIONS,
+  formatTaskSchedule,
+  getDefaultTaskSchedule,
+  getStoredTaskSchedule,
+  isTaskEligibleForCalendarScheduling,
+} from "../utils/taskCalendarScheduling.js";
 
 function createTaskDraft(task) {
   return {
@@ -46,10 +53,20 @@ export default function TaskDetailsModal({
   onDelete,
   onClose,
   returnFocusRef,
+  onScheduleCalendar,
+  onRemoveCalendar,
+  onOpenCalendarSettings,
 }) {
   const [draftTask, setDraftTask] = useState(() => createTaskDraft(task));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [calendarBusy, setCalendarBusy] = useState(false);
+  const [calendarError, setCalendarError] = useState("");
+  const [calendarNeedsReconnect, setCalendarNeedsReconnect] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleDraft, setScheduleDraft] = useState(
+    () => getStoredTaskSchedule(task) || getDefaultTaskSchedule(task)
+  );
   const dialogRef = useRef(null);
   const titleRef = useRef(null);
   const classroomLink =
@@ -57,6 +74,9 @@ export default function TaskDetailsModal({
       ? task.alternateLink.trim()
       : "";
   const classification = getEffectiveTaskClassification(draftTask);
+  const calendarLinked = Boolean(task.googleCalendarEventId || task.googleCalendarId);
+  const calendarEligible = isTaskEligibleForCalendarScheduling(task);
+  const showCalendarSection = calendarEligible || calendarLinked;
 
   useLayoutEffect(() => {
     const returnFocusElement = returnFocusRef?.current;
@@ -128,6 +148,7 @@ export default function TaskDetailsModal({
     const saved = await onToggle(task.id);
     setSaving(false);
     if (saved) onClose();
+    else setError("This task could not be updated. Check its Calendar session and try again.");
   }
 
   async function deleteTask() {
@@ -136,6 +157,45 @@ export default function TaskDetailsModal({
     const deleted = await onDelete(task.id);
     setSaving(false);
     if (deleted) onClose();
+    else setError("This task could not be deleted. Check its Calendar session and try again.");
+  }
+
+  async function saveCalendarSchedule() {
+    if (calendarBusy || !onScheduleCalendar) return;
+    setCalendarBusy(true);
+    setCalendarError("");
+    setCalendarNeedsReconnect(false);
+    const result = await onScheduleCalendar(task.id, scheduleDraft);
+    setCalendarBusy(false);
+    if (!result?.ok) {
+      setCalendarError(result?.message || "DayLo could not schedule this task.");
+      setCalendarNeedsReconnect(
+        result?.reconnectRequired === true ||
+        ["calendar_write_scope_required", "calendar_session_reconnect_required", "calendar_account_reconnect_required"].includes(result?.status)
+      );
+      return;
+    }
+    setScheduleOpen(false);
+  }
+
+  function openScheduleEditor() {
+    setScheduleDraft(getStoredTaskSchedule(task) || getDefaultTaskSchedule(task));
+    setCalendarError("");
+    setScheduleOpen(true);
+  }
+
+  async function removeCalendarSchedule() {
+    if (calendarBusy || !onRemoveCalendar) return;
+    setCalendarBusy(true);
+    setCalendarError("");
+    const result = await onRemoveCalendar(task.id);
+    setCalendarBusy(false);
+    if (!result?.ok) {
+      setCalendarError(result?.message || "DayLo could not remove this Calendar session.");
+      setCalendarNeedsReconnect(result?.reconnectRequired === true);
+      return;
+    }
+    setScheduleOpen(false);
   }
 
   return createPortal(
@@ -278,6 +338,79 @@ export default function TaskDetailsModal({
                 </a>
               )}
             </div>
+
+            {showCalendarSection && (
+              <section className="task-calendar-schedule" aria-labelledby="task-calendar-schedule-title">
+                <div className="task-calendar-schedule-heading">
+                  <div>
+                    <span className="eyebrow">Google Calendar</span>
+                    <h3 id="task-calendar-schedule-title">Schedule study time</h3>
+                  </div>
+                  {calendarLinked && <span className="task-calendar-linked">Scheduled</span>}
+                </div>
+
+                {calendarLinked && !scheduleOpen ? (
+                  <div className="task-calendar-status">
+                    <strong>{formatTaskSchedule(task)}</strong>
+                    <p>The task deadline remains {task.dueDate}.</p>
+                    <div>
+                      <button type="button" className="secondary-button" onClick={openScheduleEditor} disabled={calendarBusy || task.completed}>
+                        Reschedule
+                      </button>
+                      {task.googleCalendarEventHtmlLink && (
+                        <a className="secondary-button" href={task.googleCalendarEventHtmlLink} target="_blank" rel="noopener noreferrer">
+                          Open in Google Calendar
+                        </a>
+                      )}
+                      <button type="button" className="quiet-button" onClick={() => void removeCalendarSchedule()} disabled={calendarBusy}>
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : scheduleOpen ? (
+                  <div className="task-calendar-schedule-form">
+                    <label>
+                      <span>Study date</span>
+                      <input type="date" value={scheduleDraft.date} onChange={(event) => setScheduleDraft({ ...scheduleDraft, date: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>Start time</span>
+                      <input type="time" value={scheduleDraft.startTime} onChange={(event) => setScheduleDraft({ ...scheduleDraft, startTime: event.target.value })} />
+                    </label>
+                    <label>
+                      <span>Duration</span>
+                      <select value={scheduleDraft.durationMinutes} onChange={(event) => setScheduleDraft({ ...scheduleDraft, durationMinutes: Number(event.target.value) })}>
+                        {TASK_SCHEDULE_DURATION_OPTIONS.map((minutes) => <option key={minutes} value={minutes}>{minutes} min</option>)}
+                      </select>
+                    </label>
+                    <div className="task-calendar-schedule-buttons">
+                      <button type="button" className="primary-button" onClick={() => void saveCalendarSchedule()} disabled={calendarBusy || !scheduleDraft.date || !scheduleDraft.startTime}>
+                        {calendarBusy ? "Scheduling…" : calendarLinked ? "Update Google Calendar" : "Add to Google Calendar"}
+                      </button>
+                      <button type="button" className="quiet-button" onClick={() => setScheduleOpen(false)} disabled={calendarBusy}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="task-calendar-intro">
+                    <p>Choose when you plan to work. This does not change the deadline.</p>
+                    <button type="button" className="secondary-button" onClick={openScheduleEditor}>
+                      Schedule this task
+                    </button>
+                  </div>
+                )}
+
+                {calendarError && (
+                  <div className="task-calendar-error" role="alert">
+                    <span>{calendarError}</span>
+                    {calendarNeedsReconnect && (
+                      <button type="button" className="quiet-button" onClick={onOpenCalendarSettings}>
+                        Open Calendar settings
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
 
             {error && <p className="task-details-error" role="alert">{error}</p>}
           </div>

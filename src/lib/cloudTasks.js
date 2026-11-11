@@ -7,6 +7,7 @@ export const TASK_COLUMNS = [
   "subject_name",
   "title",
   "description",
+  "manual_overrides",
   "due_date",
   "due_time",
   "effort",
@@ -35,6 +36,14 @@ export const TASK_COLUMNS = [
   "last_synced_at",
   "archived",
   "archived_at",
+  "google_calendar_event_id",
+  "google_calendar_id",
+  "google_calendar_account_id",
+  "google_calendar_event_html_link",
+  "scheduled_date",
+  "scheduled_start_time",
+  "scheduled_duration_minutes",
+  "scheduled_timezone",
   "created_at",
   "updated_at",
 ].join(",");
@@ -48,6 +57,11 @@ function cleanString(value) {
 
 function nullableString(value) {
   return cleanString(value) || null;
+}
+
+function nullableInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) ? number : null;
 }
 
 function timestampToMilliseconds(value) {
@@ -83,6 +97,7 @@ export function mapCloudTask(row = {}) {
     linkedSubjectName: subjectName,
     title: cleanString(row.title),
     description: cleanString(row.description),
+    manualOverrides: row.manual_overrides || {},
     dueDate: cleanString(row.due_date),
     dueTime: cleanString(row.due_time),
     effort: Number.isFinite(Number(row.effort)) ? Number(row.effort) : 2,
@@ -112,6 +127,14 @@ export function mapCloudTask(row = {}) {
     lastSyncedAt: row.last_synced_at || null,
     archived: row.archived === true,
     archivedAt: row.archived_at || null,
+    googleCalendarEventId: nullableString(row.google_calendar_event_id),
+    googleCalendarId: nullableString(row.google_calendar_id),
+    googleCalendarAccountId: nullableString(row.google_calendar_account_id),
+    googleCalendarEventHtmlLink: nullableString(row.google_calendar_event_html_link),
+    scheduledDate: cleanString(row.scheduled_date),
+    scheduledStartTime: cleanString(row.scheduled_start_time).slice(0, 5),
+    scheduledDurationMinutes: nullableInteger(row.scheduled_duration_minutes),
+    scheduledTimeZone: cleanString(row.scheduled_timezone),
   });
 }
 
@@ -127,6 +150,7 @@ export function mapTaskForInsert(task, userId) {
     subject_name: subjectName,
     title: cleanString(task?.title),
     description: cleanString(task?.description),
+    manual_overrides: task?.manualOverrides || {},
     due_date: nullableString(task?.dueDate),
     due_time: nullableString(task?.dueTime),
     effort: Number.isFinite(Number(task?.effort)) ? Number(task.effort) : 2,
@@ -156,6 +180,14 @@ export function mapTaskForInsert(task, userId) {
     last_synced_at: task?.lastSyncedAt || null,
     archived: task?.archived === true,
     archived_at: task?.archived === true ? task?.archivedAt || null : null,
+    google_calendar_event_id: nullableString(task?.googleCalendarEventId),
+    google_calendar_id: nullableString(task?.googleCalendarId),
+    google_calendar_account_id: nullableString(task?.googleCalendarAccountId),
+    google_calendar_event_html_link: nullableString(task?.googleCalendarEventHtmlLink),
+    scheduled_date: nullableString(task?.scheduledDate),
+    scheduled_start_time: nullableString(task?.scheduledStartTime),
+    scheduled_duration_minutes: nullableInteger(task?.scheduledDurationMinutes),
+    scheduled_timezone: nullableString(task?.scheduledTimeZone),
   };
 }
 
