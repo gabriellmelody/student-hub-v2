@@ -2749,7 +2749,15 @@ function IntegrationsSettings({
           const errorType = popupError?.type || popupError?.error || "unknown";
 
           if (errorType === "popup_closed") {
-            setGooglePopupMessage(provider, "Google connection was cancelled.");
+            setGoogleOAuthPopupState({
+              provider: null,
+              messageProvider: provider,
+              message: "Google connection was cancelled.",
+              errorProvider: null,
+              error: "",
+              fallbackProvider: provider,
+            });
+            focusGoogleConnectButton(provider);
           } else if (errorType === "popup_failed_to_open") {
             setGooglePopupError(
               provider,
