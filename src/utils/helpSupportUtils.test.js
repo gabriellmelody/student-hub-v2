@@ -16,8 +16,8 @@ import {
 } from "./helpSupportUtils.js";
 import { GUIDED_TOUR_STORAGE_KEY } from "./guidedTourStorage.js";
 
-test("the Help centre defines the seven required topics", () => {
-  assert.equal(helpTopics.length, 7);
+test("the Help centre defines the current six topics", () => {
+  assert.equal(helpTopics.length, 6);
   assert.deepEqual(
     helpTopics.map((topic) => topic.title),
     [
@@ -26,13 +26,12 @@ test("the Help centre defines the seven required topics", () => {
       "Google Classroom setup",
       "Subjects and grade targets",
       "Calendar and busy time",
-      "Smart Planner",
       "Today’s Plan",
     ]
   );
 });
 
-test("all seven Help topics expose focused tour identifiers", () => {
+test("all Help topics expose focused tour identifiers", () => {
   assert.deepEqual(
     helpTopics.map((topic) => topic.tourId),
     [
@@ -41,7 +40,6 @@ test("all seven Help topics expose focused tour identifiers", () => {
       "google-classroom-setup",
       "subjects",
       "calendar",
-      "smart-planner",
       "todays-plan",
     ]
   );
@@ -69,13 +67,12 @@ test("Help topics no longer rely on the getting-started inclusion note", () => {
 test("written guides contain the required planning explanations", () => {
   const subjects = JSON.stringify(getHelpTopic("subjects-grades"));
   const calendar = JSON.stringify(getHelpTopic("calendar-busy-time"));
-  const planner = JSON.stringify(getHelpTopic("smart-planner"));
   const today = JSON.stringify(getHelpTopic("todays-plan"));
 
   assert.match(subjects, /secondary planning signal/);
   assert.match(calendar, /not treated as DayLo tasks/);
-  assert.match(planner, /successful Smart Planner result uses one daily allowance/);
-  assert.match(planner, /Basic Planner is unlimited/);
+  assert.equal(getHelpTopic("smart-planner"), null);
+  assert.doesNotMatch(JSON.stringify(helpTopics), /Smart Planner|AI allowance/);
   assert.doesNotMatch(today, /timer/i);
 });
 
@@ -164,8 +161,6 @@ test("diagnostics contain allowed categories and exclude student data", () => {
     online: true,
     classroomConnected: true,
     calendarConnected: false,
-    smartPlannerStatus: "ready",
-    remainingAllowance: 2,
     tasks: [{ title: "Secret assignment" }],
     grades: ["A"],
     events: ["Private meeting"],
@@ -174,7 +169,7 @@ test("diagnostics contain allowed categories and exclude student data", () => {
 
   assert.match(diagnostics, /Viewport: 390 × 844/);
   assert.match(diagnostics, /Classroom connected: Yes/);
-  assert.match(diagnostics, /AI allowance remaining: 2/);
+  assert.doesNotMatch(diagnostics, /Smart Planner|AI allowance/);
   assert.doesNotMatch(
     diagnostics,
     /Secret assignment|Private meeting|localStorage|grades|token|cookie/i

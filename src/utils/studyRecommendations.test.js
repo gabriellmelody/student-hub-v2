@@ -3,9 +3,16 @@ import { test } from "node:test";
 import {
   buildStudyRecommendations,
   clearUnlockedFutureRecommendationOverrides,
+  createManualTaskStudyRecommendation,
   createRecommendationOverride,
+  filterValidMoveOverrides,
+  getDayStudyMinutes,
+  getHorizonStudyMinutes,
+  getNextAvailableOverrideSlot,
   getStudyWeekDays,
   getTaskStudyBlockCount,
+  getValidTaskStudyDates,
+  isRecommendationEligibleOnDate,
 } from "./studyRecommendations.js";
 
 const NOW = new Date(2026, 10, 9, 12, 0, 0);
@@ -78,7 +85,7 @@ function visibleRecommendations(day) {
   return [...day.primary, ...(day.finishEarly ? [day.finishEarly] : []), ...day.extra];
 }
 
-test("Today and Week use the same recommendation object", () => {
+test("Today and Next 7 Days use the same recommendation object", () => {
   const result = build([task()]);
   assert.equal(result.today, result.days.find((day) => day.isToday));
   assert.deepEqual(result.today.primary, result.days[0].primary);
@@ -134,8 +141,8 @@ test("Monday assessment creates Saturday and Sunday preparation", () => {
     { weeklyRoutine: {} },
     friday
   );
-  assert.equal(result.days[5].primary[0].kind, "assessment");
-  assert.equal(result.days[6].primary[0].kind, "assessment");
+  assert.equal(result.days[1].primary[0].kind, "assessment");
+  assert.equal(result.days[2].primary[0].kind, "assessment");
 });
 
 test("an assessment arriving one day early uses the remaining day", () => {
@@ -172,6 +179,76 @@ test("due-tomorrow and near-due homework outrank routine", () => {
   assert.equal(result.today.primary[0].reason, "Due tomorrow");
 });
 
+test("an optional incomplete Task is reconsidered when it becomes due tomorrow", () => {
+  const wednesday = new Date(2026, 10, 11, 12, 0, 0);
+  const englishHomework = task({
+    id: "english-friday",
+    title: "English homework",
+    dueDate: "2026-11-13",
+  });
+  const result = build([
+    task({ id: "due-thursday-1", title: "Due tomorrow one", dueDate: "2026-11-12" }),
+    task({ id: "due-thursday-2", title: "Due tomorrow two", dueDate: "2026-11-12" }),
+    englishHomework,
+  ], { weeklyRoutine: {} }, wednesday);
+  const wednesdayPlan = result.days.find((day) => day.dateKey === "2026-11-11");
+  const thursdayPlan = result.days.find((day) => day.dateKey === "2026-11-12");
+
+  assert.equal(wednesdayPlan.finishEarly.taskId, englishHomework.id);
+  assert.equal(thursdayPlan.primary[0].taskId, englishHomework.id);
+  assert.equal(thursdayPlan.primary[0].reason, "Due tomorrow");
+  assert.equal(
+    visibleRecommendations(thursdayPlan).filter((item) => item.taskId === englishHomework.id).length,
+    1
+  );
+});
+
+test("completing a carried-forward Task removes every future recommendation", () => {
+  const wednesday = new Date(2026, 10, 11, 12, 0, 0);
+  const completed = task({
+    id: "completed-friday",
+    title: "Completed homework",
+    dueDate: "2026-11-13",
+    completed: true,
+  });
+  const result = build([completed], { weeklyRoutine: {} }, wednesday);
+
+  assert.ok(result.days.every((day) =>
+    visibleRecommendations(day).every((item) => item.taskId !== completed.id)
+  ));
+});
+
+test("a manual swap does not consume a Task's later urgent recommendation", () => {
+  const wednesday = new Date(2026, 10, 11, 12, 0, 0);
+  const englishHomework = task({
+    id: "swapped-friday",
+    title: "Swapped English homework",
+    dueDate: "2026-11-13",
+  });
+  const tasks = [
+    task({ id: "swap-due-1", title: "Due tomorrow one", dueDate: "2026-11-12" }),
+    task({ id: "swap-due-2", title: "Due tomorrow two", dueDate: "2026-11-12" }),
+    englishHomework,
+  ];
+  const initial = build(tasks, { weeklyRoutine: {} }, wednesday);
+  const override = createRecommendationOverride({
+    dateKey: "2026-11-11",
+    slotIndex: 0,
+    recommendation: initial.today.finishEarly,
+    manual: true,
+  });
+  const swapped = build(tasks, {
+    weeklyRoutine: {},
+    recommendationOverrides: [override],
+  }, wednesday);
+  const thursdayPlan = swapped.days.find((day) => day.dateKey === "2026-11-12");
+
+  assert.equal(swapped.today.primary[0].taskId, englishHomework.id);
+  assert.equal(swapped.today.primary[0].manualOverride, true);
+  assert.equal(thursdayPlan.primary[0].taskId, englishHomework.id);
+  assert.equal(thursdayPlan.primary[0].reason, "Due tomorrow");
+});
+
 test("far-away low-effort homework keeps routine while high-effort work may start", () => {
   const low = build([task({ dueDate: "2026-11-16", effort: 1 })]);
   assert.ok(low.today.primary.every((item) => item.kind === "routine"));
@@ -188,6 +265,13 @@ test("effort maps to one, two or three deterministic occurrences", () => {
   const occurrences = result.days.flatMap((day) => day.primary).filter((item) => item.taskId === "task-1");
   assert.equal(occurrences.length, 3);
   assert.equal(new Set(occurrences.map((item) => item.id)).size, 3);
+  const shortWindow = build([
+    task({ effort: 5, dueDate: "2026-11-10" }),
+  ], { weeklyRoutine: {} });
+  const shortWindowOccurrences = shortWindow.days
+    .flatMap(visibleRecommendations)
+    .filter((item) => item.taskId === "task-1");
+  assert.equal(shortWindowOccurrences.length, 3);
 });
 
 test("normal capacity and overflow urgent work stay honest", () => {
@@ -243,11 +327,24 @@ test("Notes and My Lists sources are excluded from academic recommendations", ()
   assert.ok(result.today.primary.every((item) => item.kind === "routine"));
 });
 
-test("local Monday–Sunday boundaries remain stable near midnight", () => {
-  const days = getStudyWeekDays(new Date(2026, 10, 9, 0, 5, 0));
-  assert.equal(days[0].dateKey, "2026-11-09");
-  assert.equal(days[6].dateKey, "2026-11-15");
+test("rolling seven-day boundaries remain stable near midnight", () => {
+  const days = getStudyWeekDays(new Date(2026, 10, 11, 0, 5, 0));
+  assert.equal(days[0].dateKey, "2026-11-11");
+  assert.equal(days[6].dateKey, "2026-11-17");
   assert.equal(days.findIndex((day) => day.isToday), 0);
+});
+
+test("rolling horizon crosses calendar-week and month boundaries", () => {
+  const days = getStudyWeekDays(new Date(2026, 10, 27, 23, 55, 0));
+  assert.deepEqual(days.map((day) => day.dateKey), [
+    "2026-11-27",
+    "2026-11-28",
+    "2026-11-29",
+    "2026-11-30",
+    "2026-12-01",
+    "2026-12-02",
+    "2026-12-03",
+  ]);
 });
 
 test("a day may show one meaningful recommendation without filler", () => {
@@ -296,15 +393,19 @@ test("ordinary assessments do not automatically occupy an earlier third day", ()
   assert.equal(result.days[3].primary[0].kind, "assessment");
 });
 
-test("large homework is distributed across distinct days when the window allows", () => {
+test("large homework keeps distributed work through the day before its deadline", () => {
   const result = build([
     task({ id: "essay", title: "Large essay", effort: 5, dueDate: "2026-11-13" }),
   ], { weeklyRoutine: {} });
   const dates = result.days.flatMap((day) =>
     visibleRecommendations(day).filter((item) => item.taskId === "essay").map(() => day.dateKey)
   );
-  assert.equal(dates.length, 3);
-  assert.equal(new Set(dates).size, 3);
+  assert.deepEqual(dates, [
+    "2026-11-09",
+    "2026-11-11",
+    "2026-11-12",
+  ]);
+  assert.equal(new Set(dates).size, dates.length);
 });
 
 test("completed Tasks remove future recommendations even when the slot was locked", () => {
@@ -324,18 +425,43 @@ test("completed Tasks remove future recommendations even when the slot was locke
   assert.equal(visibleRecommendations(completed.today).some((item) => item.taskId === active.id), false);
 });
 
-test("past recommendation output remains unchanged when a Task is later completed", () => {
-  const active = task({ id: "history-task", title: "Historical essay" });
-  const monday = build([active], { weeklyRoutine: {} });
+test("advancing the rolling horizon starts at the new day and removes completed work", () => {
+  const active = task({ id: "rolling-task", title: "Rolling essay", dueDate: "2026-11-12" });
   const tuesday = build(
     [{ ...active, completed: true }],
     { weeklyRoutine: {} },
-    new Date(2026, 10, 10, 12, 0, 0),
-    { previousDays: monday.days }
+    new Date(2026, 10, 10, 12, 0, 0)
   );
-  assert.equal(tuesday.days[0].historical, true);
-  assert.equal(tuesday.days[0].primary[0].title, "Historical essay");
-  assert.equal(visibleRecommendations(tuesday.today).some((item) => item.taskId === active.id), false);
+  assert.equal(tuesday.days[0].dateKey, "2026-11-10");
+  assert.equal(tuesday.days[6].dateKey, "2026-11-16");
+  assert.equal(tuesday.days.some((day) => day.historical), false);
+  assert.equal(tuesday.days.some((day) =>
+    visibleRecommendations(day).some((item) => item.taskId === active.id)
+  ), false);
+});
+
+test("ordinary homework is not recommended on its due date", () => {
+  const thursdayDue = task({ id: "thursday", title: "Thursday work", dueDate: "2026-11-12", effort: 5 });
+  const result = build([thursdayDue], { weeklyRoutine: {} });
+  const dueDay = result.days.find((day) => day.dateKey === thursdayDue.dueDate);
+  assert.equal(
+    visibleRecommendations(dueDay).some((item) => item.taskId === thursdayDue.id),
+    false
+  );
+  assert.ok(result.days
+    .filter((day) => day.dateKey < thursdayDue.dueDate)
+    .some((day) => visibleRecommendations(day).some((item) => item.taskId === thursdayDue.id)));
+});
+
+test("assessment deadline is a marker while preparation remains before it", () => {
+  const upcoming = assessment({ id: "marker", dueDate: "2026-11-13" });
+  const result = build([upcoming], { weeklyRoutine: {} });
+  const dueDay = result.days.find((day) => day.dateKey === upcoming.dueDate);
+  assert.deepEqual(dueDay.deadlines.map((item) => item.taskId), [upcoming.id]);
+  assert.equal(visibleRecommendations(dueDay).some((item) => item.taskId === upcoming.id), false);
+  assert.ok(result.days
+    .filter((day) => day.dateKey < upcoming.dueDate)
+    .some((day) => visibleRecommendations(day).some((item) => item.taskId === upcoming.id)));
 });
 
 test("manual swap changes one slot without mutating either Task", () => {
@@ -361,7 +487,7 @@ test("manual swap changes one slot without mutating either Task", () => {
   assert.deepEqual(tasks, original);
 });
 
-test("lock and unlock records are deterministic and Redo clears only unlocked future swaps", () => {
+test("lock and manual override records are deterministic and Redo preserves manual placements", () => {
   const result = build([task()], { weeklyRoutine: {} });
   const locked = createRecommendationOverride({
     dateKey: result.today.dateKey,
@@ -382,9 +508,220 @@ test("lock and unlock records are deterministic and Redo clears only unlocked fu
     [locked, unlocked, past],
     result.today.dateKey
   );
-  assert.deepEqual(retained, [locked, past]);
+  assert.deepEqual(retained, [locked, unlocked, past]);
   const rebuilt = build([task()], { weeklyRoutine: {}, recommendationOverrides: retained });
   assert.equal(rebuilt.today.primary[0].locked, true);
+});
+
+test("a recommendation can move from Saturday to Sunday beyond the daily target", () => {
+  const friday = new Date(2026, 10, 13, 12, 0, 0);
+  const upcoming = assessment({ id: "move-assessment", dueDate: "2026-11-16" });
+  const initial = build([upcoming], { dailyStudyBlocks: 1, weeklyRoutine: {} }, friday);
+  const saturday = initial.days.find((day) => day.dateKey === "2026-11-14");
+  const sunday = initial.days.find((day) => day.dateKey === "2026-11-15");
+  const moved = saturday.primary[0];
+  const removal = createRecommendationOverride({
+    dateKey: saturday.dateKey,
+    slotIndex: 0,
+    recommendation: moved,
+    removed: true,
+    originDateKey: saturday.dateKey,
+    originSlotIndex: 0,
+  });
+  const destination = createRecommendationOverride({
+    dateKey: sunday.dateKey,
+    slotIndex: 3,
+    recommendation: moved,
+    originDateKey: saturday.dateKey,
+    originSlotIndex: 0,
+  });
+  const result = build([upcoming], {
+    dailyStudyBlocks: 1,
+    weeklyRoutine: {},
+    recommendationOverrides: [removal, destination],
+  }, friday);
+  const movedSaturday = result.days.find((day) => day.dateKey === saturday.dateKey);
+  const movedSunday = result.days.find((day) => day.dateKey === sunday.dateKey);
+
+  assert.equal(visibleRecommendations(movedSaturday).some((item) => item.id === moved.id), false);
+  assert.equal(visibleRecommendations(movedSunday).filter((item) => item.taskId === upcoming.id).length, 2);
+  assert.equal(movedSunday.targetBlockCount, 1);
+});
+
+test("an active Task can add a persistent study block using the default duration", () => {
+  const now = new Date(2026, 10, 12, 12, 0, 0);
+  const homework = task({ id: "manual-add", dueDate: "2026-11-16", effort: 2 });
+  const validDates = getValidTaskStudyDates(homework, now);
+  assert.deepEqual(validDates.map((day) => day.dateKey), [
+    "2026-11-12",
+    "2026-11-13",
+    "2026-11-14",
+    "2026-11-15",
+  ]);
+
+  const dateKey = "2026-11-14";
+  const recommendation = createManualTaskStudyRecommendation(homework, dateKey);
+  const slotIndex = getNextAvailableOverrideSlot([], dateKey);
+  const added = createRecommendationOverride({
+    dateKey,
+    slotIndex,
+    recommendation,
+    manual: true,
+    added: true,
+    originDateKey: dateKey,
+    originSlotIndex: slotIndex,
+    durationMinutes: 45,
+  });
+  const result = build([homework], {
+    weeklyRoutine: {},
+    blockDurationMinutes: 45,
+    recommendationOverrides: [added],
+  }, now);
+  const day = result.days.find((item) => item.dateKey === dateKey);
+  const manualBlock = visibleRecommendations(day).find((item) => item.id === recommendation.id);
+
+  assert.equal(slotIndex, 3);
+  assert.equal(manualBlock.durationMinutes, 45);
+  assert.equal(manualBlock.manualAdded, true);
+  assert.equal(homework.dueDate, "2026-11-16");
+  assert.equal(homework.effort, 2);
+  assert.deepEqual(clearUnlockedFutureRecommendationOverrides([added], result.todayKey), [added]);
+});
+
+test("manual study dates reject due day, later dates, and completed Tasks", () => {
+  const now = new Date(2026, 10, 12, 12, 0, 0);
+  const homework = task({ id: "cutoff-homework", dueDate: "2026-11-14" });
+  const assessmentTask = assessment({ id: "cutoff-assessment", dueDate: "2026-11-14" });
+  assert.deepEqual(getValidTaskStudyDates(homework, now).map((day) => day.dateKey), ["2026-11-12", "2026-11-13"]);
+  assert.deepEqual(getValidTaskStudyDates(assessmentTask, now).map((day) => day.dateKey), ["2026-11-12", "2026-11-13"]);
+  assert.deepEqual(getValidTaskStudyDates({ ...homework, completed: true }, now), []);
+});
+
+test("a standalone removal hides one occurrence, survives Redo, and leaves the Task unchanged", () => {
+  const homework = task({ id: "removed-occurrence", dueDate: "2026-11-12", effort: 2 });
+  const initial = build([homework], { weeklyRoutine: {} });
+  const recommendation = initial.today.primary.find((item) => item.taskId === homework.id);
+  const removal = createRecommendationOverride({
+    dateKey: initial.today.dateKey,
+    slotIndex: 0,
+    recommendation,
+    manual: true,
+    removed: true,
+  });
+  const result = build([homework], { weeklyRoutine: {}, recommendationOverrides: [removal] });
+  const retained = clearUnlockedFutureRecommendationOverrides([removal], initial.todayKey);
+
+  assert.equal(visibleRecommendations(result.today).some((item) => item.taskId === homework.id), false);
+  assert.deepEqual(retained, [removal]);
+  assert.equal(homework.completed, false);
+  assert.equal(homework.dueDate, "2026-11-12");
+});
+
+test("manual move destinations respect homework and assessment cutoffs", () => {
+  const homework = task({ dueDate: "2026-11-13" });
+  const prep = assessment({ dueDate: "2026-11-17" });
+  assert.equal(isRecommendationEligibleOnDate(homework, "2026-11-12", "2026-11-11"), true);
+  assert.equal(isRecommendationEligibleOnDate(homework, "2026-11-13", "2026-11-11"), false);
+  assert.equal(isRecommendationEligibleOnDate(prep, "2026-11-16", "2026-11-11"), true);
+  assert.equal(isRecommendationEligibleOnDate(prep, "2026-11-17", "2026-11-11"), false);
+  assert.equal(isRecommendationEligibleOnDate(prep, "2026-11-10", "2026-11-11"), false);
+});
+
+test("an invalidated move restores generated work and discards its paired overrides", () => {
+  const upcoming = task({ id: "changed-date", dueDate: "2026-11-11" });
+  const initial = build([upcoming], { weeklyRoutine: {} });
+  const recommendation = initial.today.primary[0];
+  const removal = createRecommendationOverride({
+    dateKey: initial.today.dateKey,
+    slotIndex: 0,
+    recommendation,
+    removed: true,
+    originDateKey: initial.today.dateKey,
+    originSlotIndex: 0,
+  });
+  const destination = createRecommendationOverride({
+    dateKey: "2026-11-10",
+    slotIndex: 3,
+    recommendation,
+    originDateKey: initial.today.dateKey,
+    originSlotIndex: 0,
+  });
+  const changedTask = { ...upcoming, dueDate: "2026-11-10" };
+  const validOverrides = filterValidMoveOverrides(
+    [removal, destination],
+    [changedTask],
+    initial.todayKey
+  );
+  const result = build([changedTask], {
+    weeklyRoutine: {},
+    recommendationOverrides: [removal, destination],
+  });
+
+  assert.deepEqual(validOverrides, []);
+  assert.equal(result.today.primary.some((item) => item.taskId === changedTask.id), true);
+});
+
+test("duration override changes only one occurrence and survives Redo", () => {
+  const highEffort = task({ id: "duration-task", effort: 5, dueDate: "2026-11-13" });
+  const initial = build([highEffort], { weeklyRoutine: {} });
+  const firstOccurrence = initial.today.primary[0];
+  const durationOverride = createRecommendationOverride({
+    dateKey: initial.today.dateKey,
+    slotIndex: 0,
+    recommendation: firstOccurrence,
+    manual: true,
+    durationMinutes: 60,
+  });
+  const result = build([highEffort], {
+    weeklyRoutine: {},
+    blockDurationMinutes: 45,
+    recommendationOverrides: [durationOverride],
+  });
+  const taskOccurrences = result.days.flatMap(visibleRecommendations)
+    .filter((item) => item.taskId === highEffort.id);
+  const retained = clearUnlockedFutureRecommendationOverrides(
+    [durationOverride],
+    initial.todayKey
+  );
+
+  assert.equal(result.today.primary[0].durationMinutes, 60);
+  assert.equal(result.blockDurationMinutes, 45);
+  assert.equal(getDayStudyMinutes(result.today), 60);
+  assert.equal(
+    getHorizonStudyMinutes(result.days),
+    result.days.reduce((sum, day) => sum + getDayStudyMinutes(day), 0)
+  );
+  assert.ok(taskOccurrences.some((item) => !item.durationMinutes));
+  assert.deepEqual(retained, [durationOverride]);
+  assert.equal(highEffort.effort, 5);
+});
+
+test("completed Tasks remove manually moved future blocks", () => {
+  const upcoming = task({ id: "completed-move", dueDate: "2026-11-13" });
+  const initial = build([upcoming], { weeklyRoutine: {} });
+  const recommendation = initial.today.primary[0];
+  const removal = createRecommendationOverride({
+    dateKey: initial.today.dateKey,
+    slotIndex: 0,
+    recommendation,
+    removed: true,
+    originDateKey: initial.today.dateKey,
+    originSlotIndex: 0,
+  });
+  const destination = createRecommendationOverride({
+    dateKey: "2026-11-12",
+    slotIndex: 3,
+    recommendation,
+    originDateKey: initial.today.dateKey,
+    originSlotIndex: 0,
+  });
+  const result = build([{ ...upcoming, completed: true }], {
+    weeklyRoutine: {},
+    recommendationOverrides: [removal, destination],
+  });
+  assert.equal(result.days.some((day) =>
+    visibleRecommendations(day).some((item) => item.taskId === upcoming.id)
+  ), false);
 });
 
 test("generic review appears only when no higher-priority work or routine exists", () => {

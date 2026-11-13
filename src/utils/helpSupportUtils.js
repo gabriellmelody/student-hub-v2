@@ -64,13 +64,6 @@ function normalizeConnectionStatus(value) {
   return "Unknown";
 }
 
-function normalizePlannerStatus(value) {
-  if (value === "ready") return "Ready";
-  if (value === "daily_limit_reached") return "Limit reached";
-  if (["unavailable", "configuration_error"].includes(value)) return "Unavailable";
-  return "Unknown";
-}
-
 export function buildSafeDiagnosticDetails({
   appVersion = "Beta build",
   now = new Date(),
@@ -82,8 +75,6 @@ export function buildSafeDiagnosticDetails({
   online = true,
   classroomConnected,
   calendarConnected,
-  smartPlannerStatus,
-  remainingAllowance,
 } = {}) {
   const lines = [
     "DayLo diagnostics",
@@ -96,16 +87,7 @@ export function buildSafeDiagnosticDetails({
     `Online: ${online === true ? "Yes" : online === false ? "No" : "Unknown"}`,
     `Classroom connected: ${normalizeConnectionStatus(classroomConnected)}`,
     `Calendar connected: ${normalizeConnectionStatus(calendarConnected)}`,
-    `Smart Planner: ${normalizePlannerStatus(smartPlannerStatus)}`,
   ];
-
-  if (
-    Number.isInteger(remainingAllowance) &&
-    remainingAllowance >= 0 &&
-    smartPlannerStatus
-  ) {
-    lines.push(`AI allowance remaining: ${remainingAllowance}`);
-  }
 
   return lines.join("\n");
 }

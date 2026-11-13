@@ -60,6 +60,8 @@ function nullableString(value) {
 }
 
 function nullableInteger(value) {
+  if (value == null || value === "") return null;
+
   const number = Number(value);
   return Number.isInteger(number) ? number : null;
 }

@@ -1991,7 +1991,7 @@
   }
 }
 
-/* Deterministic Today and Week study recommendations. */
+/* Deterministic Today and rolling seven-day study recommendations. */
 .study-plan-page {
   gap: 18px;
   min-width: 0;
@@ -2094,13 +2094,14 @@
 }
 
 .study-today-panel {
-  width: min(100%, 1120px);
+  width: min(100%, 980px);
+  margin-inline: auto;
   justify-self: center;
 }
 
 .study-today-panel .study-recommendation-list {
   grid-template-columns: 1fr;
-  width: min(100%, 960px);
+  width: 100%;
 }
 
 .study-today-panel,
@@ -2174,7 +2175,7 @@
 
 .study-recommendation-row {
   display: grid;
-  gap: 7px;
+  gap: 3px;
   min-width: 0;
 }
 
@@ -2760,6 +2761,30 @@
   gap: 7px;
 }
 
+.study-detail-remove {
+  width: auto;
+  min-height: var(--density-button-height);
+  border: 1px solid color-mix(in srgb, var(--urgent) 28%, var(--border));
+  border-radius: var(--radius-button);
+  padding: var(--density-button-padding);
+  background: transparent;
+  color: var(--urgent);
+  font: inherit;
+  font-size: var(--font-button);
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.study-detail-remove:hover,
+.study-detail-remove:focus-visible {
+  background: color-mix(in srgb, var(--urgent) 8%, transparent);
+}
+
+.study-detail-remove:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
 .study-alternative-list {
   display: grid;
   gap: 8px;
@@ -2926,6 +2951,348 @@
   background: var(--surface-panel);
 }
 
+/* Focused Today cards and rolling seven-day horizon. */
+.study-recommendation-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.study-recommendation-card.has-number {
+  grid-template-columns: 72px minmax(0, 1fr) auto;
+}
+
+.study-recommendation-number {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  border-radius: 50%;
+  background: var(--accent-tint-strong);
+  color: var(--accent-soft);
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.study-recommendation-open {
+  padding: 14px;
+}
+
+.study-recommendation-card.has-number .study-recommendation-open {
+  grid-column: 2;
+}
+
+.study-recommendation-actions {
+  position: static;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 12px;
+}
+
+.study-recommendation-lock,
+.study-recommendation-swap,
+.study-recommendation-more {
+  position: static;
+  min-height: 34px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-control);
+  padding: 5px 9px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: var(--font-meta);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.study-recommendation-more {
+  width: 34px;
+  padding: 0;
+  font-size: 1.05rem;
+}
+
+.study-recommendation-swap:hover,
+.study-recommendation-more:hover {
+  border-color: var(--accent-border);
+  color: var(--text);
+}
+
+.study-recommendation-swap:focus-visible,
+.study-recommendation-more:focus-visible,
+.study-optional-toggle:focus-visible,
+.study-horizon-recommendation:focus-visible,
+.study-horizon-optional-toggle:focus-visible,
+.study-horizon-deadline:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.study-recommendation-finish-early {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.study-optional-toggle {
+  width: 100%;
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-control);
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--accent-tint) 52%, transparent);
+  color: var(--accent-soft);
+  font: inherit;
+  font-size: var(--font-helper);
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.study-optional-toggle small {
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  font-weight: 650;
+}
+
+.study-horizon-panel {
+  width: min(100%, 1280px);
+  margin-inline: auto;
+  padding: 18px;
+}
+
+.study-horizon-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.study-horizon-header h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--font-section-title);
+}
+
+.study-horizon-header p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: var(--font-helper);
+}
+
+.study-horizon-header > span {
+  color: var(--text-secondary);
+  font-size: var(--font-helper);
+  font-weight: 700;
+}
+
+.study-horizon-days {
+  display: grid;
+  gap: 8px;
+}
+
+.study-horizon-day {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-card);
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--surface-raised) 80%, transparent);
+}
+
+.study-horizon-day.is-today {
+  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--accent-tint) 32%, var(--surface-raised));
+}
+
+.study-horizon-day > header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.study-horizon-day > header strong {
+  color: var(--text);
+  font-size: var(--font-card-title);
+}
+
+.study-horizon-items {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.study-horizon-recommendation,
+.study-horizon-deadline {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  border-left: 4px solid var(--study-subject-colour, var(--accent));
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: color-mix(in srgb, var(--study-subject-colour, var(--accent)) 7%, var(--surface-subtle));
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.study-horizon-recommendation {
+  cursor: grab;
+}
+
+.study-horizon-recommendation:active {
+  cursor: grabbing;
+}
+
+.study-horizon-recommendation.is-dragging {
+  border-color: var(--accent-border);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: var(--shadow-card);
+  opacity: 0.78;
+}
+
+.study-horizon-day.is-drop-valid {
+  border-color: var(--accent-border);
+  background: color-mix(in srgb, var(--accent-tint) 24%, var(--surface-raised));
+}
+
+.study-horizon-day.is-drop-invalid {
+  opacity: 0.62;
+}
+
+.study-horizon-recommendation > i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--study-subject-colour, var(--accent));
+}
+
+.study-horizon-recommendation > span,
+.study-horizon-deadline > span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.study-horizon-recommendation strong,
+.study-horizon-deadline strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--font-helper);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.study-horizon-recommendation small,
+.study-horizon-deadline small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.study-horizon-recommendation > b,
+.study-horizon-deadline > b {
+  color: var(--text-secondary);
+  font-size: var(--font-meta);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.study-horizon-deadline {
+  grid-template-columns: minmax(0, 1fr) auto;
+  border-left-color: var(--urgent);
+  background: color-mix(in srgb, var(--urgent) 8%, var(--surface-raised));
+}
+
+.study-detail-manual-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 10px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 14px;
+}
+
+.study-detail-manual-controls label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-meta);
+  font-weight: 700;
+}
+
+.study-detail-manual-controls select {
+  width: 100%;
+  min-width: 0;
+  min-height: 38px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: 6px 9px;
+  background: var(--surface-input);
+  color: var(--text);
+  font: inherit;
+}
+
+.study-detail-manual-controls .secondary-button {
+  width: auto;
+  min-height: 38px;
+  white-space: nowrap;
+}
+
+.study-horizon-deadline > b {
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: color-mix(in srgb, var(--urgent) 10%, transparent);
+  color: var(--urgent);
+}
+
+.study-horizon-optional-toggle {
+  width: fit-content;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-meta);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.study-horizon-empty {
+  color: var(--text-muted);
+  font-size: var(--font-helper);
+}
+
+.study-horizon-day > footer {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: var(--font-meta);
+}
+
+.study-horizon-day > footer strong {
+  color: var(--text-secondary);
+}
+
 @media (max-width: 1100px) {
   .study-week-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2975,6 +3342,51 @@
 
   .study-week-grid {
     grid-template-columns: 1fr;
+  }
+
+  .study-recommendation-card.has-number {
+    grid-template-columns: 52px minmax(0, 1fr);
+  }
+
+  .study-recommendation-number {
+    width: 38px;
+    height: 38px;
+    font-size: 1rem;
+  }
+
+  .study-recommendation-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border-soft);
+    padding: 8px 10px;
+  }
+
+  .study-horizon-panel {
+    padding: 12px;
+  }
+
+  .study-horizon-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .study-horizon-day {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .study-horizon-day > footer {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .study-detail-manual-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .study-detail-manual-controls .secondary-button {
+    width: 100%;
+    min-height: 44px;
   }
 
   .study-today-panel > header {
@@ -3038,7 +3450,8 @@
   }
 
   .study-detail-actions .primary-button,
-  .study-detail-actions .secondary-button {
+  .study-detail-actions .secondary-button,
+  .study-detail-actions .study-detail-remove {
     width: 100%;
     min-height: 44px;
   }
@@ -3090,6 +3503,29 @@
 
   .study-today-panel > header {
     display: grid;
+  }
+
+  .study-recommendation-card.has-number {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .study-recommendation-card.has-number .study-recommendation-open {
+    grid-column: 1;
+  }
+
+  .study-recommendation-open {
+    padding: 11px 9px;
+  }
+
+  .study-recommendation-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .study-recommendation-lock,
+  .study-recommendation-swap,
+  .study-recommendation-more {
+    width: 100%;
   }
 
   .study-daily-target {

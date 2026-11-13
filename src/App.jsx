@@ -3503,6 +3503,8 @@ function App() {
           toggleTask={toggleTask}
           deleteTask={deleteTask}
           updateTask={updateTask}
+          planningPreferences={cloudPlanningPreferences}
+          updatePlanningPreferences={updatePlanningPreferences}
           taskSyncError={tasksSyncError}
           retryTaskSync={refetchTasks}
           scheduleTaskInCalendar={(taskId, schedule) =>

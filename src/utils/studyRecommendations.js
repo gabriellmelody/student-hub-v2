@@ -18,6 +18,31 @@ export const STUDY_WEEKDAYS = Object.freeze([
 const INACTIVE_CLASSROOM_STATES = new Set(["done", "returned", "submitted", "turned_in"]);
 const RECOMMENDATION_KINDS = new Set(["assessment", "homework", "routine", "review"]);
 const MAX_OVERRIDE_COUNT = 64;
+export const PLAN_BLOCK_DURATION_OPTIONS = Object.freeze([15, 20, 25, 30, 45, 60, 75, 90]);
+
+export function getRecommendationDurationMinutes(recommendation, fallbackMinutes = 45) {
+  const requested = Number(recommendation?.durationMinutes);
+  return PLAN_BLOCK_DURATION_OPTIONS.includes(requested)
+    ? requested
+    : Number(fallbackMinutes) || 45;
+}
+
+export function getDayStudyMinutes(day) {
+  return [...(day?.primary || []), ...(day?.extra || [])].reduce(
+    (sum, recommendation) => sum + getRecommendationDurationMinutes(
+      recommendation,
+      day?.blockDurationMinutes
+    ),
+    0
+  );
+}
+
+export function getHorizonStudyMinutes(days) {
+  return (Array.isArray(days) ? days : []).reduce(
+    (sum, day) => sum + getDayStudyMinutes(day),
+    0
+  );
+}
 
 function startOfLocalDay(value) {
   const date = new Date(value);
@@ -39,19 +64,12 @@ function differenceInLocalDays(later, earlier) {
   return Math.round((laterDate - earlierDate) / 86400000);
 }
 
-function getMonday(value) {
-  const date = startOfLocalDay(value);
-  const weekday = date.getDay();
-  date.setDate(date.getDate() - (weekday === 0 ? 6 : weekday - 1));
-  return date;
-}
-
 export function getStudyWeekDays(now = new Date()) {
-  const monday = getMonday(now);
   const today = startOfLocalDay(now);
   const todayKey = formatDateKey(today);
-  return STUDY_WEEKDAYS.map((weekday, index) => {
-    const date = addLocalDays(monday, index);
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addLocalDays(today, index);
+    const weekday = STUDY_WEEKDAYS[(date.getDay() + 6) % 7];
     return {
       ...weekday,
       date,
@@ -136,18 +154,30 @@ function getHomeworkOccurrenceDates(task, today, weekEnd) {
   const daysUntilDue = differenceInLocalDays(dueDate, today);
   if (!shouldRecommendHomework(task, daysUntilDue)) return [];
   const count = getTaskStudyBlockCount(task);
-  if (daysUntilDue <= 0) return Array.from({ length: count }, () => today);
-  const lastEligibleDate = dueDate < weekEnd ? dueDate : weekEnd;
+  if (daysUntilDue < 0) return Array.from({ length: count }, () => today);
+  if (daysUntilDue === 0) return [];
+  const finalWorkDate = addLocalDays(dueDate, -1);
+  const lastEligibleDate = finalWorkDate < weekEnd ? finalWorkDate : weekEnd;
   const availableDates = [];
   for (let date = today; date <= lastEligibleDate; date = addLocalDays(date, 1)) {
     availableDates.push(date);
   }
   if (availableDates.length === 0) return [];
-  if (count === 1) return [availableDates[0]];
-  return Array.from({ length: count }, (_, index) => {
+  const occurrenceDates = count === 1 ? [availableDates[0]] : Array.from({ length: count }, (_, index) => {
     const distributedIndex = Math.round((index * (availableDates.length - 1)) / (count - 1));
     return availableDates[distributedIndex];
   });
+  const urgentCarryForwardDates = [finalWorkDate]
+    .filter((date) => date >= today && date <= weekEnd);
+  const scheduledDateKeys = new Set(occurrenceDates.map(formatDateKey));
+  const newCarryForwardDates = urgentCarryForwardDates.filter((date) => {
+    const dateKey = formatDateKey(date);
+    if (scheduledDateKeys.has(dateKey)) return false;
+    scheduledDateKeys.add(dateKey);
+    return true;
+  });
+  return [...occurrenceDates, ...newCarryForwardDates]
+    .sort((first, second) => first - second);
 }
 
 function createTaskRecommendation({
@@ -325,12 +355,76 @@ function cleanOverrideRecommendation(recommendation) {
   };
 }
 
+function normalizeOverrideDuration(value) {
+  const duration = Number(value);
+  return PLAN_BLOCK_DURATION_OPTIONS.includes(duration) ? duration : null;
+}
+
+export function isRecommendationEligibleOnDate(
+  recommendation,
+  dateKey,
+  todayKey = formatDateKey(new Date())
+) {
+  const destination = String(dateKey || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(destination) || destination < todayKey) return false;
+  const dueDate = String(recommendation?.dueDate || "");
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dueDate) && destination >= dueDate) return false;
+  return true;
+}
+
+export function createManualTaskStudyRecommendation(task, dateKey) {
+  if (!isActiveAcademicTask(task) || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey || ""))) {
+    return null;
+  }
+  const date = parseDateKey(dateKey);
+  const { classification, isAssessment } = isAssessmentTask(task);
+  const assessmentLabel = isAssessment ? getAssessmentLabel(task, classification) : "";
+  const recommendation = createTaskRecommendation({
+    task,
+    date,
+    kind: isAssessment ? "assessment" : "homework",
+    reason: "Manual study block",
+    score: 0,
+    required: false,
+    occurrenceIndex: "manual",
+    assessmentLabel,
+  });
+  recommendation.id = `manual-task:${task.id}:${dateKey}`;
+  return recommendation;
+}
+
+export function getValidTaskStudyDates(task, now = new Date()) {
+  const recommendation = createManualTaskStudyRecommendation(task, formatDateKey(startOfLocalDay(now)));
+  if (!recommendation) return [];
+  const todayKey = formatDateKey(startOfLocalDay(now));
+  return getStudyWeekDays(now).filter((day) =>
+    isRecommendationEligibleOnDate(recommendation, day.dateKey, todayKey)
+  );
+}
+
+export function getNextAvailableOverrideSlot(overrides, dateKey) {
+  const occupied = new Set(
+    (Array.isArray(overrides) ? overrides : [])
+      .filter((override) => override?.dateKey === dateKey && !override?.removed)
+      .map((override) => Number(override.slotIndex))
+  );
+  for (let slotIndex = 3; slotIndex <= 12; slotIndex += 1) {
+    if (!occupied.has(slotIndex)) return slotIndex;
+  }
+  return null;
+}
+
 export function createRecommendationOverride({
   dateKey,
   slotIndex,
   recommendation,
   locked = false,
   manual = true,
+  removed = false,
+  added = false,
+  originDateKey = "",
+  originSlotIndex = null,
+  durationMinutes = null,
 }) {
   const cleanedRecommendation = cleanOverrideRecommendation(recommendation);
   const normalizedSlotIndex = Math.max(0, Math.min(12, Math.trunc(Number(slotIndex))));
@@ -341,12 +435,21 @@ export function createRecommendationOverride({
     recommendation: cleanedRecommendation,
     locked: Boolean(locked),
     manual: Boolean(manual),
+    removed: Boolean(removed),
+    added: Boolean(added),
+    originDateKey: /^\d{4}-\d{2}-\d{2}$/.test(String(originDateKey || ""))
+      ? String(originDateKey)
+      : "",
+    originSlotIndex: originSlotIndex !== null && originSlotIndex !== "" && Number.isFinite(Number(originSlotIndex))
+      ? Math.max(0, Math.min(12, Math.trunc(Number(originSlotIndex))))
+      : null,
+    durationMinutes: normalizeOverrideDuration(durationMinutes),
   };
 }
 
 export function clearUnlockedFutureRecommendationOverrides(overrides, todayKey) {
   return (Array.isArray(overrides) ? overrides : []).filter((override) =>
-    override?.dateKey < todayKey || override?.locked
+    override?.dateKey < todayKey || override?.locked || override?.manual
   );
 }
 
@@ -358,6 +461,39 @@ function normalizeOverrides(value) {
     if (normalized) bySlot.set(`${normalized.dateKey}:${normalized.slotIndex}`, normalized);
   });
   return Array.from(bySlot.values());
+}
+
+function getMoveOverrideKey(override) {
+  return `${override.originDateKey}:${override.originSlotIndex}`;
+}
+
+export function filterValidMoveOverrides(overrides, tasks, todayKey) {
+  const taskById = new Map((Array.isArray(tasks) ? tasks : []).map((task) => [String(task.id), task]));
+  const isTaskOverrideValid = (override) => {
+    const taskId = override.recommendation?.taskId;
+    if (!taskId) return true;
+    const task = taskById.get(String(taskId));
+    if (!isActiveAcademicTask(task)) return false;
+    if (override.removed && !override.originDateKey) return true;
+    return isRecommendationEligibleOnDate(
+      { ...override.recommendation, dueDate: task.dueDate || "" },
+      override.dateKey,
+      todayKey
+    );
+  };
+  const validMoveKeys = new Set();
+  overrides.forEach((override) => {
+    if (override.removed || !override.originDateKey) return;
+    if (isTaskOverrideValid(override)) {
+      validMoveKeys.add(getMoveOverrideKey(override));
+    }
+  });
+  return overrides.filter((override) => {
+    if (!isTaskOverrideValid(override)) return false;
+    if (!override.originDateKey) return true;
+    if (override.removed) return validMoveKeys.has(getMoveOverrideKey(override));
+    return validMoveKeys.has(getMoveOverrideKey(override));
+  });
 }
 
 function hydrateOverrideRecommendation(override, tasks, subjects, today) {
@@ -386,6 +522,11 @@ function hydrateOverrideRecommendation(override, tasks, subjects, today) {
       source: task.source || stored.source,
       locked: override.locked,
       manualOverride: override.manual,
+      manualAdded: override.added,
+      manualOriginDateKey: override.originDateKey || "",
+      manualOriginSlotIndex: override.originSlotIndex,
+      overrideSlotIndex: override.slotIndex,
+      durationMinutes: override.durationMinutes,
     };
   }
   if (stored.subjectId) {
@@ -397,10 +538,24 @@ function hydrateOverrideRecommendation(override, tasks, subjects, today) {
       subjectColour: subject.colour || subject.color || null,
       locked: override.locked,
       manualOverride: override.manual,
+      manualAdded: override.added,
+      manualOriginDateKey: override.originDateKey || "",
+      manualOriginSlotIndex: override.originSlotIndex,
+      overrideSlotIndex: override.slotIndex,
+      durationMinutes: override.durationMinutes,
     };
   }
   if (stored.kind !== "review") return null;
-  return { ...stored, locked: override.locked, manualOverride: override.manual };
+  return {
+    ...stored,
+    locked: override.locked,
+    manualOverride: override.manual,
+    manualAdded: override.added,
+    manualOriginDateKey: override.originDateKey || "",
+    manualOriginSlotIndex: override.originSlotIndex,
+    overrideSlotIndex: override.slotIndex,
+    durationMinutes: override.durationMinutes,
+  };
 }
 
 function getDisplayed(day) {
@@ -425,12 +580,34 @@ function applyDayOverrides({ day, overrides, tasks, subjects, today }) {
     finishEarly: day.finishEarly || null,
   };
   const displacedRequired = [];
-  overrides
+  const dayOverrides = overrides
     .filter((override) => override.dateKey === day.dateKey)
-    .sort((first, second) => first.slotIndex - second.slotIndex)
+    .sort((first, second) => first.slotIndex - second.slotIndex);
+  const removedRecommendationIds = new Set();
+  dayOverrides
+    .filter((override) => override.removed)
+    .forEach((override) => {
+      const removed = hydrateOverrideRecommendation(override, tasks, subjects, today);
+      if (removed?.id) removedRecommendationIds.add(removed.id);
+      if (override.added) return;
+      const current = override.slotIndex <= 1
+        ? next.primary[override.slotIndex]
+        : override.slotIndex === 2
+          ? next.finishEarly
+          : next.extra[override.slotIndex - 3];
+      if (current?.id) removedRecommendationIds.add(current.id);
+      setDaySlot(next, override.slotIndex, null);
+    });
+  dayOverrides
+    .filter((override) => !override.removed)
     .forEach((override) => {
       const replacement = hydrateOverrideRecommendation(override, tasks, subjects, today);
       if (!replacement) return;
+      if (
+        override.manual &&
+        override.originDateKey &&
+        !isRecommendationEligibleOnDate(replacement, override.dateKey, formatDateKey(today))
+      ) return;
       const current = override.slotIndex <= 1
         ? next.primary[override.slotIndex]
         : override.slotIndex === 2
@@ -443,14 +620,17 @@ function applyDayOverrides({ day, overrides, tasks, subjects, today }) {
   next.extra = next.extra.filter(Boolean);
   const displayedIds = new Set(getDisplayed(next).map((item) => item.id));
   [...day.requiredCandidates, ...displacedRequired].forEach((recommendation) => {
-    if (!displayedIds.has(recommendation.id)) {
+    if (!displayedIds.has(recommendation.id) && !removedRecommendationIds.has(recommendation.id)) {
       next.extra.push(recommendation);
       displayedIds.add(recommendation.id);
     }
   });
   next.extra = next.extra.filter((recommendation, index, list) =>
+    !removedRecommendationIds.has(recommendation.id) &&
     list.findIndex((item) => item.id === recommendation.id) === index
   );
+  next.primary = next.primary.filter((recommendation) => !removedRecommendationIds.has(recommendation.id));
+  if (next.finishEarly && removedRecommendationIds.has(next.finishEarly.id)) next.finishEarly = null;
   return next;
 }
 
@@ -482,13 +662,18 @@ export function buildStudyRecommendations({
   const todayKey = formatDateKey(today);
   const activeTasks = tasks.filter(isActiveAcademicTask);
   const candidateMap = new Map(weekDays.map((day) => [day.dateKey, []]));
+  const deadlineMap = new Map(weekDays.map((day) => [day.dateKey, []]));
   const dailyBlockCount = Math.min(6, Math.max(1, Number(preferences.dailyStudyBlocks) || 2));
   const primaryLimit = Math.min(2, dailyBlockCount);
   const blockDurationMinutes = [20, 25, 30, 45, 60, 90].includes(Number(preferences.blockDurationMinutes))
     ? Number(preferences.blockDurationMinutes)
     : 45;
   const weeklyRoutine = preferences.weeklyRoutine || {};
-  const overrides = normalizeOverrides(preferences.recommendationOverrides);
+  const overrides = filterValidMoveOverrides(
+    normalizeOverrides(preferences.recommendationOverrides),
+    activeTasks,
+    todayKey
+  );
 
   activeTasks.forEach((task) => {
     if (!task.dueDate) return;
@@ -496,6 +681,17 @@ export function buildStudyRecommendations({
     const { classification, isAssessment } = isAssessmentTask(task);
     if (isAssessment) {
       const label = getAssessmentLabel(task, classification);
+      const dueDateKey = formatDateKey(dueDate);
+      if (deadlineMap.has(dueDateKey)) {
+        deadlineMap.get(dueDateKey).push({
+          id: `assessment-deadline:${task.id}:${dueDateKey}`,
+          taskId: task.id,
+          title: task.title,
+          subject: task.subject || "Unassigned",
+          assessmentLabel: label,
+          source: task.source || "manual",
+        });
+      }
       [-2, -1].forEach((offset, occurrenceIndex) => {
         const prepDate = addLocalDays(dueDate, offset);
         if (prepDate < today || prepDate < weekStart || prepDate > weekEnd) return;
@@ -527,9 +723,9 @@ export function buildStudyRecommendations({
       }
       return;
     }
-    const daysUntilDue = differenceInLocalDays(dueDate, today);
     getHomeworkOccurrenceDates(task, today, weekEnd).forEach((date, occurrenceIndex) => {
       if (date < weekStart || date > weekEnd) return;
+      const daysUntilDue = differenceInLocalDays(dueDate, date);
       const reason = getDueReason(daysUntilDue, dueDate);
       addCandidate(candidateMap, formatDateKey(date), createTaskRecommendation({
         task,
@@ -578,6 +774,7 @@ export function buildStudyRecommendations({
     }
     const baseDay = {
       ...weekday,
+      deadlines: deadlineMap.get(weekday.dateKey) || [],
       primary,
       finishEarly,
       extra,

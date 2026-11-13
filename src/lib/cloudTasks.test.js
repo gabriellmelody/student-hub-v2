@@ -200,6 +200,24 @@ test("maps the full DayLo task shape to snake_case DB fields", () => {
   assert.equal("user_id" in mapTaskForUpdate(dayloTask()), false);
 });
 
+test("scheduled duration preserves empty values as null and valid integers as numbers", () => {
+  const cases = [
+    [null, null],
+    ["", null],
+    [undefined, null],
+    ["45", 45],
+    [45, 45],
+  ];
+
+  cases.forEach(([scheduledDurationMinutes, expected]) => {
+    const payload = mapTaskForInsert(
+      dayloTask({ scheduledDurationMinutes }),
+      USER_ID
+    );
+    assert.equal(payload.scheduled_duration_minutes, expected);
+  });
+});
+
 test("Google Calendar task linkage round-trips through cloud task serialization", () => {
   const linkedTask = dayloTask({
     googleCalendarEventId: "event-1",

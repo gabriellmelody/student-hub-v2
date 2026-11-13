@@ -51,17 +51,4 @@ export const integrationCatalog = [
     source: "future",
     previewAvailable: false,
   },
-  {
-    id: "ai-planner",
-    name: "Smart Planner AI",
-    provider: "DayLo",
-    description:
-      "Build a focused study plan from your active tasks.",
-    status: "checking",
-    enabled: true,
-    canLink: false,
-    canUnlink: false,
-    source: "future",
-    previewAvailable: false,
-  },
 ];

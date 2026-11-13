@@ -2,10 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from "react-dom";
 import DueDateField from "../components/DueDateField.jsx";
 import SubjectField from "../components/SubjectField.jsx";
-import TaskCard from "../components/TaskCard.jsx";
 import TaskClassificationFields from "../components/TaskClassificationFields.jsx";
 import TaskDetailsModal from "../components/TaskDetailsModal.jsx";
 import RevealOnScroll from "../components/RevealOnScroll.jsx";
+import TaskSourceBadge from "../components/TaskSourceBadge.jsx";
 import {
   blockGuidedTourBackground,
   getFocusableTourElements,
@@ -13,6 +13,8 @@ import {
   restoreTourFocus,
 } from "../utils/guidedTourUtils.js";
 import {
+  findSubjectProfile,
+  getEffortLabel,
   getEffortClass,
   sortTasksByMode,
   updateTaskTitleWithDetection,
@@ -22,9 +24,16 @@ import {
   createEmptyTaskDraft,
   createPriorityBoardColumns,
   createTaskDraftForBoardColumn,
-  getVisibleTaskColumnItems,
-  TASK_BOARD_VISIBLE_LIMIT,
+  formatTaskCompletionLabel,
+  formatTaskDueLabel,
+  getTaskAcademicLabel,
 } from "../utils/taskBoardUtils.js";
+import {
+  createManualTaskStudyRecommendation,
+  createRecommendationOverride,
+  getNextAvailableOverrideSlot,
+  getValidTaskStudyDates,
+} from "../utils/studyRecommendations.js";
 
 function TasksPage({
   subjects,
@@ -41,6 +50,8 @@ function TasksPage({
   toggleTask,
   deleteTask,
   updateTask,
+  planningPreferences,
+  updatePlanningPreferences,
   taskSyncError = null,
   retryTaskSync,
   scheduleTaskInCalendar,
@@ -50,10 +61,15 @@ function TasksPage({
   onTaskDetailsRequestHandled,
 }) {
   const [taskView, setTaskView] = useState("dueDate");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [collapsedGroups, setCollapsedGroups] = useState(
+    () => new Set(["later", "unscheduled"])
+  );
   const [completedOpen, setCompletedOpen] = useState(false);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [dueTimeEnabled, setDueTimeEnabled] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
+  const [completionToast, setCompletionToast] = useState("");
   const titleInputRef = useRef(null);
   const addTaskDialogRef = useRef(null);
   const addTaskReturnFocusRef = useRef(null);
@@ -77,6 +93,18 @@ function TasksPage({
     () => createPriorityBoardColumns(allActiveTasks),
     [allActiveTasks]
   );
+  const visibleColumns = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    const columns = taskView === "dueDate" ? dueDateColumns : priorityColumns;
+    if (!query) return columns;
+    return columns.map((column) => ({
+      ...column,
+      tasks: column.tasks.filter((task) =>
+        [task.title, task.subject, task.description]
+          .some((value) => String(value || "").toLowerCase().includes(query))
+      ),
+    }));
+  }, [dueDateColumns, priorityColumns, searchQuery, taskView]);
   const sortedCompletedTasks = sortTasksByMode(completedTasks, "dueDate");
   const effectiveSelectedTaskId = requestedTaskId || selectedTaskId;
   const selectedTask = [...allActiveTasks, ...completedTasks].find(
@@ -87,6 +115,16 @@ function TasksPage({
   const dueTodayCount =
     dueDateColumns.find((column) => column.label === "Today")?.tasks.length || 0;
   const hasActiveTasks = allActiveTasks.length > 0;
+  const validStudyDates = useMemo(
+    () => selectedTask && !selectedTask.completed ? getValidTaskStudyDates(selectedTask) : [],
+    [selectedTask]
+  );
+
+  useEffect(() => {
+    if (!completionToast) return undefined;
+    const timer = window.setTimeout(() => setCompletionToast(""), 2600);
+    return () => window.clearTimeout(timer);
+  }, [completionToast]);
 
   useEffect(() => {
     const taskId = deepLinkedTaskIdRef.current;
@@ -129,6 +167,38 @@ function TasksPage({
         window.history.replaceState({}, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
       }
     }
+  }
+
+  async function handleToggleTask(taskId) {
+    const task = [...allActiveTasks, ...completedTasks].find((item) => item.id === taskId);
+    const saved = await toggleTask(taskId);
+    if (saved && task && !task.completed) {
+      setCompletionToast(`${task.title} completed`);
+    }
+    return saved;
+  }
+
+  async function handleSetStudyBlock(task, dateKey) {
+    if (!task || task.completed || task.archived || !updatePlanningPreferences) return false;
+    const recommendation = createManualTaskStudyRecommendation(task, dateKey);
+    if (!recommendation) return false;
+    const overrides = planningPreferences?.recommendationOverrides || [];
+    const slotIndex = getNextAvailableOverrideSlot(overrides, dateKey);
+    if (slotIndex === null) return false;
+    const block = createRecommendationOverride({
+      dateKey,
+      slotIndex,
+      recommendation,
+      manual: true,
+      added: true,
+      originDateKey: dateKey,
+      originSlotIndex: slotIndex,
+      durationMinutes: planningPreferences?.blockDurationMinutes || 45,
+    });
+    if (!block) return false;
+    return Boolean(await updatePlanningPreferences({
+      recommendationOverrides: [...overrides, block],
+    }));
   }
 
   const closeAddTaskModal = useCallback(() => {
@@ -189,8 +259,8 @@ function TasksPage({
       <header className="page-header tasks-page-header">
         <div className="tasks-header-copy">
           <p className="eyebrow">To-do</p>
-          <h1>To-do board</h1>
-          <p>Scan deadlines first, then open a task when you need the details.</p>
+          <h1>To-do list</h1>
+          <p>All your active schoolwork in one place.</p>
           <p className="task-live-counts" data-tour="todo-due-navigation">
             {formatCount(allActiveTasks.length, "active")} · {formatCount(overdueCount, "overdue")}
             {dueTodayCount > 0 && <> · {formatCount(dueTodayCount, "due today")}</>}
@@ -198,14 +268,25 @@ function TasksPage({
         </div>
 
         <div className="tasks-header-actions">
-          <button
-            className="primary-button task-add-trigger"
-            type="button"
-            data-tour="todo-add-task"
-            onClick={(event) => openAddTask(null, event.currentTarget)}
-          >
-            + Add task
-          </button>
+          <div className="task-header-search-row">
+            <label className="task-search-field">
+              <span className="sr-only">Search tasks</span>
+              <input
+                type="search"
+                placeholder="Search tasks…"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+            </label>
+            <button
+              className="primary-button task-add-trigger"
+              type="button"
+              data-tour="todo-add-task"
+              onClick={(event) => openAddTask(null, event.currentTarget)}
+            >
+              + Add task
+            </button>
+          </div>
 
           <div
             className="task-view-tabs"
@@ -233,7 +314,7 @@ function TasksPage({
         </div>
       </header>
 
-      <div className="panel tasks-panel" data-tour="todo-overview">
+      <div className="panel tasks-panel" data-tour="todo-overview" tabIndex={-1}>
         {taskSyncError && (
           <div className="task-sync-error" role="alert">
             <span>Tasks could not sync. Check your connection and try again.</span>
@@ -244,42 +325,53 @@ function TasksPage({
         )}
 
         {!hasActiveTasks && (
-          <div className="task-board-empty-intro" role="status">
+          <div className="task-list-empty-intro" role="status">
             <strong>You’re caught up.</strong>
-            <span>Add a task in the column where it belongs.</span>
+            <span>Add a task when something new comes up.</span>
           </div>
         )}
 
-        <TaskBoard
-          columns={taskView === "dueDate" ? dueDateColumns : priorityColumns}
+        <TaskGroupList
+          columns={visibleColumns}
           subjects={subjects}
           onOpenTask={openTaskDetails}
-          onAddTask={openAddTask}
-          boardMode={taskView}
-          label={taskView === "dueDate" ? "Tasks by due date" : "Tasks by priority"}
+          onToggleTask={handleToggleTask}
+          collapsedGroups={collapsedGroups}
+          onToggleGroup={(groupId) => setCollapsedGroups((current) => {
+            const next = new Set(current);
+            if (next.has(groupId)) next.delete(groupId);
+            else next.add(groupId);
+            return next;
+          })}
+          emptyMessage={searchQuery.trim() ? "No tasks match your search." : "No active tasks."}
         />
 
-        <section className="task-completed-section">
-          <button
-            className="task-completed-toggle"
-            type="button"
-            aria-expanded={completedOpen}
-            onClick={() => setCompletedOpen((open) => !open)}
-          >
-            <span>Completed · {completedTasks.length}</span>
-            <span aria-hidden="true">{completedOpen ? "⌃" : "⌄"}</span>
-          </button>
+        <section className={`task-list-section task-completed-section${completedOpen ? "" : " is-collapsed"}`}>
+          <h2>
+            <button
+              className="task-completed-toggle"
+              type="button"
+              aria-expanded={completedOpen}
+              aria-controls="task-list-group-completed"
+              onClick={() => setCompletedOpen((open) => !open)}
+            >
+              <span className="task-list-chevron" aria-hidden="true">⌄</span>
+              <span>Completed</span>
+              <small>· {completedTasks.length} task{completedTasks.length === 1 ? "" : "s"}</small>
+            </button>
+          </h2>
 
           {completedOpen && (
-            <RevealOnScroll as="div" className="task-completed-list" maxDelay={80}>
+            <RevealOnScroll as="div" className="task-completed-list" id="task-list-group-completed" maxDelay={80}>
               {sortedCompletedTasks.length > 0 ? (
-                <div className="task-completed-grid">
+                <div className="task-list-group">
                   {sortedCompletedTasks.map((task) => (
-                    <TaskCard
+                    <TaskListRow
                       key={task.id}
                       task={task}
                       subjects={subjects}
-                      onOpen={openTaskDetails}
+                      onOpenTask={openTaskDetails}
+                      onToggleTask={handleToggleTask}
                       completed
                     />
                   ))}
@@ -464,91 +556,168 @@ function TasksPage({
           task={selectedTask}
           subjects={subjects}
           onSave={updateTask}
-          onToggle={toggleTask}
+          onToggle={handleToggleTask}
           onDelete={deleteTask}
           onClose={closeTaskDetails}
           returnFocusRef={taskReturnFocusRef}
           onScheduleCalendar={scheduleTaskInCalendar}
           onRemoveCalendar={removeTaskFromCalendar}
           onOpenCalendarSettings={openCalendarSettings}
+          validStudyDates={validStudyDates}
+          defaultStudyDuration={planningPreferences?.blockDurationMinutes || 45}
+          onSetStudyBlock={(dateKey) => handleSetStudyBlock(selectedTask, dateKey)}
         />
+      )}
+      {completionToast && (
+        <div className="task-completion-toast" role="status" aria-live="polite">
+          <span aria-hidden="true">✓</span>
+          <span>{completionToast}</span>
+        </div>
       )}
     </div>
   );
 }
 
-function TaskBoard({ columns, subjects, onOpenTask, onAddTask, boardMode, label }) {
-  const [expandedColumns, setExpandedColumns] = useState(() => new Set());
-
-  function toggleColumn(columnKey) {
-    setExpandedColumns((current) => {
-      const next = new Set(current);
-      if (next.has(columnKey)) next.delete(columnKey);
-      else next.add(columnKey);
-      return next;
-    });
+function TaskGroupList({
+  columns,
+  subjects,
+  onOpenTask,
+  onToggleTask,
+  collapsedGroups,
+  onToggleGroup,
+  emptyMessage,
+}) {
+  const populatedColumns = columns.filter((column) => column.tasks.length > 0);
+  if (populatedColumns.length === 0) {
+    return <p className="task-list-search-empty" role="status">{emptyMessage}</p>;
   }
-
   return (
-    <div className="task-board-scroll" role="region" aria-label={label} tabIndex={0}>
-      <div className="task-board">
-        {columns.map((column) => {
-          const columnKey = `${boardMode}:${column.id}`;
-          const expanded = expandedColumns.has(columnKey);
-          const visibleTasks = getVisibleTaskColumnItems(column.tasks, expanded);
-          const hiddenCount = Math.max(0, column.tasks.length - TASK_BOARD_VISIBLE_LIMIT);
-          const listId = `task-column-${columnKey.replace(/[^a-z0-9_-]/gi, "-")}`;
-
-          return <section
-            className={`task-board-column task-board-column-${column.kind || column.id}`}
-            key={column.id}
-          >
-            <header className="task-board-column-header">
-              <div>
-                <h2>{column.label}</h2>
-                {column.dateLabel && <span>{column.dateLabel}</span>}
-              </div>
-              <span aria-label={`${column.tasks.length} tasks`}>{column.tasks.length}</span>
-            </header>
-
-            <div className="task-board-column-list" id={listId}>
-              {column.tasks.length > 0 ? (
-                visibleTasks.map((task) => (
-                  <TaskCard
+    <div className="task-grouped-list">
+      {populatedColumns.map((column) => {
+        const collapsed = collapsedGroups.has(column.id);
+        const contentId = `task-list-group-${column.id.replace(/[^a-z0-9_-]/gi, "-")}`;
+        return (
+          <section className={`task-list-section is-${column.kind || column.id}${collapsed ? " is-collapsed" : ""}`} key={column.id}>
+            <h2>
+              <button
+                type="button"
+                aria-expanded={!collapsed}
+                aria-controls={contentId}
+                onClick={() => onToggleGroup(column.id)}
+              >
+                <span className="task-list-chevron" aria-hidden="true">⌄</span>
+                <span>{column.label}</span>
+                <small>· {column.tasks.length} task{column.tasks.length === 1 ? "" : "s"}</small>
+              </button>
+            </h2>
+            {!collapsed && (
+              <div className="task-list-group" id={contentId}>
+                {column.tasks.map((task) => (
+                  <TaskListRow
                     key={task.id}
                     task={task}
                     subjects={subjects}
-                    onOpen={onOpenTask}
+                    onOpenTask={onOpenTask}
+                    onToggleTask={onToggleTask}
                   />
-                ))
-              ) : (
-                <p className="task-board-column-empty">No tasks</p>
-              )}
-              {column.tasks.length > TASK_BOARD_VISIBLE_LIMIT && (
-                <button
-                  className="task-board-show-more"
-                  type="button"
-                  aria-expanded={expanded}
-                  aria-controls={listId}
-                  onClick={() => toggleColumn(columnKey)}
-                >
-                  {expanded ? "Show less" : `Show ${hiddenCount} more`}
-                </button>
-              )}
-            </div>
-            <button
-              className="task-board-add-task"
-              type="button"
-              aria-label={`Add task to ${column.label}`}
-              onClick={(event) => onAddTask(column, event.currentTarget)}
-            >
-              <span aria-hidden="true">+</span> Add task
-            </button>
+                ))}
+              </div>
+            )}
           </section>
-        })}
-      </div>
+        );
+      })}
     </div>
   );
+}
+
+function TaskListRow({ task, subjects, onOpenTask, onToggleTask, completed = false }) {
+  const subject = findSubjectProfile(subjects, task.subject);
+  const academicLabel = getTaskAcademicLabel(task);
+  const classification = academicLabel || formatTaskType(task.taskType);
+  const classificationTone = getClassificationTone(academicLabel);
+  const subjectStyle = subject ? { "--task-list-subject": subject.colour || subject.color } : undefined;
+  const dueLabel = completed ? formatTaskCompletionLabel(task) : formatTaskDueLabel(task);
+
+  async function toggleFromRow(event) {
+    const controls = [...document.querySelectorAll(".task-list-complete")];
+    const currentIndex = controls.indexOf(event.currentTarget);
+    const focusTarget = controls[currentIndex + 1] || controls[currentIndex - 1] || document.querySelector(".tasks-panel");
+    const saved = await onToggleTask(task.id);
+    if (saved) window.requestAnimationFrame(() => focusTarget?.focus());
+  }
+
+  return (
+    <article className={`task-list-row${completed ? " is-completed" : ""}`} style={subjectStyle}>
+      <button
+        type="button"
+        className="task-list-complete"
+        aria-label={`${completed ? "Reopen" : "Mark"} ${task.title} ${completed ? "" : "complete"}`.trim()}
+        aria-pressed={completed}
+        onClick={(event) => void toggleFromRow(event)}
+      >
+        <span aria-hidden="true">{completed ? "✓" : ""}</span>
+      </button>
+      <button
+        type="button"
+        className="task-list-row-main"
+        onClick={(event) => onOpenTask(task.id, event.currentTarget)}
+        aria-label={`Open task details for ${task.title}`}
+        data-tour="todo-task-actions"
+      >
+        <span className="task-list-subject">
+          <i aria-hidden="true" />
+          {task.subject || "No subject"}
+        </span>
+        <strong>{task.title}</strong>
+        <span className={`task-list-classification ${classificationTone}`}>{classification}</span>
+        <span className={`task-list-due ${completed ? "is-completed" : getDueTone(task)}`}>{dueLabel}</span>
+        <span className="task-list-effort">{getEffortLabel(Number(task.effort) || 2)} effort</span>
+        <span className="task-list-source">
+          {task.source === "classroom" && <TaskSourceBadge task={task} />}
+        </span>
+      </button>
+      <button
+        type="button"
+        className="task-list-details"
+        aria-label={`More options for ${task.title}`}
+        onClick={(event) => onOpenTask(task.id, event.currentTarget)}
+      >
+        ⋯
+      </button>
+    </article>
+  );
+}
+
+function getClassificationTone(label) {
+  if (label === "Summative") return "is-summative";
+  if (label === "Formative") return "is-formative";
+  if (label === "CFA") return "is-cfa";
+  return "";
+}
+
+function formatTaskType(value) {
+  const normalized = String(value || "homework").replace(/[-_]+/g, " ");
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+function parseLocalDate(dateKey) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateKey || ""));
+  return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null;
+}
+
+function getDueDayDifference(task, now = new Date()) {
+  const dueDate = parseLocalDate(task.dueDate);
+  if (!dueDate) return null;
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  return Math.round((dueDate - today) / 86400000);
+}
+
+function getDueTone(task) {
+  const difference = getDueDayDifference(task);
+  if (difference === null || difference > 1) return "is-future";
+  if (difference < 0) return "is-overdue";
+  return difference === 0 ? "is-today" : "is-tomorrow";
 }
 
 function mergeUniqueTasks(taskList) {

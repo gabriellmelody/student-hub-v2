@@ -1834,6 +1834,42 @@
   background: var(--surface-panel);
 }
 
+@media (min-width: 901px) and (min-height: 900px) {
+  .calendar-page {
+    height: calc(100dvh - var(--density-main-top) - var(--density-main-bottom));
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .calendar-workspace {
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  .calendar-month-panel:not(.calendar-week-panel) {
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .calendar-month-panel:not(.calendar-week-panel) .calendar-month-scroll {
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .calendar-month-panel:not(.calendar-week-panel) .calendar-grid {
+    min-height: 0;
+    grid-template-rows: repeat(6, minmax(112px, 1fr));
+  }
+
+  .calendar-month-panel:not(.calendar-week-panel) .calendar-day {
+    min-height: 0;
+  }
+}
+
 .calendar-day:hover {
   background: var(--surface-hover);
 }

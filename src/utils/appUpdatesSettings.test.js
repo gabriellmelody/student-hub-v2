@@ -34,10 +34,11 @@ test("version metadata is generated from package version", () => {
 });
 
 test("the current release contains the v9.3.0 student-facing highlights", () => {
-  assert.match(releaseNotes, /Smarter AI planning/);
+  assert.match(releaseNotes, /Clearer study planning/);
   assert.match(releaseNotes, /Better study recommendations/);
   assert.match(releaseNotes, /Improved Google connections/);
-  assert.match(releaseNotes, /More reliable Smart Planner/);
+  assert.match(releaseNotes, /More reliable plans/);
+  assert.doesNotMatch(releaseNotes, /Smart Planner|AI planning/);
   assert.doesNotMatch(releaseNotes, /service-role|AES encryption|Vercel function limits|JSON schemas/);
 });
 

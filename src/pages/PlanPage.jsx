@@ -15,22 +15,21 @@ import {
   buildStudyRecommendations,
   clearUnlockedFutureRecommendationOverrides,
   createRecommendationOverride,
+  filterValidMoveOverrides,
+  getDayStudyMinutes,
+  getHorizonStudyMinutes,
+  getRecommendationDurationMinutes,
+  isRecommendationEligibleOnDate,
+  PLAN_BLOCK_DURATION_OPTIONS,
 } from "../utils/studyRecommendations.js";
 
 const BLOCK_DURATION_OPTIONS = [20, 25, 30, 45, 60, 90];
 
-function formatWeekRange(startKey, endKey) {
+function formatHorizonRange(startKey, endKey) {
   const start = new Date(`${startKey}T12:00:00`);
   const end = new Date(`${endKey}T12:00:00`);
-  const sameMonth =
-    start.getMonth() === end.getMonth() &&
-    start.getFullYear() === end.getFullYear();
-
-  if (sameMonth) {
-    return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${end.toLocaleDateString(undefined, { day: "numeric" })}`;
-  }
-
-  return `${start.toLocaleDateString(undefined, { month: "short", day: "numeric" })}–${end.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+  const options = { weekday: "short", month: "short", day: "numeric" };
+  return `${start.toLocaleDateString(undefined, options)} → ${end.toLocaleDateString(undefined, options)}`;
 }
 
 function createPreferenceDraft(preferences) {
@@ -62,18 +61,21 @@ function RecommendationCard({
   onToggleLock,
   subjectColour,
   extra = false,
+  number = null,
+  onSwap,
 }) {
   const typeLabel = extra
     ? "Extra work"
     : RECOMMENDATION_TYPE_LABELS[recommendation.kind] || "Study";
   const assessmentIndicator = getAssessmentIndicator(recommendation);
-  const className = `study-recommendation-card is-${recommendation.kind}${extra ? " is-extra" : ""}${recommendation.locked ? " is-locked" : ""}${subjectColour ? " has-subject-colour" : ""}`;
+  const className = `study-recommendation-card is-${recommendation.kind}${extra ? " is-extra" : ""}${recommendation.locked ? " is-locked" : ""}${subjectColour ? " has-subject-colour" : ""}${number !== null ? " has-number" : ""}`;
 
   return (
     <article
       className={className}
       style={subjectColour ? { "--study-subject-colour": subjectColour } : undefined}
     >
+      {number !== null && <span className="study-recommendation-number" aria-hidden="true">{number}</span>}
       <button
         type="button"
         className="study-recommendation-open"
@@ -109,17 +111,25 @@ function RecommendationCard({
         )}
       </div>
       </button>
-      <button
-        type="button"
-        className="study-recommendation-lock"
-        aria-label={`${recommendation.locked ? "Unlock" : "Lock"} ${recommendation.title}`}
-        aria-pressed={recommendation.locked}
-        title={recommendation.locked ? "Unlock recommendation" : "Lock recommendation"}
-        onClick={onToggleLock}
-      >
-        <span className="study-lock-icon" aria-hidden="true" />
-        <span>{recommendation.locked ? "Locked" : "Lock"}</span>
-      </button>
+      <div className="study-recommendation-actions">
+        <button
+          type="button"
+          className="study-recommendation-lock"
+          aria-label={`${recommendation.locked ? "Unlock" : "Lock"} ${recommendation.title}`}
+          aria-pressed={recommendation.locked}
+          title={recommendation.locked ? "Unlock recommendation" : "Lock recommendation"}
+          onClick={onToggleLock}
+        >
+          <span className="study-lock-icon" aria-hidden="true" />
+          <span>{recommendation.locked ? "Locked" : "Lock"}</span>
+        </button>
+        {onSwap && (
+          <button type="button" className="study-recommendation-swap" onClick={onSwap}>
+            Swap
+          </button>
+        )}
+        <button type="button" className="study-recommendation-more" aria-label={`More details for ${recommendation.title}`} onClick={onOpen}>⋯</button>
+      </div>
     </article>
   );
 }
@@ -130,6 +140,8 @@ function RecommendationList({
   onToggleLock,
   subjectColours,
   compact = false,
+  optionalOpen = false,
+  onToggleOptional,
   emptyTitle = "Nothing recommended.",
   emptyMessage = "Add a routine in Study preferences if you want a regular fallback.",
   emptyAction = null,
@@ -146,8 +158,9 @@ function RecommendationList({
 
   return (
     <div className={compact ? "study-recommendation-list is-compact" : "study-recommendation-list"}>
-      {day.primary.map((recommendation, index) => (
-        <section
+      {day.primary.map((recommendation, index) => {
+        const slotIndex = recommendation.overrideSlotIndex ?? index;
+        return <section
           className={`study-recommendation-row is-priority-${index + 1}`}
           aria-labelledby={!compact ? `${day.dateKey}-priority-${index + 1}` : undefined}
           key={recommendation.id}
@@ -162,13 +175,15 @@ function RecommendationList({
           )}
           <RecommendationCard
             recommendation={recommendation}
-            duration={day.blockDurationMinutes}
-            onOpen={() => onOpenRecommendation(day.dateKey, index)}
-            onToggleLock={() => onToggleLock(day, recommendation, index)}
+            duration={getRecommendationDurationMinutes(recommendation, day.blockDurationMinutes)}
+            onOpen={() => onOpenRecommendation(day.dateKey, slotIndex)}
+            onToggleLock={() => onToggleLock(day, recommendation, slotIndex)}
             subjectColour={subjectColours.get(recommendation.subject)}
+            number={!compact ? index + 1 : null}
+            onSwap={() => onOpenRecommendation(day.dateKey, slotIndex)}
           />
-        </section>
-      ))}
+        </section>;
+      })}
 
       {day.extra.length > 0 && (
         <section className="study-recommendation-extra" aria-label="Extra work recommended">
@@ -177,45 +192,241 @@ function RecommendationList({
             <p>Your normal target is full, but this work still needs attention.</p>
           </div>
           <div className="study-recommendation-extra-grid">
-            {day.extra.map((recommendation, index) => (
-              <RecommendationCard
+            {day.extra.map((recommendation, index) => {
+              const slotIndex = recommendation.overrideSlotIndex ?? index + 3;
+              return <RecommendationCard
                 key={recommendation.id}
                 recommendation={recommendation}
-                duration={day.blockDurationMinutes}
-                onOpen={() => onOpenRecommendation(day.dateKey, index + 3)}
-                onToggleLock={() => onToggleLock(day, recommendation, index + 3)}
+                duration={getRecommendationDurationMinutes(recommendation, day.blockDurationMinutes)}
+                onOpen={() => onOpenRecommendation(day.dateKey, slotIndex)}
+                onToggleLock={() => onToggleLock(day, recommendation, slotIndex)}
                 subjectColour={subjectColours.get(recommendation.subject)}
                 extra
-              />
-            ))}
+              />;
+            })}
           </div>
         </section>
       )}
 
       {day.finishEarly && (
         <section className="study-recommendation-finish-early" aria-label="If you finish early">
-          <div>
-            <span className="eyebrow">If you finish early</span>
-            <p>Optional lower-priority work after your main study target.</p>
-          </div>
-          <RecommendationCard
-            recommendation={day.finishEarly}
-            duration={day.blockDurationMinutes}
-            onOpen={() => onOpenRecommendation(day.dateKey, 2)}
-            onToggleLock={() => onToggleLock(day, day.finishEarly, 2)}
-            subjectColour={subjectColours.get(day.finishEarly.subject)}
-          />
+          <button
+            type="button"
+            className="study-optional-toggle"
+            aria-expanded={optionalOpen}
+            onClick={onToggleOptional}
+          >
+            <span>{optionalOpen ? "Hide optional" : "+1 more optional"}</span>
+            <small>If you finish early</small>
+          </button>
+          {optionalOpen && (
+            <RecommendationCard
+              recommendation={day.finishEarly}
+              duration={getRecommendationDurationMinutes(day.finishEarly, day.blockDurationMinutes)}
+              onOpen={() => onOpenRecommendation(day.dateKey, day.finishEarly.overrideSlotIndex ?? 2)}
+              onToggleLock={() => onToggleLock(day, day.finishEarly, day.finishEarly.overrideSlotIndex ?? 2)}
+              subjectColour={subjectColours.get(day.finishEarly.subject)}
+              onSwap={() => onOpenRecommendation(day.dateKey, day.finishEarly.overrideSlotIndex ?? 2)}
+            />
+          )}
         </section>
       )}
     </div>
   );
 }
 
+function NextSevenRecommendation({
+  recommendation,
+  duration,
+  subjectColour,
+  onOpen,
+  onDragStart,
+  onDragEnd,
+  dragging = false,
+}) {
+  const typeLabel = RECOMMENDATION_TYPE_LABELS[recommendation.kind] || "Study";
+  return (
+    <button
+      type="button"
+      className={`study-horizon-recommendation is-${recommendation.kind}${dragging ? " is-dragging" : ""}`}
+      style={subjectColour ? { "--study-subject-colour": subjectColour } : undefined}
+      onClick={onOpen}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      aria-label={`View recommendation details for ${recommendation.title}`}
+    >
+      <i aria-hidden="true" />
+      <span>
+        <strong>{recommendation.subject} · {typeLabel}</strong>
+        <small>{recommendation.title}</small>
+      </span>
+      <b>{duration} min</b>
+    </button>
+  );
+}
+
+function NextSevenDays({
+  recommendations,
+  subjectColours,
+  expandedOptionalDays,
+  onToggleOptional,
+  onOpenRecommendation,
+  onOpenTask,
+  draggedSlot,
+  onDragStart,
+  onDragEnd,
+  onDropRecommendation,
+  isValidMoveDate,
+}) {
+  const totalBlocks = recommendations.days.reduce(
+    (sum, day) => sum + day.primary.length + day.extra.length,
+    0
+  );
+  const totalMinutes = getHorizonStudyMinutes(recommendations.days);
+
+  return (
+    <section className="panel study-horizon-panel" aria-labelledby="study-horizon-title">
+      <header className="study-horizon-header">
+        <div>
+          <h2 id="study-horizon-title">Next 7 Days</h2>
+          <p>{formatHorizonRange(recommendations.weekStart, recommendations.weekEnd)}</p>
+        </div>
+        <span>{totalBlocks} study block{totalBlocks === 1 ? "" : "s"} · {formatDuration(totalMinutes)}</span>
+      </header>
+
+      <div className="study-horizon-days">
+        {recommendations.days.map((day) => {
+          const mainRecommendations = [...day.primary, ...day.extra];
+          const optionalOpen = expandedOptionalDays.has(day.dateKey);
+          return (
+            <section
+              className={`study-horizon-day${day.isToday ? " is-today" : ""}${draggedSlot ? (isValidMoveDate(day.dateKey) ? " is-drop-valid" : " is-drop-invalid") : ""}`}
+              key={day.dateKey}
+              onDragOver={(event) => {
+                if (!draggedSlot) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = isValidMoveDate(day.dateKey) ? "move" : "none";
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                onDropRecommendation(day.dateKey);
+              }}
+            >
+              <header>
+                <strong>{day.date.toLocaleDateString(undefined, { weekday: "short", day: "numeric" })}</strong>
+                {day.isToday && <span className="study-today-label">Today</span>}
+              </header>
+              <div className="study-horizon-items">
+                {mainRecommendations.map((recommendation, index) => {
+                  const slotIndex = recommendation.overrideSlotIndex ?? (index < day.primary.length
+                    ? index
+                    : index - day.primary.length + 3);
+                  return (
+                    <NextSevenRecommendation
+                      key={recommendation.id}
+                      recommendation={recommendation}
+                      duration={getRecommendationDurationMinutes(recommendation, day.blockDurationMinutes)}
+                      subjectColour={subjectColours.get(recommendation.subject)}
+                      onOpen={() => onOpenRecommendation(day.dateKey, slotIndex)}
+                      onDragStart={(event) => onDragStart(event, day.dateKey, slotIndex)}
+                      onDragEnd={onDragEnd}
+                      dragging={draggedSlot?.dateKey === day.dateKey && draggedSlot?.slotIndex === slotIndex}
+                    />
+                  );
+                })}
+                {day.finishEarly && (
+                  <>
+                    <button
+                      type="button"
+                      className="study-horizon-optional-toggle"
+                      aria-expanded={optionalOpen}
+                      onClick={() => onToggleOptional(day.dateKey)}
+                    >
+                      {optionalOpen ? "Hide optional" : "+1 optional"}
+                    </button>
+                    {optionalOpen && (
+                      <NextSevenRecommendation
+                        recommendation={day.finishEarly}
+                        duration={getRecommendationDurationMinutes(day.finishEarly, day.blockDurationMinutes)}
+                        subjectColour={subjectColours.get(day.finishEarly.subject)}
+                        onOpen={() => onOpenRecommendation(day.dateKey, day.finishEarly.overrideSlotIndex ?? 2)}
+                        onDragStart={(event) => onDragStart(event, day.dateKey, day.finishEarly.overrideSlotIndex ?? 2)}
+                        onDragEnd={onDragEnd}
+                        dragging={draggedSlot?.dateKey === day.dateKey && draggedSlot?.slotIndex === (day.finishEarly.overrideSlotIndex ?? 2)}
+                      />
+                    )}
+                  </>
+                )}
+                {day.deadlines?.map((deadline) => (
+                  <button
+                    type="button"
+                    className="study-horizon-deadline"
+                    key={deadline.id}
+                    onClick={() => onOpenTask(deadline.taskId)}
+                  >
+                    <span>
+                      <strong>{deadline.subject} · {deadline.title}</strong>
+                      <small>Assessment date</small>
+                    </span>
+                    <b>{deadline.assessmentLabel}</b>
+                  </button>
+                ))}
+                {mainRecommendations.length === 0 && !day.finishEarly && day.deadlines?.length === 0 && (
+                  <span className="study-horizon-empty">No study blocks recommended.</span>
+                )}
+              </div>
+              <footer>
+                <strong>{mainRecommendations.length} block{mainRecommendations.length === 1 ? "" : "s"}</strong>
+                <span>{mainRecommendations.length > 0
+                  ? formatDuration(getDayStudyMinutes(day))
+                  : "Free day"}</span>
+              </footer>
+            </section>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function formatDuration(minutes) {
+  if (minutes <= 0) return "0 min";
+  const hours = Math.floor(minutes / 60);
+  const remaining = minutes % 60;
+  if (!hours) return `${remaining} min`;
+  return `${hours}h${remaining ? ` ${remaining}m` : ""}`;
+}
+
+function getDayRecommendationSlots(day) {
+  if (!day) return [];
+  return [
+    ...day.primary.map((recommendation, index) => ({
+      recommendation,
+      slotIndex: recommendation.overrideSlotIndex ?? index,
+    })),
+    ...(day.finishEarly ? [{
+      recommendation: day.finishEarly,
+      slotIndex: day.finishEarly.overrideSlotIndex ?? 2,
+    }] : []),
+    ...day.extra.map((recommendation, index) => ({
+      recommendation,
+      slotIndex: recommendation.overrideSlotIndex ?? index + 3,
+    })),
+  ];
+}
+
 function getRecommendationForSlot(day, slotIndex) {
-  if (!day) return null;
-  if (slotIndex <= 1) return day.primary[slotIndex] || null;
-  if (slotIndex === 2) return day.finishEarly || null;
-  return day.extra[slotIndex - 3] || null;
+  return getDayRecommendationSlots(day)
+    .find((entry) => entry.slotIndex === slotIndex)?.recommendation || null;
+}
+
+function getNextManualSlot(day) {
+  const occupiedSlots = new Set(getDayRecommendationSlots(day).map((entry) => entry.slotIndex));
+  for (let slotIndex = 3; slotIndex <= 12; slotIndex += 1) {
+    if (!occupiedSlots.has(slotIndex)) return slotIndex;
+  }
+  return null;
 }
 
 function formatRecommendationDate(value) {
@@ -238,10 +449,15 @@ function RecommendationDetailsModal({
   onOpenTask,
   onSwap,
   onToggleLock,
+  onMove,
+  onRemove,
+  onDurationChange,
+  validMoveDates,
   subjectColours,
 }) {
   const dialogRef = useRef(null);
   const returnFocusRef = useRef(document.activeElement);
+  const [moveDate, setMoveDate] = useState("");
   const typeLabel = RECOMMENDATION_TYPE_LABELS[recommendation.kind] || "Study";
 
   useEffect(() => {
@@ -324,8 +540,46 @@ function RecommendationDetailsModal({
               )}
               <span>{recommendation.assessmentLabel || typeLabel}</span>
               <span className={recommendation.locked ? "is-locked" : ""}>
-                {recommendation.locked ? "Locked for Redo week" : "Updates with Redo week"}
+                {recommendation.locked ? "Locked for Redo plan" : "Updates with Redo plan"}
               </span>
+            </div>
+
+            <div className="study-detail-manual-controls" aria-label="Manual plan controls">
+              <label>
+                <span>Duration</span>
+                <select
+                  value={duration}
+                  disabled={saving}
+                  onChange={(event) => onDurationChange(Number(event.target.value))}
+                >
+                  {Array.from(new Set([...PLAN_BLOCK_DURATION_OPTIONS, duration]))
+                    .sort((first, second) => first - second)
+                    .map((minutes) => (
+                      <option key={minutes} value={minutes}>{minutes} min</option>
+                    ))}
+                </select>
+              </label>
+              <label>
+                <span>Move to…</span>
+                <select
+                  value={moveDate}
+                  disabled={saving || validMoveDates.length === 0}
+                  onChange={(event) => setMoveDate(event.target.value)}
+                >
+                  <option value="">Choose a day</option>
+                  {validMoveDates.map((date) => (
+                    <option key={date.dateKey} value={date.dateKey}>{date.label}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={saving || !moveDate}
+                onClick={() => onMove(moveDate)}
+              >
+                Move block
+              </button>
             </div>
 
             <div className="study-detail-actions">
@@ -347,6 +601,14 @@ function RecommendationDetailsModal({
                   Open Task
                 </button>
               )}
+              <button
+                type="button"
+                className="study-detail-remove"
+                disabled={saving}
+                onClick={onRemove}
+              >
+                Remove study block
+              </button>
             </div>
           </div>
 
@@ -526,11 +788,13 @@ function PlanPage({
   syncError = null,
 }) {
   const [view, setView] = useState("today");
+  const [expandedOptionalDays, setExpandedOptionalDays] = useState(() => new Set());
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [overrideSaving, setOverrideSaving] = useState(false);
   const [redoRevision, setRedoRevision] = useState(0);
   const [redoMessage, setRedoMessage] = useState("");
+  const [draggedSlot, setDraggedSlot] = useState(null);
   const historicalDaysRef = useRef([]);
   const closePreferences = useCallback(() => setPreferencesOpen(false), []);
   const closeRecommendationDetails = useCallback(() => setSelectedSlot(null), []);
@@ -563,6 +827,17 @@ function PlanPage({
   const selectedRecommendation = selectedDay
     ? getRecommendationForSlot(selectedDay, selectedSlot.slotIndex)
     : null;
+  const selectedMoveDates = selectedRecommendation
+    ? recommendations.days
+      .filter((day) =>
+        day.dateKey !== selectedDay?.dateKey &&
+        isRecommendationEligibleOnDate(selectedRecommendation, day.dateKey, recommendations.todayKey)
+      )
+      .map((day) => ({
+        dateKey: day.dateKey,
+        label: day.date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" }),
+      }))
+    : [];
 
   useEffect(() => {
     historicalDaysRef.current = recommendations.days;
@@ -580,7 +855,13 @@ function PlanPage({
   async function persistRecommendationOverrides(nextOverrides) {
     setOverrideSaving(true);
     setRedoMessage("");
-    const saved = await updatePlanningPreferences({ recommendationOverrides: nextOverrides });
+    const saved = await updatePlanningPreferences({
+      recommendationOverrides: filterValidMoveOverrides(
+        nextOverrides,
+        tasks,
+        recommendations.todayKey
+      ),
+    });
     setOverrideSaving(false);
     return Boolean(saved);
   }
@@ -611,6 +892,10 @@ function PlanPage({
         recommendation,
         locked: true,
         manual: Boolean(existing?.manual || recommendation.manualOverride),
+        originDateKey: existing?.originDateKey || recommendation.manualOriginDateKey,
+        originSlotIndex: existing?.originSlotIndex ?? recommendation.manualOriginSlotIndex,
+        durationMinutes: existing?.durationMinutes || recommendation.durationMinutes,
+        added: Boolean(existing?.added || recommendation.manualAdded),
       });
       if (!nextOverride) return false;
       nextOverrides = upsertOverride(overrides, nextOverride);
@@ -620,6 +905,10 @@ function PlanPage({
 
   async function handleSwapRecommendation(alternative) {
     if (!selectedDay || !selectedSlot) return false;
+    if (!isRecommendationEligibleOnDate(alternative, selectedDay.dateKey, recommendations.todayKey)) {
+      setRedoMessage("That recommendation cannot be placed on this day.");
+      return false;
+    }
     const overrides = preferences.recommendationOverrides || [];
     const existing = overrides.find((override) =>
       override.dateKey === selectedDay.dateKey && override.slotIndex === selectedSlot.slotIndex
@@ -630,12 +919,164 @@ function PlanPage({
       recommendation: alternative,
       locked: Boolean(existing?.locked),
       manual: true,
+      originDateKey: existing?.originDateKey || selectedRecommendation.manualOriginDateKey,
+      originSlotIndex: existing?.originSlotIndex ?? selectedRecommendation.manualOriginSlotIndex,
+      durationMinutes: existing?.durationMinutes || selectedRecommendation.durationMinutes,
+      added: Boolean(existing?.added || selectedRecommendation.manualAdded),
     });
     if (!nextOverride) return false;
     return persistRecommendationOverrides(upsertOverride(overrides, nextOverride));
   }
 
-  async function handleRedoWeek() {
+  async function handleMoveRecommendation(sourceDateKey, sourceSlotIndex, destinationDateKey) {
+    const sourceDay = recommendations.days.find((day) => day.dateKey === sourceDateKey);
+    const destinationDay = recommendations.days.find((day) => day.dateKey === destinationDateKey);
+    const recommendation = getRecommendationForSlot(sourceDay, sourceSlotIndex);
+    if (!sourceDay || !destinationDay || !recommendation) return false;
+    if (
+      sourceDateKey === destinationDateKey ||
+      !isRecommendationEligibleOnDate(recommendation, destinationDateKey, recommendations.todayKey)
+    ) {
+      setRedoMessage("That block must stay before its deadline or assessment date.");
+      return false;
+    }
+
+    const overrides = preferences.recommendationOverrides || [];
+    const existing = overrides.find((override) =>
+      override.dateKey === sourceDateKey && override.slotIndex === sourceSlotIndex
+    );
+    const originDateKey = recommendation.manualOriginDateKey || existing?.originDateKey || sourceDateKey;
+    const originSlotIndex = recommendation.manualOriginSlotIndex ?? existing?.originSlotIndex ?? sourceSlotIndex;
+    const manuallyAdded = Boolean(existing?.added || recommendation.manualAdded);
+    const destinationSlotIndex = destinationDateKey === originDateKey
+      ? originSlotIndex
+      : getNextManualSlot(destinationDay);
+    if (destinationSlotIndex === null) {
+      setRedoMessage("That day already has the maximum number of manual study blocks.");
+      return false;
+    }
+
+    let nextOverrides = overrides.filter((override) =>
+      !(override.dateKey === sourceDateKey && override.slotIndex === sourceSlotIndex)
+    );
+    nextOverrides = nextOverrides.filter((override) =>
+      !(override.dateKey === originDateKey && override.slotIndex === originSlotIndex)
+    );
+
+    if (destinationDateKey !== originDateKey) {
+      const removalOverride = createRecommendationOverride({
+        dateKey: originDateKey,
+        slotIndex: originSlotIndex,
+        recommendation,
+        locked: Boolean(existing?.locked || recommendation.locked),
+        manual: true,
+        removed: true,
+        added: manuallyAdded,
+        originDateKey,
+        originSlotIndex,
+        durationMinutes: existing?.durationMinutes || recommendation.durationMinutes,
+      });
+      if (!removalOverride) return false;
+      nextOverrides = upsertOverride(nextOverrides, removalOverride);
+    }
+
+    const destinationOverride = createRecommendationOverride({
+      dateKey: destinationDateKey,
+      slotIndex: destinationSlotIndex,
+      recommendation,
+      locked: Boolean(existing?.locked || recommendation.locked),
+      manual: true,
+      added: manuallyAdded,
+      originDateKey,
+      originSlotIndex,
+      durationMinutes: existing?.durationMinutes || recommendation.durationMinutes,
+    });
+    if (!destinationOverride) return false;
+    const saved = await persistRecommendationOverrides(upsertOverride(nextOverrides, destinationOverride));
+    if (saved) {
+      setRedoMessage(`Moved to ${destinationDay.date.toLocaleDateString(undefined, { weekday: "long" })}.`);
+      setSelectedSlot(null);
+    }
+    return saved;
+  }
+
+  async function handleDurationChange(durationMinutes) {
+    if (!selectedDay || !selectedSlot || !selectedRecommendation) return false;
+    const overrides = preferences.recommendationOverrides || [];
+    const existing = overrides.find((override) =>
+      override.dateKey === selectedDay.dateKey && override.slotIndex === selectedSlot.slotIndex
+    );
+    const nextOverride = createRecommendationOverride({
+      dateKey: selectedDay.dateKey,
+      slotIndex: selectedSlot.slotIndex,
+      recommendation: selectedRecommendation,
+      locked: Boolean(existing?.locked || selectedRecommendation.locked),
+      manual: true,
+      originDateKey: existing?.originDateKey || selectedRecommendation.manualOriginDateKey,
+      originSlotIndex: existing?.originSlotIndex ?? selectedRecommendation.manualOriginSlotIndex,
+      durationMinutes,
+      added: Boolean(existing?.added || selectedRecommendation.manualAdded),
+    });
+    if (!nextOverride) return false;
+    const saved = await persistRecommendationOverrides(upsertOverride(overrides, nextOverride));
+    if (saved) setRedoMessage("Block duration updated.");
+    return saved;
+  }
+
+  async function handleRemoveRecommendation() {
+    if (!selectedDay || !selectedSlot || !selectedRecommendation) return false;
+    const overrides = preferences.recommendationOverrides || [];
+    const existing = overrides.find((override) =>
+      override.dateKey === selectedDay.dateKey && override.slotIndex === selectedSlot.slotIndex
+    );
+    const originDateKey = selectedRecommendation.manualOriginDateKey || existing?.originDateKey || selectedDay.dateKey;
+    const originSlotIndex = selectedRecommendation.manualOriginSlotIndex ?? existing?.originSlotIndex ?? selectedSlot.slotIndex;
+    const manuallyAdded = Boolean(existing?.added || selectedRecommendation.manualAdded);
+    let nextOverrides = overrides.filter((override) => {
+      const isCurrent = override.dateKey === selectedDay.dateKey && override.slotIndex === selectedSlot.slotIndex;
+      const isMovePair = override.originDateKey === originDateKey && override.originSlotIndex === originSlotIndex;
+      return !isCurrent && !isMovePair;
+    });
+
+    if (!manuallyAdded) {
+      const removalOverride = createRecommendationOverride({
+        dateKey: originDateKey,
+        slotIndex: originSlotIndex,
+        recommendation: selectedRecommendation,
+        manual: true,
+        removed: true,
+        durationMinutes: existing?.durationMinutes || selectedRecommendation.durationMinutes,
+      });
+      if (!removalOverride) return false;
+      nextOverrides = upsertOverride(nextOverrides, removalOverride);
+    }
+
+    const saved = await persistRecommendationOverrides(nextOverrides);
+    if (saved) {
+      setRedoMessage("Study block removed.");
+      setSelectedSlot(null);
+    }
+    return saved;
+  }
+
+  function handleRecommendationDragStart(event, dateKey, slotIndex) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", `${dateKey}:${slotIndex}`);
+    setDraggedSlot({ dateKey, slotIndex });
+  }
+
+  function handleRecommendationDragEnd() {
+    setDraggedSlot(null);
+  }
+
+  async function handleRecommendationDrop(destinationDateKey) {
+    if (!draggedSlot) return;
+    const source = draggedSlot;
+    setDraggedSlot(null);
+    await handleMoveRecommendation(source.dateKey, source.slotIndex, destinationDateKey);
+  }
+
+  async function handleRedoPlan() {
     const nextOverrides = clearUnlockedFutureRecommendationOverrides(
       preferences.recommendationOverrides,
       recommendations.todayKey
@@ -643,7 +1084,16 @@ function PlanPage({
     const saved = await persistRecommendationOverrides(nextOverrides);
     if (!saved) return;
     setRedoRevision((current) => current + 1);
-    setRedoMessage("Week updated");
+    setRedoMessage("Plan updated");
+  }
+
+  function toggleOptionalDay(dateKey) {
+    setExpandedOptionalDays((current) => {
+      const next = new Set(current);
+      if (next.has(dateKey)) next.delete(dateKey);
+      else next.add(dateKey);
+      return next;
+    });
   }
 
   function openRecommendationDetails(dateKey, slotIndex) {
@@ -654,7 +1104,7 @@ function PlanPage({
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     const tablist = event.currentTarget.closest('[role="tablist"]');
-    const nextView = event.key === "ArrowLeft" || event.key === "Home" ? "today" : "week";
+    const nextView = event.key === "ArrowLeft" || event.key === "Home" ? "today" : "next7";
     setView(nextView);
     window.requestAnimationFrame(() => {
       tablist
@@ -695,23 +1145,22 @@ function PlanPage({
             <button
               type="button"
               role="tab"
-              data-view="week"
-              className={view === "week" ? "is-active" : ""}
-              aria-selected={view === "week"}
-              tabIndex={view === "week" ? 0 : -1}
+              data-view="next7"
+              className={view === "next7" ? "is-active" : ""}
+              aria-selected={view === "next7"}
+              tabIndex={view === "next7" ? 0 : -1}
               onKeyDown={handleViewTabKeyDown}
-              onClick={() => setView("week")}
+              onClick={() => setView("next7")}
             >
-              Week
+              Next 7 Days
             </button>
           </div>
           <div className="study-plan-toolbar-actions">
-            <span>{recommendations.dailyBlockCount} block{recommendations.dailyBlockCount === 1 ? "" : "s"} · {recommendations.blockDurationMinutes} min each</span>
             <button type="button" className="secondary-button" onClick={() => setPreferencesOpen(true)}>
               Edit preferences
             </button>
-            <button type="button" className="secondary-button" disabled={overrideSaving} onClick={handleRedoWeek}>
-              {overrideSaving ? "Updating…" : "Redo week"}
+            <button type="button" className="secondary-button" disabled={overrideSaving} onClick={handleRedoPlan}>
+              {overrideSaving ? "Updating…" : "Redo plan"}
             </button>
           </div>
         </div>
@@ -739,6 +1188,8 @@ function PlanPage({
             onOpenRecommendation={openRecommendationDetails}
             onToggleLock={handleToggleLock}
             subjectColours={subjectColours}
+            optionalOpen={expandedOptionalDays.has(recommendations.today?.dateKey)}
+            onToggleOptional={() => toggleOptionalDay(recommendations.today?.dateKey)}
             emptyTitle="No recommendations today"
             emptyMessage={subjects.length === 0
               ? "Add a Subject or task to start building study recommendations."
@@ -746,37 +1197,28 @@ function PlanPage({
           />
         </section>
       ) : (
-        <section className="study-week-panel" aria-labelledby="study-week-title">
-          <header>
-            <div>
-              <span className="eyebrow">Week</span>
-              <h2 id="study-week-title">{formatWeekRange(recommendations.weekStart, recommendations.weekEnd)}</h2>
-            </div>
-            <span>Monday–Sunday</span>
-          </header>
-          <div className="study-week-grid">
-            {recommendations.days.map((day) => (
-              <section className={`study-week-day${day.isToday ? " is-today" : ""}${day.historical ? " is-past" : ""}`} key={day.dateKey}>
-                <header>
-                  <div>
-                    <h3>{day.label}</h3>
-                    <span>{day.date.toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-                  </div>
-                  {day.isToday && <span className="study-today-label">Today</span>}
-                </header>
-                <RecommendationList
-                  day={day}
-                  onOpenRecommendation={openRecommendationDetails}
-                  onToggleLock={handleToggleLock}
-                  subjectColours={subjectColours}
-                  compact
-                  emptyTitle={day.historical ? "Past day" : "No recommendations"}
-                  emptyMessage={day.historical ? "Past recommendations are left unchanged." : "No deadline work or routine study."}
-                />
-              </section>
-            ))}
-          </div>
-        </section>
+        <NextSevenDays
+          recommendations={recommendations}
+          subjectColours={subjectColours}
+          expandedOptionalDays={expandedOptionalDays}
+          onToggleOptional={toggleOptionalDay}
+          onOpenRecommendation={openRecommendationDetails}
+          onOpenTask={openTaskDetails}
+          draggedSlot={draggedSlot}
+          onDragStart={handleRecommendationDragStart}
+          onDragEnd={handleRecommendationDragEnd}
+          onDropRecommendation={handleRecommendationDrop}
+          isValidMoveDate={(dateKey) => {
+            if (!draggedSlot || dateKey === draggedSlot.dateKey) return false;
+            const sourceDay = recommendations.days.find((day) => day.dateKey === draggedSlot.dateKey);
+            const recommendation = getRecommendationForSlot(sourceDay, draggedSlot.slotIndex);
+            return Boolean(recommendation) && isRecommendationEligibleOnDate(
+              recommendation,
+              dateKey,
+              recommendations.todayKey
+            );
+          }}
+        />
       )}
 
       {preferencesOpen && (
@@ -791,7 +1233,7 @@ function PlanPage({
         <RecommendationDetailsModal
           day={selectedDay}
           recommendation={selectedRecommendation}
-          duration={selectedDay.blockDurationMinutes}
+          duration={getRecommendationDurationMinutes(selectedRecommendation, selectedDay.blockDurationMinutes)}
           saving={overrideSaving}
           onClose={closeRecommendationDetails}
           onOpenTask={(taskId) => {
@@ -804,6 +1246,14 @@ function PlanPage({
             selectedRecommendation,
             selectedSlot.slotIndex
           )}
+          onMove={(destinationDateKey) => handleMoveRecommendation(
+            selectedDay.dateKey,
+            selectedSlot.slotIndex,
+            destinationDateKey
+          )}
+          onDurationChange={handleDurationChange}
+          onRemove={handleRemoveRecommendation}
+          validMoveDates={selectedMoveDates}
           subjectColours={subjectColours}
         />
       )}

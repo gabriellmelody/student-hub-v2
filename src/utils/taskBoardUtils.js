@@ -72,6 +72,40 @@ function parseTaskDate(dateKey) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function formatTaskDueTime(value, locale) {
+  const match = /^(\d{1,2}):(\d{2})/.exec(String(value || ""));
+  if (!match) return "";
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return "";
+  const date = new Date(2000, 0, 1, hours, minutes);
+  return date.toLocaleTimeString(locale, { hour: "numeric", minute: "2-digit" });
+}
+
+export function formatTaskDueLabel(task, now = new Date(), locale) {
+  const dueDate = parseTaskDate(task?.dueDate);
+  if (!dueDate) return "Unscheduled";
+
+  const today = startOfLocalDay(now);
+  const difference = Math.round((dueDate - today) / 86400000);
+  const dueTime = formatTaskDueTime(task?.dueTime, locale);
+  const suffix = dueTime ? ` · ${dueTime}` : "";
+  if (difference < 0) return `Overdue${suffix}`;
+  if (difference === 0) return `Due today${suffix}`;
+  if (difference === 1) return `Due tomorrow${suffix}`;
+  if (difference <= 3) return `Due in ${difference} days${suffix}`;
+  return `Due ${dueDate.toLocaleDateString(locale, { month: "short", day: "numeric" })}${suffix}`;
+}
+
+export function formatTaskCompletionLabel(task, locale) {
+  const value = task?.completedAt;
+  if (value == null || value === "") return "Completed";
+  const numericValue = Number(value);
+  const date = new Date(Number.isFinite(numericValue) ? numericValue : value);
+  if (Number.isNaN(date.getTime())) return "Completed";
+  return `Completed ${date.toLocaleDateString(locale, { month: "short", day: "numeric" })}`;
+}
+
 function getTaskDeadline(task) {
   const date = parseTaskDate(task?.dueDate);
   if (!date) return null;
@@ -108,6 +142,9 @@ function sortColumnTasks(tasks) {
 }
 
 export function getTaskAcademicLabel(task) {
+  const tags = Array.isArray(task?.detectedTags) ? task.detectedTags.join(" ") : "";
+  const searchable = `${task?.title || ""} ${task?.description || ""} ${tags}`;
+  if (/\bc\s*[.-]?\s*f\s*[.-]?\s*a\b|common\s+formative\s+assessment/i.test(searchable)) return "CFA";
   const classification = getEffectiveTaskClassification(task).assessmentClassification;
   if (classification === "formative") return "Formative";
   if (classification === "summative") return "Summative";
@@ -118,29 +155,20 @@ export function createDueDateBoardColumns(tasks, now = new Date()) {
   const eligibleTasks = (Array.isArray(tasks) ? tasks : []).filter(isEligibleBoardTask);
   const today = startOfLocalDay(now);
   const todayKey = formatDateKey(today);
-  const rollingDates = Array.from({ length: 6 }, (_, index) => addLocalDays(today, index));
-  const finalDate = rollingDates[rollingDates.length - 1];
+  const tomorrow = addLocalDays(today, 1);
+  const finalDate = addLocalDays(today, 6);
   const columns = [
     { id: "overdue", label: "Overdue", kind: "overdue", tasks: [] },
-    ...rollingDates.map((date, index) => ({
-      id: `date:${formatDateKey(date)}`,
-      label:
-        index === 0
-          ? "Today"
-          : index === 1
-            ? "Tomorrow"
-            : date.toLocaleDateString("en-US", { weekday: "long" }),
-      dateLabel: date.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
-      dateKey: formatDateKey(date),
-      kind: "date",
-      tasks: [],
-    })),
+    { id: `date:${todayKey}`, label: "Today", dateKey: todayKey, kind: "date", tasks: [] },
+    { id: `date:${formatDateKey(tomorrow)}`, label: "Tomorrow", dateKey: formatDateKey(tomorrow), kind: "date", tasks: [] },
+    { id: "next-seven-days", label: "Next 7 Days", kind: "range", tasks: [] },
     { id: "later", label: "Later", kind: "later", tasks: [] },
     { id: "unscheduled", label: "Unscheduled", kind: "unscheduled", tasks: [] },
   ];
   const overdueColumn = columns[0];
   const laterColumn = columns[columns.length - 2];
   const unscheduledColumn = columns[columns.length - 1];
+  const nextSevenDaysColumn = columns.find((column) => column.id === "next-seven-days");
   const dateColumns = new Map(
     columns.filter((column) => column.kind === "date").map((column) => [column.dateKey, column])
   );
@@ -162,6 +190,8 @@ export function createDueDateBoardColumns(tasks, now = new Date()) {
       overdueColumn.tasks.push(task);
     } else if (dateColumns.has(dueKey)) {
       dateColumns.get(dueKey).tasks.push(task);
+    } else if (dueDate <= finalDate) {
+      nextSevenDaysColumn.tasks.push(task);
     } else if (dueDate > finalDate) {
       laterColumn.tasks.push(task);
     }

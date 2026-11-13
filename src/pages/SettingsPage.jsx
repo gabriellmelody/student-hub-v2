@@ -50,7 +50,6 @@ import {
   loadGoogleCalendarAccountMeta,
   reconcileGoogleCalendarAccountStorage,
 } from "../utils/googleCalendarStorage.js";
-import { formatSmartPlannerResetTime } from "../utils/smartPlannerUtils.js";
 import {
   isValidSubjectColour,
   suggestSubjectColour,
@@ -568,9 +567,6 @@ function SettingsPage({
   initialView = "hub",
   classroomCallbackStatus = null,
   googleCalendarCallbackStatus = null,
-  smartPlannerStatus,
-  onRefreshSmartPlannerStatus,
-  onOpenSmartPlanner,
   onReplayTour,
   activeGuidedTourId = "",
   releaseWelcomeOpen = false,
@@ -1455,9 +1451,6 @@ function SettingsPage({
           updateMockClassroomCourseSubject={updateMockClassroomCourseSubject}
           classroomCallbackStatus={classroomCallbackStatus}
           googleCalendarCallbackStatus={googleCalendarCallbackStatus}
-          smartPlannerStatus={smartPlannerStatus}
-          onRefreshSmartPlannerStatus={onRefreshSmartPlannerStatus}
-          onOpenSmartPlanner={onOpenSmartPlanner}
           activeGuidedTourId={activeGuidedTourId}
           releaseWelcomeOpen={releaseWelcomeOpen}
           classroomSetupTourRequest={classroomSetupTourRequest}
@@ -1491,7 +1484,6 @@ function SettingsPage({
             classroomCallbackStatus?.result === "connected" ? true : undefined
           }
           calendarConnected={Boolean(loadGoogleCalendarAccountMeta()?.accountId)}
-          smartPlannerStatus={smartPlannerStatus}
           onReplayTour={onReplayTour}
         />
         )}
@@ -1702,9 +1694,6 @@ function IntegrationsSettings({
   updateMockClassroomCourseSubject,
   classroomCallbackStatus,
   googleCalendarCallbackStatus,
-  smartPlannerStatus,
-  onRefreshSmartPlannerStatus,
-  onOpenSmartPlanner,
   activeGuidedTourId = "",
   releaseWelcomeOpen = false,
   classroomSetupTourRequest = 0,
@@ -1990,10 +1979,6 @@ function IntegrationsSettings({
       successToast ||
       googleOAuthPopupState.provider
   );
-
-  useEffect(() => {
-    onRefreshSmartPlannerStatus?.();
-  }, [onRefreshSmartPlannerStatus]);
 
   useEffect(() => {
     return () => {
@@ -2786,6 +2771,9 @@ function IntegrationsSettings({
 
   async function startGoogleRedirectConnection(provider) {
     const config = getGooglePopupConfig(provider);
+    if (provider === "classroom" && activeGuidedTourId === CLASSROOM_SETUP_TOUR_ID) {
+      saveClassroomSetupResume("load-classes");
+    }
     const response = await fetch(`${config.fallbackHref}?mode=redirect`, {
       headers: getIntegrationAuthHeaders(authAccessToken, { Accept: "application/json" }),
     });
@@ -3961,7 +3949,7 @@ function IntegrationsSettings({
           onSetSyncSettings={setClassroomSyncSettings}
           onUpdateSyncSettings={saveClassroomSyncSettings}
           onSyncNow={onSyncClassroomNow}
-          onConnect={() => startGooglePopupConnection("classroom")}
+          onConnect={() => startGoogleRedirectConnection("classroom")}
           onBack={() => setRealClassroomManagerPageOpen(false)}
         />
 
@@ -4061,8 +4049,6 @@ function IntegrationsSettings({
               googleCalendarSession={googleCalendarSession}
               googleCalendarCalendars={googleCalendarCalendars}
               googleCalendarPreferences={googleCalendarPreferences}
-              googleIdentityStatus={googleIdentityStatus}
-              googleOAuthPopupState={googleOAuthPopupState}
               realClassroomLinkedSubjectCount={
                 Object.keys(realClassroomCourseSubjectLinks).length
               }
@@ -4073,14 +4059,8 @@ function IntegrationsSettings({
               onPreview={() => setShowMockPreview(true)}
               onCheckRealClassroomSetup={checkRealClassroomSetup}
               onLoadRealClassroomCourses={loadRealClassroomCourses}
-              onConnectGooglePopup={startGooglePopupConnection}
-              onGoogleRedirect={startGoogleRedirectConnection}
+              onConnectGoogleRedirect={startGoogleRedirectConnection}
               onDisconnectGoogle={disconnectGoogleIntegration}
-              onClassroomRedirect={() => {
-                if (activeGuidedTourId === CLASSROOM_SETUP_TOUR_ID) {
-                  saveClassroomSetupResume("load-classes");
-                }
-              }}
               realClassroomConnectButtonRef={realClassroomConnectButtonRef}
               onManageRealClassroom={() =>
                 setRealClassroomManagerPageOpen(true)
@@ -4090,9 +4070,6 @@ function IntegrationsSettings({
               onManageGoogleCalendars={() =>
                 setGoogleCalendarManagerPageOpen(true)
               }
-              smartPlannerStatus={smartPlannerStatus}
-              onRefreshSmartPlannerStatus={onRefreshSmartPlannerStatus}
-              onOpenSmartPlanner={onOpenSmartPlanner}
             />
           ))}
         </div>
@@ -4216,8 +4193,6 @@ function IntegrationCard({
   googleCalendarSession,
   googleCalendarCalendars,
   googleCalendarPreferences,
-  googleIdentityStatus,
-  googleOAuthPopupState,
   onLink,
   onSync,
   onUnlink,
@@ -4225,23 +4200,17 @@ function IntegrationCard({
   onPreview,
   onCheckRealClassroomSetup,
   onLoadRealClassroomCourses,
-  onConnectGooglePopup,
-  onGoogleRedirect,
+  onConnectGoogleRedirect,
   onDisconnectGoogle,
-  onClassroomRedirect,
   realClassroomConnectButtonRef,
   onManageRealClassroom,
   onLoadGoogleCalendars,
   googleCalendarConnectButtonRef,
   onManageGoogleCalendars,
-  smartPlannerStatus,
-  onRefreshSmartPlannerStatus,
-  onOpenSmartPlanner,
 }) {
   const isClassroom = integration.id === "google-classroom";
   const isRealClassroom = integration.id === "real-google-classroom";
   const isGoogleCalendar = integration.id === "google-calendar";
-  const isSmartPlanner = integration.id === "ai-planner";
   const isLinkedSample = isClassroom && classroomConnection.linked;
   const status = isClassroom
     ? isLinkedSample
@@ -4255,66 +4224,22 @@ function IntegrationCard({
       ? googleCalendarSession.connected
         ? "linked"
         : "not-linked"
-      : isSmartPlanner
-        ? smartPlannerStatus?.error
-          ? "unavailable"
-          : smartPlannerStatus?.loading
-            ? "checking"
-            : smartPlannerStatus?.status === "ready"
-              ? "ready"
-              : smartPlannerStatus?.status === "daily_limit_reached"
-                ? "daily-limit-reached"
-                : smartPlannerStatus?.status === "unavailable" ||
-                    smartPlannerStatus?.status === "configuration_error"
-                  ? "unavailable"
-                  : "checking"
-        : integration.status;
+      : integration.status;
   const { includedCount } = getRealClassroomCourseCounts(
     realClassroomCourses.courses,
     realClassroomCourseSelections
   );
-  const popupProvider = isRealClassroom
-    ? "classroom"
-    : isGoogleCalendar
-      ? "calendar"
-      : null;
-  const isPopupConnecting =
-    popupProvider && googleOAuthPopupState.provider === popupProvider;
-  const popupMessage =
-    popupProvider && googleOAuthPopupState.messageProvider === popupProvider
-      ? googleOAuthPopupState.message
-      : "";
-  const popupError =
-    popupProvider && googleOAuthPopupState.errorProvider === popupProvider
-      ? googleOAuthPopupState.error
-      : "";
-  const showRedirectFallback =
-    popupProvider &&
-    (googleOAuthPopupState.fallbackProvider === popupProvider ||
-      googleIdentityStatus.error);
-  const popupConnectDisabled =
-    Boolean(isPopupConnecting) ||
-    googleIdentityStatus.loading ||
-    (!googleIdentityStatus.ready && !googleIdentityStatus.error);
   const integrationIconId = isRealClassroom
     ? "school"
     : isGoogleCalendar
       ? "calendar"
-      : isSmartPlanner
-        ? "sparkles"
-        : "school";
+      : "school";
 
   return (
     <article
       id={isRealClassroom ? "google-classroom" : isGoogleCalendar ? "google-calendar" : undefined}
       className={`integration-card ${highlightedSettingId === (isRealClassroom ? "google-classroom" : isGoogleCalendar ? "google-calendar" : "") ? "settings-target-highlight" : ""}`}
-      data-tour={
-        isSmartPlanner
-          ? "smart-planner-status"
-          : isRealClassroom
-            ? "classroom-setup-card"
-            : undefined
-      }
+      data-tour={isRealClassroom ? "classroom-setup-card" : undefined}
     >
       <div className="integration-card-heading">
         <span className="integration-provider-mark" aria-hidden="true">
@@ -4365,9 +4290,6 @@ function IntegrationCard({
           preferences={googleCalendarPreferences}
         />
       )}
-      {isSmartPlanner && (
-        <SmartPlannerIntegrationStatus status={smartPlannerStatus} />
-      )}
       {isLinkedSample && (
         <dl className="integration-sync-meta" aria-label="Sample sync status">
           <div>
@@ -4389,20 +4311,6 @@ function IntegrationCard({
           {syncMessage}
         </p>
       )}
-      {popupMessage && (
-        <p className="integration-card-message" aria-live="polite">
-          {popupMessage}
-        </p>
-      )}
-      {popupError && (
-        <p
-          className="integration-card-message integration-card-message-error"
-          role="alert"
-        >
-          {popupError}
-        </p>
-      )}
-
       <div className="integration-card-actions">
         {isClassroom && !isLinkedSample && (
           <button
@@ -4482,29 +4390,16 @@ function IntegrationCard({
                     ? "integration-secondary-action secondary"
                     : "integration-primary-action"
                 }
-                onClick={() => onConnectGooglePopup("classroom")}
-                disabled={popupConnectDisabled}
+                onClick={() => onConnectGoogleRedirect("classroom")}
                 ref={realClassroomConnectButtonRef}
                 data-tour="classroom-setup-connect"
-                aria-busy={isPopupConnecting ? "true" : undefined}
               >
-                {isPopupConnecting
-                  ? "Connecting..."
-                  : realClassroomSession.connected
+                {realClassroomSession.connected
                   ? "Change account"
                   : "Connect Google Classroom"}
               </button>
               {realClassroomSession.connected && (
                 <button type="button" className="integration-setup-button secondary" onClick={() => onDisconnectGoogle("classroom")}>Disconnect</button>
-              )}
-              {showRedirectFallback && (
-                <button
-                  type="button"
-                  className="integration-setup-button secondary"
-                  onClick={() => { onClassroomRedirect(); onGoogleRedirect("classroom"); }}
-                >
-                  Use redirect instead
-                </button>
               )}
               <button
                 type="button"
@@ -4542,47 +4437,16 @@ function IntegrationCard({
                     ? "integration-secondary-action secondary"
                     : "integration-primary-action"
                 }
-                onClick={() => onConnectGooglePopup("calendar")}
-                disabled={popupConnectDisabled}
+                onClick={() => onConnectGoogleRedirect("calendar")}
                 ref={googleCalendarConnectButtonRef}
-                aria-busy={isPopupConnecting ? "true" : undefined}
               >
-                {isPopupConnecting
-                  ? "Connecting..."
-                  : googleCalendarSession.connected
+                {googleCalendarSession.connected
                   ? "Change account"
                   : "Connect Google Calendar"}
               </button>
               {googleCalendarSession.connected && (
                 <button type="button" className="integration-setup-button secondary" onClick={() => onDisconnectGoogle("calendar")}>Disconnect</button>
               )}
-              {showRedirectFallback && (
-                <button
-                  type="button"
-                  className="integration-setup-button secondary"
-                  onClick={() => onGoogleRedirect("calendar")}
-                >
-                  Use redirect instead
-                </button>
-              )}
-            </>
-          ) : isSmartPlanner ? (
-            <>
-              <button
-                type="button"
-                className="integration-primary-action"
-                onClick={onOpenSmartPlanner}
-              >
-                Open Smart Planner
-              </button>
-              <button
-                type="button"
-                className="integration-setup-button secondary"
-                onClick={onRefreshSmartPlannerStatus}
-                disabled={smartPlannerStatus?.loading}
-              >
-                {smartPlannerStatus?.loading ? "Refreshing..." : "Refresh status"}
-              </button>
             </>
           ) : (
             <button type="button" className="integration-link-button" disabled>
@@ -4592,52 +4456,6 @@ function IntegrationCard({
         )}
       </div>
     </article>
-  );
-}
-
-function SmartPlannerIntegrationStatus({ status }) {
-  const dailyLimit = Number.isInteger(status?.dailyLimit)
-    ? status.dailyLimit
-    : 3;
-  const remaining = Number.isInteger(status?.remainingGenerations)
-    ? Math.max(0, status.remainingGenerations)
-    : null;
-  const resetLabel = formatSmartPlannerResetTime(status?.resetAt);
-  const isLimitReached = status?.status === "daily_limit_reached";
-  const isUnavailable =
-    status?.status === "unavailable" ||
-    status?.status === "configuration_error" ||
-    Boolean(status?.error);
-
-  let detail = `${dailyLimit} AI plans available every 24 hours`;
-  let support = "Basic Planner is always available.";
-
-  if (status?.loading && status?.status === "unknown") {
-    detail = "Checking Smart Planner availability...";
-  } else if (isLimitReached) {
-    detail = `0 of ${dailyLimit} AI plans remaining`;
-    support = "Basic Planner is still available.";
-  } else if (isUnavailable) {
-    detail = "AI planning is unavailable right now.";
-    support = "Basic Planner still works.";
-  } else if (
-    remaining !== null &&
-    !(status?.status === "ready" && !status?.resetAt && remaining === dailyLimit)
-  ) {
-    detail = `${remaining} of ${dailyLimit} AI plans remaining`;
-  }
-
-  return (
-    <div
-      className="smart-planner-integration-status"
-      role="status"
-      aria-live="polite"
-      aria-busy={status?.loading ? "true" : "false"}
-    >
-      <strong>{detail}</strong>
-      {resetLabel && !isUnavailable && <span>{resetLabel}</span>}
-      <small>{support}</small>
-    </div>
   );
 }
 
@@ -8092,7 +7910,6 @@ function HelpSettings({
   theme,
   classroomConnected,
   calendarConnected,
-  smartPlannerStatus,
   onReplayTour,
 }) {
   const [selectedTopicId, setSelectedTopicId] = useState(null);
@@ -8243,7 +8060,6 @@ function HelpSettings({
         theme={theme}
         classroomConnected={classroomConnected}
         calendarConnected={calendarConnected}
-        smartPlannerStatus={smartPlannerStatus}
         headingRef={pageHeadingRef}
         onBack={() => setSupportMode(null)}
       />
@@ -8439,7 +8255,6 @@ function HelpSupportForm({
   theme,
   classroomConnected,
   calendarConnected,
-  smartPlannerStatus,
   headingRef,
   onBack,
 }) {
@@ -8456,11 +8271,6 @@ function HelpSupportForm({
   );
   const [validationMessage, setValidationMessage] = useState("");
   const [copyStatus, setCopyStatus] = useState("");
-  const plannerAllowance = Number.isInteger(
-    smartPlannerStatus?.remainingGenerations
-  )
-    ? smartPlannerStatus.remainingGenerations
-    : undefined;
   const diagnostics = buildSafeDiagnosticDetails({
     appVersion: STUDENT_HUB_BUILD_ID,
     currentPage: "Settings / Help & tours",
@@ -8472,8 +8282,6 @@ function HelpSupportForm({
     online: typeof navigator === "undefined" ? undefined : navigator.onLine,
     classroomConnected,
     calendarConnected,
-    smartPlannerStatus: smartPlannerStatus?.status,
-    remainingAllowance: plannerAllowance,
   });
   const supportMessage = buildSupportMessage({
     mode,

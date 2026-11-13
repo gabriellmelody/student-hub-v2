@@ -16,9 +16,9 @@ export const helpTopics = [
       {
         title: "Create today’s plan",
         bullets: [
-          "Open Smart Planner or choose Basic Planner.",
-          "Review the preview before accepting it.",
-          "Accepting the preview creates Today’s Plan for the current day.",
+          "Open Plan to review today’s study recommendations.",
+          "Use task deadlines and your study routine to decide what to work on.",
+          "Adjust your plan as your day changes.",
         ],
       },
       {
@@ -30,7 +30,7 @@ export const helpTopics = [
       {
         title: "Optional connections",
         paragraphs: [
-          "Classroom and Calendar are optional. Basic Planner remains available without AI, accounts or cloud sync.",
+          "Classroom and Calendar are optional. DayLo’s task and planning tools remain available without either connection.",
         ],
       },
     ],
@@ -126,7 +126,7 @@ export const helpTopics = [
       {
         title: "Use grades carefully",
         paragraphs: [
-          "Being at your target does not make a Subject disappear from planning. Smart Planner cannot guarantee grade improvement, so grades should reflect your own current understanding.",
+          "Being at your target does not make a Subject disappear from planning. Grades should reflect your own current understanding and do not guarantee an outcome.",
         ],
       },
     ],
@@ -152,60 +152,13 @@ export const helpTopics = [
       {
         title: "Show and block",
         paragraphs: [
-          "Show in DayLo controls whether a calendar’s events appear here. Block study time lets Smart Planner avoid those event intervals when Calendar consideration is enabled.",
+          "Show in DayLo controls whether a calendar’s events appear here. Block study time marks event intervals that planning should avoid.",
         ],
       },
       {
         title: "Your Google calendars",
         paragraphs: [
           "Hidden calendars remain unchanged in Google, and removing a calendar from DayLo does not delete it. Switching accounts should load only the currently connected account’s data.",
-        ],
-      },
-    ],
-  },
-  {
-    id: "smart-planner",
-    title: "Smart Planner",
-    summary: "Create and review an AI-assisted plan for the current day.",
-    tourId: "smart-planner",
-    sections: [
-      {
-        title: "Choose the study window",
-        paragraphs: [
-          "Smart Planner plans today only. Start time rounds forward to the next half hour by default, while start and finish remain editable.",
-        ],
-      },
-      {
-        title: "Choose a style",
-        bullets: [
-          "Balanced aims for realistic progress with breaks.",
-          "Lighter leaves more breathing room.",
-          "Maximum progress uses the available window more fully.",
-        ],
-      },
-      {
-        title: "Add useful context",
-        paragraphs: [
-          "Calendar busy time can be considered when available. Temporary Planner context can describe progress or priorities, while Subject grades remain secondary signals.",
-        ],
-      },
-      {
-        title: "Review before saving",
-        paragraphs: [
-          "The preview shows scheduled blocks, Not scheduled today and Plan notes. Nothing changes until you accept the preview.",
-        ],
-      },
-      {
-        title: "AI allowance and Basic Planner",
-        paragraphs: [
-          "A successful Smart Planner result uses one daily allowance. Failed AI requests and Basic Planner do not use an allowance. Basic Planner is unlimited.",
-          "The Smart Planner card in Settings → Integrations shows current availability and reset time.",
-        ],
-      },
-      {
-        title: "AI disclosure",
-        paragraphs: [
-          "Smart Planner uses AI to suggest a study plan. Review the preview and adjust anything that does not fit your situation.",
         ],
       },
     ],
@@ -219,7 +172,7 @@ export const helpTopics = [
       {
         title: "Create the plan",
         paragraphs: [
-          "Accepting a Smart or Basic Planner preview creates Today’s Plan with study blocks and breaks.",
+          "Use DayLo’s recommendations and your preferences to create a practical plan for today.",
         ],
       },
       {

@@ -56,6 +56,9 @@ export default function TaskDetailsModal({
   onScheduleCalendar,
   onRemoveCalendar,
   onOpenCalendarSettings,
+  validStudyDates = [],
+  defaultStudyDuration = 45,
+  onSetStudyBlock,
 }) {
   const [draftTask, setDraftTask] = useState(() => createTaskDraft(task));
   const [saving, setSaving] = useState(false);
@@ -67,6 +70,11 @@ export default function TaskDetailsModal({
   const [scheduleDraft, setScheduleDraft] = useState(
     () => getStoredTaskSchedule(task) || getDefaultTaskSchedule(task)
   );
+  const [studyBlockOpen, setStudyBlockOpen] = useState(false);
+  const [studyBlockDate, setStudyBlockDate] = useState("");
+  const [studyBlockBusy, setStudyBlockBusy] = useState(false);
+  const [studyBlockMessage, setStudyBlockMessage] = useState("");
+  const [studyBlockError, setStudyBlockError] = useState("");
   const dialogRef = useRef(null);
   const titleRef = useRef(null);
   const classroomLink =
@@ -196,6 +204,22 @@ export default function TaskDetailsModal({
       return;
     }
     setScheduleOpen(false);
+  }
+
+  async function setStudyBlock() {
+    if (!studyBlockDate || studyBlockBusy || !onSetStudyBlock) return;
+    setStudyBlockBusy(true);
+    setStudyBlockError("");
+    setStudyBlockMessage("");
+    const saved = await onSetStudyBlock(studyBlockDate);
+    setStudyBlockBusy(false);
+    if (!saved) {
+      setStudyBlockError("This study block could not be saved. Try another day.");
+      return;
+    }
+    setStudyBlockMessage("Study block added to Plan.");
+    setStudyBlockOpen(false);
+    setStudyBlockDate("");
   }
 
   return createPortal(
@@ -338,6 +362,57 @@ export default function TaskDetailsModal({
                 </a>
               )}
             </div>
+
+            {!task.completed && onSetStudyBlock && (
+              <section className="task-study-block" aria-labelledby="task-study-block-title">
+                <div className="task-study-block-heading">
+                  <div>
+                    <span className="eyebrow">Plan</span>
+                    <h3 id="task-study-block-title">Set study block</h3>
+                    <p>Add one {defaultStudyDuration}-minute block without changing this Task.</p>
+                  </div>
+                  {!studyBlockOpen && (
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      disabled={validStudyDates.length === 0}
+                      onClick={() => {
+                        setStudyBlockOpen(true);
+                        setStudyBlockMessage("");
+                      }}
+                    >
+                      Set study block
+                    </button>
+                  )}
+                </div>
+                {studyBlockOpen && (
+                  <div className="task-study-block-form">
+                    <label>
+                      <span>Study day</span>
+                      <select value={studyBlockDate} onChange={(event) => setStudyBlockDate(event.target.value)}>
+                        <option value="">Choose a day</option>
+                        {validStudyDates.map((day) => (
+                          <option key={day.dateKey} value={day.dateKey}>
+                            {day.date.toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="button" className="primary-button" disabled={!studyBlockDate || studyBlockBusy} onClick={() => void setStudyBlock()}>
+                      {studyBlockBusy ? "Adding…" : "Add to Plan"}
+                    </button>
+                    <button type="button" className="quiet-button" disabled={studyBlockBusy} onClick={() => setStudyBlockOpen(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                )}
+                {validStudyDates.length === 0 && (
+                  <p className="task-study-block-note">No valid study days remain before this deadline.</p>
+                )}
+                {studyBlockMessage && <p className="task-study-block-success" role="status">{studyBlockMessage}</p>}
+                {studyBlockError && <p className="task-details-error" role="alert">{studyBlockError}</p>}
+              </section>
+            )}
 
             {showCalendarSection && (
               <section className="task-calendar-schedule" aria-labelledby="task-calendar-schedule-title">

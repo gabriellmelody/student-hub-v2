@@ -5,7 +5,6 @@ import {
   demoGuidedTour,
   gettingStartedGuidedTour,
   getGuidedTourDefinition,
-  smartPlannerGuidedTour,
   subjectsGuidedTour,
   todoGuidedTour,
   todaysPlanGuidedTour,
@@ -491,13 +490,13 @@ test("all supported forced replay identifiers resolve", () => {
     "todo",
     "subjects",
     "calendar",
-    "smart-planner",
     "todays-plan",
     "google-classroom-setup",
     "demo",
   ]) {
     assert.equal(getGuidedTourDefinition(tourId)?.id, tourId);
   }
+  assert.equal(getGuidedTourDefinition("smart-planner"), null);
 });
 
 test("Classroom setup starts at Connect when disconnected", () => {
@@ -647,15 +646,6 @@ test("Calendar busy-time fallback returns to the overview", () => {
   assert.equal(
     calendarGuidedTour.steps[3].fallbackTarget,
     '[data-tour="calendar-overview"]'
-  );
-});
-
-test("Smart Planner tour opens the existing modal declaratively", () => {
-  assert.equal(smartPlannerGuidedTour.steps.length, 5);
-  assert.equal(smartPlannerGuidedTour.steps[0].action, "open-smart-planner");
-  assert.deepEqual(
-    smartPlannerGuidedTour.steps.map((step) => step.page),
-    ["plan", "plan", "plan", "plan", "plan"]
   );
 });
 

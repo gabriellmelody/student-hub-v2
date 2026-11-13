@@ -33,6 +33,7 @@ const STUDY_WEEKDAY_KEYS = [
   "saturday",
   "sunday",
 ];
+const PLAN_BLOCK_DURATION_OPTIONS = new Set([15, 20, 25, 30, 45, 60, 75, 90]);
 
 function normalizeWeeklyRoutine(value) {
   const source = value && typeof value === "object" ? value : {};
@@ -70,6 +71,17 @@ function normalizeRecommendationOverrides(value) {
       slotIndex,
       locked: Boolean(override?.locked),
       manual: Boolean(override?.manual),
+      removed: Boolean(override?.removed),
+      added: Boolean(override?.added),
+      originDateKey: /^\d{4}-\d{2}-\d{2}$/.test(String(override?.originDateKey || ""))
+        ? String(override.originDateKey)
+        : "",
+      originSlotIndex: override?.originSlotIndex !== null && override?.originSlotIndex !== undefined && Number.isFinite(Number(override.originSlotIndex))
+        ? Math.max(0, Math.min(12, Math.trunc(Number(override.originSlotIndex))))
+        : null,
+      durationMinutes: PLAN_BLOCK_DURATION_OPTIONS.has(Number(override?.durationMinutes))
+        ? Number(override.durationMinutes)
+        : null,
       recommendation: {
         id: cleanPreferenceString(recommendation?.id, 180),
         kind,

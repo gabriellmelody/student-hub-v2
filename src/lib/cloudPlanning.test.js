@@ -95,6 +95,36 @@ test("recommendation swaps and locks persist as compact account-owned preference
   assert.equal(payload.preferences.recommendationOverrides[0].recommendation.description, "Finish the conclusion.");
 });
 
+test("manual placement and per-block duration fields survive preference normalization", () => {
+  const payload = mapPlanningPreferencesForUpsert({
+    recommendationOverrides: [{
+      dateKey: "2026-11-15",
+      slotIndex: 3,
+      locked: false,
+      manual: true,
+      removed: false,
+      added: true,
+      originDateKey: "2026-11-14",
+      originSlotIndex: 0,
+      durationMinutes: 60,
+      recommendation: {
+        id: "assessment:task-1:2026-11-14:0",
+        kind: "assessment",
+        taskId: TASK_ID,
+        title: "Psychology prep",
+        subject: "Psychology",
+        dueDate: "2026-11-16",
+      },
+    }],
+  }, USER_ID);
+  const [override] = payload.preferences.recommendationOverrides;
+  assert.equal(override.originDateKey, "2026-11-14");
+  assert.equal(override.originSlotIndex, 0);
+  assert.equal(override.durationMinutes, 60);
+  assert.equal(override.removed, false);
+  assert.equal(override.added, true);
+});
+
 test("malformed recommendation overrides are discarded safely", () => {
   const payload = mapPlanningPreferencesForUpsert({
     recommendationOverrides: [

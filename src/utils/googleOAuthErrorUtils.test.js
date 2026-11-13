@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
 import { getGoogleOAuthAccessDeniedMessage } from "./googleOAuthErrorUtils.js";
@@ -22,4 +23,44 @@ test("ordinary access-denied remains a cancelled connection", () => {
 
 test("non access-denied OAuth errors use existing error handling", () => {
   assert.equal(getGoogleOAuthAccessDeniedMessage({ error: "server_error" }), "");
+});
+
+test("popup_closed preserves cancellation copy and exposes the shared redirect fallback", () => {
+  const settingsSource = fs.readFileSync(
+    new URL("../pages/SettingsPage.jsx", import.meta.url),
+    "utf8"
+  );
+  const popupClosedBranch = settingsSource.match(
+    /if \(errorType === "popup_closed"\) \{([\s\S]*?)\} else if/
+  )?.[1] || "";
+
+  assert.match(popupClosedBranch, /messageProvider: provider/);
+  assert.match(
+    popupClosedBranch,
+    /message: "Google connection was cancelled\."/
+  );
+  assert.match(popupClosedBranch, /fallbackProvider: provider/);
+  assert.match(popupClosedBranch, /focusGoogleConnectButton\(provider\)/);
+  assert.match(settingsSource, /provider === "classroom"/);
+  assert.match(settingsSource, /provider: "calendar"/);
+});
+
+test("access_denied remains a cancellation without enabling redirect fallback", () => {
+  const settingsSource = fs.readFileSync(
+    new URL("../pages/SettingsPage.jsx", import.meta.url),
+    "utf8"
+  );
+  const messageHelper = settingsSource.match(
+    /function setGooglePopupMessage\(provider, message\) \{([\s\S]*?)\n  \}/
+  )?.[1] || "";
+
+  assert.equal(
+    getGoogleOAuthAccessDeniedMessage({ error: "access_denied" }),
+    "Google connection was cancelled."
+  );
+  assert.match(
+    settingsSource,
+    /setGooglePopupMessage\(provider, accessDeniedMessage\)/
+  );
+  assert.match(messageHelper, /fallbackProvider: null/);
 });
